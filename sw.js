@@ -4,7 +4,7 @@
 // pushmeldingen tonen zodra de server-kant die gaat versturen.
 
 const CACHE_NAAM = "ploeg-mobiel-v1";
-const KERN_BESTANDEN = ["./ploeg-mobiel.html", "./manifest.json"];
+const KERN_BESTANDEN = ["./index.html", "./manifest.json"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -34,7 +34,7 @@ self.addEventListener("fetch", (event) => {
 // Wordt aangeroepen zodra de server (via de VAPID-sleutel) een pushbericht
 // stuurt, bijvoorbeeld "je bent ingedeeld" of "deze dienst is ingevuld".
 self.addEventListener("push", (event) => {
-  let data = { titel: "Ploeg", tekst: "Er is een update.", url: "./ploeg-mobiel.html" };
+  let data = { titel: "Ploeg", tekst: "Er is een update.", url: "./index.html" };
   try { data = Object.assign(data, event.data.json()); } catch (e) {}
   event.waitUntil(
     self.registration.showNotification(data.titel, {
@@ -48,11 +48,11 @@ self.addEventListener("push", (event) => {
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const url = (event.notification.data && event.notification.data.url) || "./ploeg-mobiel.html";
+  const url = (event.notification.data && event.notification.data.url) || "./index.html";
   event.waitUntil(
     clients.matchAll({ type: "window" }).then((lijst) => {
       for (const client of lijst) {
-        if (client.url.includes("ploeg-mobiel.html") && "focus" in client) return client.focus();
+        if (client.url.includes("index.html") && "focus" in client) return client.focus();
       }
       if (clients.openWindow) return clients.openWindow(url);
     })
