@@ -1,0 +1,15 @@
+{
+  "name": "Ploeg — Brandweer Gelderland Midden",
+  "short_name": "Ploeg",
+  "description": "Reageer op openstaande diensten en bekijk je eigen diensten.",
+  "start_url": "./ploeg-mobiel.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#12161B",
+  "theme_color": "#12161B",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
