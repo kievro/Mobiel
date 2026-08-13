@@ -253,14 +253,17 @@
   async function vraagPushToestemming(){
     if(state.pushGevraagd) return;
     state.pushGevraagd = true;
-    if(!("serviceWorker" in navigator) || !("PushManager" in window)) return;
+    if(!("serviceWorker" in navigator)){ showToast("Meldingen niet ondersteund in deze browser/context."); return; }
     try{
       var reg = await navigator.serviceWorker.ready;
+      if(!reg.pushManager){ showToast("Meldingen niet ondersteund op dit toestel/deze browser."); return; }
       var toestemming = await Notification.requestPermission();
-      if(toestemming !== "granted") return;
+      if(toestemming !== "granted"){ showToast("Meldingen: toestemming niet gegeven ("+toestemming+")."); return; }
       var sub = await reg.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY) });
-      await sbPloeg.from("push_subscriptions").upsert({ lid_id: state.currentUserId, subscriptie: sub.toJSON(), bijgewerkt_op: new Date().toISOString() }, {onConflict:"lid_id"});
-    }catch(e){ /* stil falen -- pushmeldingen zijn een bonus, geen vereiste */ }
+      var res = await sbPloeg.from("push_subscriptions").upsert({ lid_id: state.currentUserId, subscriptie: sub.toJSON(), bijgewerkt_op: new Date().toISOString() }, {onConflict:"lid_id"});
+      if(res.error){ showToast("Meldingen: opslaan mislukt \u2013 "+res.error.message); return; }
+      showToast("Meldingen ingeschakeld \u2713");
+    }catch(e){ showToast("Meldingen: instellen mislukt \u2013 "+(e&&e.message?e.message:e)); }
   }
 
   var App = {}; window.App = App;
