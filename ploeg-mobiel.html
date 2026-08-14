@@ -2,101 +2,162 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<meta name="theme-color" content="#12161B" />
-<title>Ploeg — Brandweer Gelderland Midden</title>
-<link rel="manifest" href="manifest.json">
-<link rel="apple-touch-icon" href="icon-192.png">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Ploeg">
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>PloegCompleet – Brandweer Gelderland Midden</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <style>
   :root{
-    --bg:#12161B; --surface:#1B2129; --surface-2:#232B34; --border:#2E3843;
-    --text:#EDEFF1; --text-muted:#8A96A3;
-    --red:#E33629; --red-dim:#3A1613; --lime:#D7E100; --amber:#F0A93A;
-    --font-display:'Barlow Condensed',Arial,sans-serif; --font-body:'Open Sans',Arial,sans-serif;
-    --safe-top:env(safe-area-inset-top,0px); --safe-bottom:env(safe-area-inset-bottom,0px);
+    --bg:#12161B;
+    --surface:#1B2129;
+    --surface-2:#232B34;
+    --border:#2E3843;
+    --text:#EDEFF1;
+    --text-muted:#8A96A3;
+    --red:#E33629;
+    --red-dim:#3A1613;
+    --lime:#D7E100;
+    --amber:#F0A93A;
+    --blue-grey:#5B7083;
+    --grey-nee:#55606B;
+    --radius:8px;
+    --font-display:'Barlow Condensed',Arial,sans-serif;
+    --font-body:'Open Sans',Arial,sans-serif;
+    --font-mono:'Open Sans',Arial,sans-serif;
   }
-  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
-  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:var(--font-body);height:100%;overscroll-behavior-y:none;}
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:var(--font-body);}
   body{-webkit-font-smoothing:antialiased;}
+  #app{max-width:720px;margin:0 auto;min-height:100vh;display:flex;flex-direction:column;padding-bottom:40px;}
+  @media(min-width:900px){ #app{max-width:960px;} }
   button,input,select,textarea{font-family:inherit;color:inherit;}
-  #app{min-height:100vh;display:flex;flex-direction:column;}
+  a{color:var(--lime);}
+  ::selection{background:var(--lime);color:#12161B;}
 
-  .topbar{position:sticky;top:0;z-index:10;background:var(--bg);padding:calc(14px + var(--safe-top)) 18px 12px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border);}
-  .topbar .brand{font-family:var(--font-display);font-weight:700;letter-spacing:0.04em;font-size:19px;text-transform:uppercase;}
-  .topbar .brand small{display:block;font-family:var(--font-body);font-weight:600;font-size:10px;letter-spacing:0.06em;color:var(--text-muted);text-transform:uppercase;margin-top:2px;}
-  .icon-btn{background:var(--surface);border:1px solid var(--border);border-radius:10px;width:38px;height:38px;display:flex;align-items:center;justify-content:center;font-size:16px;}
+  .header{position:sticky;top:0;z-index:10;background:var(--bg);padding:14px 16px 0;}
+  .header-row{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;}
+  .brand{font-family:var(--font-display);font-weight:700;letter-spacing:0.05em;font-size:21px;text-transform:uppercase;line-height:1;}
+  .brand small{display:block;font-family:var(--font-mono);font-size:11px;letter-spacing:0.08em;color:var(--text-muted);text-transform:uppercase;margin-top:4px;font-weight:600;}
+  .header-actions{display:flex;align-items:center;gap:6px;position:relative;}
+  .chevron-divider{height:5px;margin-top:12px;background:repeating-linear-gradient(45deg,var(--red) 0 9px,var(--lime) 9px 18px);}
+  .icon-btn{background:var(--surface);border:1px solid var(--border);border-radius:6px;width:34px;height:34px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:15px;position:relative;}
+  .icon-btn:hover{border-color:var(--lime);}
+  .badge-dot{position:absolute;top:-4px;right:-4px;background:var(--red);color:#fff;font-family:var(--font-mono);font-size:10px;border-radius:10px;min-width:16px;height:16px;display:flex;align-items:center;justify-content:center;padding:0 3px;}
+  .user-chip{background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:6px 12px;font-size:12px;cursor:pointer;white-space:nowrap;}
+  .user-chip:hover{border-color:var(--lime);}
+  .user-chip .role{color:var(--text-muted);}
 
-  .content{flex:1;padding:14px 16px calc(90px + var(--safe-bottom));overflow-y:auto;}
-  .eyebrow{font-family:var(--font-body);font-weight:600;font-size:12px;letter-spacing:0.07em;text-transform:uppercase;color:var(--text-muted);margin:18px 0 8px;}
+  .tabs{display:flex;gap:4px;overflow-x:auto;padding:12px 16px;border-bottom:1px solid var(--border);}
+  .tab{font-family:var(--font-display);text-transform:uppercase;letter-spacing:0.04em;font-size:14px;padding:8px 14px;border-radius:999px;background:transparent;color:var(--text-muted);border:1px solid transparent;cursor:pointer;white-space:nowrap;}
+  .tab.active{background:var(--surface-2);color:var(--text);border-color:var(--border);}
+  .tab:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,.member-pick:focus-visible{outline:2px solid var(--lime);outline-offset:2px;}
+
+  .content{padding:16px;flex:1;}
+  .eyebrow{font-family:var(--font-mono);font-weight:600;font-size:12px;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-muted);margin:22px 0 8px;display:flex;align-items:center;gap:8px;}
   .eyebrow:first-child{margin-top:0;}
-  .info-line{font-size:13.5px;color:var(--text-muted);background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:11px 13px;margin-bottom:10px;line-height:1.4;}
+  .info-line{font-size:13px;color:var(--text-muted);background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;margin-bottom:6px;}
+  .error-line{font-size:13px;background:var(--surface);border:1px solid var(--red);color:#FF8A80;border-radius:var(--radius);padding:10px 12px;margin:12px 16px 0;}
 
-  .card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:15px 16px;margin-bottom:12px;}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:12px;}
   .card-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap;}
   .tag-row{display:flex;gap:6px;flex-wrap:wrap;}
-  .post-tag{font-family:var(--font-display);font-weight:700;text-transform:uppercase;font-size:13px;letter-spacing:0.03em;padding:3px 9px;border-radius:5px;border:1px solid var(--border);background:var(--surface-2);}
-  .doelgroep-tag{font-family:var(--font-body);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:0.04em;padding:3px 8px;border-radius:4px;border:1px dashed var(--text-muted);color:var(--text-muted);}
-  .date-big{font-family:var(--font-body);font-size:16px;font-weight:700;text-transform:capitalize;}
-  .urgent-badge{background:var(--red-dim);color:#FF8A80;border:1px solid var(--red);font-family:var(--font-body);font-weight:700;font-size:11px;padding:3px 8px;border-radius:4px;text-transform:uppercase;}
-  .notitie{font-size:13.5px;color:var(--text-muted);margin-top:6px;font-style:italic;}
+  .post-tag{font-family:var(--font-display);text-transform:uppercase;font-size:13px;letter-spacing:0.03em;padding:3px 9px;border-radius:4px;border:1px solid var(--border);}
+  .post-noord{background:rgba(91,112,131,0.15);border-color:var(--blue-grey);color:#AEC3D6;}
+  .post-zuid{background:rgba(240,169,58,0.12);border-color:var(--amber);color:var(--amber);}
+  .post-ede{background:rgba(215,225,0,0.12);border-color:var(--lime);color:var(--lime);}
+  .doelgroep-tag{font-family:var(--font-mono);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:0.04em;padding:3px 8px;border-radius:4px;border:1px dashed var(--text-muted);color:var(--text-muted);}
+  .date-big{font-family:var(--font-mono);font-weight:700;font-size:15px;color:var(--text);font-variant-numeric:tabular-nums;}
+  .urgent-badge{background:var(--red-dim);color:#FF8A80;border:1px solid var(--red);font-family:var(--font-mono);font-weight:700;font-size:12px;padding:2px 7px;border-radius:4px;text-transform:uppercase;}
+  .notitie{font-size:13px;color:var(--text-muted);margin-top:6px;font-style:italic;}
+
+  .deadline-row{display:flex;justify-content:space-between;align-items:center;margin-top:10px;font-size:12px;color:var(--text-muted);}
+  .deadline-track{position:relative;height:8px;background:var(--surface-2);border-radius:4px;overflow:hidden;border:1px solid var(--border);margin-top:6px;}
+  .deadline-elapsed{position:absolute;left:0;top:0;height:100%;background:var(--border);}
+  .deadline-remaining{position:absolute;right:0;top:0;height:100%;background:repeating-linear-gradient(45deg,var(--red) 0 6px,var(--lime) 6px 12px);}
 
   .slot{margin-top:12px;padding-top:12px;border-top:1px dashed var(--border);}
-  .slot:first-child{border-top:none;margin-top:9px;padding-top:0;}
-  .slot-label{font-family:var(--font-display);font-weight:700;text-transform:uppercase;font-size:14.5px;margin-bottom:8px;}
-  .response-buttons{display:flex;flex-direction:column;gap:8px;}
-  .resp-btn{padding:13px 10px;border-radius:10px;border:1px solid var(--border);background:var(--surface-2);color:var(--text);font-size:15px;font-weight:600;cursor:pointer;text-align:center;}
-  .resp-btn.ja.selected{background:var(--lime);color:#12161B;border-color:var(--lime);font-weight:700;}
-  .resp-btn.kan_wel.selected{background:var(--amber);color:#12161B;border-color:var(--amber);font-weight:700;}
-  .resp-btn.nee.selected{background:#3a4048;color:var(--text);border-color:#3a4048;}
-  .counts-line{font-size:12.5px;color:var(--text-muted);margin-top:8px;}
+  .slot:first-child{border-top:none;margin-top:8px;padding-top:0;}
+  .slot-label{font-family:var(--font-display);text-transform:uppercase;font-size:14px;letter-spacing:0.02em;margin-bottom:6px;}
+  .response-buttons{display:flex;gap:6px;flex-wrap:wrap;}
+  .resp-btn{flex:1;min-width:100px;padding:9px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface-2);color:var(--text);font-size:13px;cursor:pointer;text-align:center;}
+  .resp-btn:hover{border-color:var(--lime);}
+  .resp-btn.ja.selected{background:var(--lime);color:#12161B;border-color:var(--lime);font-weight:600;}
+  .resp-btn.kan_wel.selected{background:var(--amber);color:#12161B;border-color:var(--amber);font-weight:600;}
+  .resp-btn.nee.selected{background:var(--grey-nee);color:var(--text);border-color:var(--grey-nee);}
+  .counts-line{font-size:13px;font-weight:400;color:var(--text-muted);margin-top:6px;font-family:var(--font-mono);}
 
-  .assigned-banner{padding:11px 12px;border-radius:10px;background:rgba(215,225,0,0.08);border:1px solid var(--lime);font-size:14px;font-weight:600;}
+  .assigned-banner{padding:9px 10px;border-radius:6px;background:rgba(215,225,0,0.08);border:1px solid var(--lime);font-size:13px;}
   .assigned-banner.mine{background:rgba(215,225,0,0.18);}
 
-  .deadline-row{display:flex;justify-content:space-between;align-items:center;margin-top:12px;font-size:12.5px;color:var(--text-muted);}
-  .empty{padding:32px 12px;text-align:center;color:var(--text-muted);font-size:15px;line-height:1.5;}
+  .expand-btn{background:none;border:none;color:var(--lime);font-size:12px;font-weight:600;cursor:pointer;padding:0;font-family:var(--font-mono);text-transform:uppercase;letter-spacing:0.05em;}
+  .card-tools{display:flex;gap:14px;align-items:center;margin-top:10px;flex-wrap:wrap;}
+  .wa-link{font-size:12px;font-weight:600;color:#25D366;text-decoration:none;font-family:var(--font-mono);text-transform:uppercase;letter-spacing:0.05em;}
+  .wa-link:hover{text-decoration:underline;}
+  .admin-panel{margin-top:10px;background:var(--surface-2);border:1px solid var(--border);border-radius:6px;padding:10px;}
+  .admin-panel h4{margin:0 0 8px;font-family:var(--font-display);text-transform:uppercase;font-size:13px;letter-spacing:0.03em;color:var(--text-muted);}
+  .reactie-row{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;flex-wrap:wrap;}
+  .reactie-row:last-child{border-bottom:none;}
+  .reactie-meta{color:var(--text-muted);font-family:var(--font-mono);font-size:12px;}
+  .suggest-star{color:var(--lime);margin-right:4px;}
+  .small-btn{background:var(--surface);border:1px solid var(--border);border-radius:5px;padding:5px 9px;font-size:12px;cursor:pointer;display:inline-block;}
+  .small-btn:hover{border-color:var(--lime);}
+  .small-btn.primary{background:var(--red);border-color:var(--red);color:#fff;}
 
-  .stat-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:20px;text-align:center;margin-bottom:14px;}
-  .stat-big{font-family:var(--font-body);font-weight:700;font-size:38px;color:var(--lime);font-variant-numeric:tabular-nums;}
-  .stat-label{font-size:13px;color:var(--text-muted);margin-top:2px;}
-  .list-item{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:13px 14px;margin-bottom:10px;}
-  .list-item-top{display:flex;justify-content:space-between;align-items:center;gap:8px;}
-
-  .bottomnav{position:fixed;left:0;right:0;bottom:0;z-index:20;background:var(--surface);border-top:1px solid var(--border);display:flex;padding:6px 8px calc(6px + var(--safe-bottom));gap:4px;}
-  .nav-btn{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 4px;border-radius:10px;background:none;border:none;color:var(--text-muted);font-size:11px;font-weight:600;font-family:var(--font-body);}
-  .nav-btn .nav-icon{font-size:20px;line-height:1;}
-  .nav-btn.active{color:var(--lime);}
-  .nav-fab{width:56px;height:56px;border-radius:50%;background:var(--red);color:#fff;border:none;font-size:26px;display:flex;align-items:center;justify-content:center;position:fixed;right:18px;bottom:calc(84px + var(--safe-bottom));z-index:21;box-shadow:0 6px 18px rgba(227,54,41,0.4);}
-
-  .field{margin-bottom:14px;display:flex;flex-direction:column;gap:6px;}
-  label{font-size:11.5px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;font-weight:600;}
-  input,select,textarea{background:var(--surface-2);border:1px solid var(--border);color:var(--text);padding:12px 12px;border-radius:10px;font-size:15px;width:100%;}
-  textarea{resize:vertical;min-height:60px;}
-  .field-checkbox{display:flex;flex-direction:row;align-items:center;gap:10px;margin-bottom:14px;background:var(--red-dim);border:1px solid var(--red);border-radius:10px;padding:12px 13px;}
+  .field{margin-bottom:12px;display:flex;flex-direction:column;gap:4px;}
+  .field-row{display:flex;gap:10px;flex-wrap:wrap;}
+  .field-row .field{flex:1;min-width:150px;}
+  .field-checkbox{display:flex;flex-direction:row;align-items:center;gap:8px;margin-bottom:14px;background:var(--red-dim);border:1px solid var(--red);border-radius:6px;padding:10px 12px;}
   .field-checkbox input{width:auto;}
-  .field-checkbox label{text-transform:none;font-size:13.5px;color:var(--text);font-weight:400;}
+  .field-checkbox label{text-transform:none;font-size:13px;color:var(--text);font-family:var(--font-body);}
+  .doelgroep-box{border:1px solid var(--border);border-radius:6px;padding:10px 12px;margin-bottom:14px;background:var(--surface-2);}
+  .doelgroep-box .eyebrow{margin:0 0 8px;}
+  label{font-size:11.5px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;font-family:var(--font-mono);}
+  input,select,textarea{background:var(--surface-2);border:1px solid var(--border);color:var(--text);padding:9px 10px;border-radius:6px;font-size:14px;width:100%;}
+  textarea{resize:vertical;min-height:50px;}
+  .preview-line{font-size:12px;color:var(--lime);font-family:var(--font-mono);}
 
-  .btn{font-family:var(--font-display);font-weight:700;text-transform:uppercase;letter-spacing:0.03em;padding:13px 16px;border-radius:10px;border:1px solid var(--border);background:var(--surface-2);color:var(--text);font-size:15px;width:100%;}
+  .btn{font-family:var(--font-display);text-transform:uppercase;letter-spacing:0.03em;padding:10px 16px;border-radius:6px;border:1px solid var(--border);background:var(--surface-2);color:var(--text);cursor:pointer;font-size:14px;}
+  .btn:hover{border-color:var(--lime);}
   .btn-primary{background:var(--red);border-color:var(--red);color:#fff;}
+  .btn-primary:hover{background:#c72e22;border-color:#c72e22;}
   .btn-ghost{background:transparent;}
+  .btn-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;}
 
-  .login-wrap{padding:60px 24px 30px;max-width:420px;margin:0 auto;text-align:center;}
+  .list-item{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-bottom:10px;}
+  .list-item-top{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;}
+  .status-tag{font-family:var(--font-mono);font-weight:600;font-size:12px;padding:2px 7px;border-radius:4px;text-transform:uppercase;border:1px solid var(--border);color:var(--text-muted);}
+  .status-open{color:var(--amber);border-color:var(--amber);}
+  .status-full{color:var(--lime);border-color:var(--lime);}
+  .status-overdue{color:#FF8A80;border-color:var(--red);}
+  .role-badge{font-family:var(--font-mono);font-weight:600;font-size:11px;text-transform:uppercase;padding:2px 6px;border-radius:4px;background:var(--surface-2);color:var(--text-muted);border:1px solid var(--border);}
+  .role-badge.admin{color:var(--lime);border-color:var(--lime);}
+  .role-badge.extra{color:var(--amber);border-color:var(--amber);}
+  .pin-input{width:70px;display:inline-block;text-align:center;letter-spacing:0.15em;}
+  .phone-input{width:130px;display:inline-block;}
+  .mini-select{width:auto;display:inline-block;}
+  .inline-field-label{font-size:10.5px;font-weight:600;color:var(--text-muted);font-family:var(--font-mono);text-transform:uppercase;display:block;margin-bottom:2px;}
+  .meta-line{font-size:12px;color:var(--text-muted);font-family:var(--font-mono);margin-top:4px;}
+
+  .login-wrap{padding:50px 20px;max-width:420px;margin:0 auto;text-align:center;}
   .login-wrap .brand{display:flex;flex-direction:column;align-items:center;}
-  .login-wrap .brand b{font-family:var(--font-display);font-weight:700;font-size:26px;letter-spacing:0.04em;text-transform:uppercase;}
-  .login-wrap .brand small{font-family:var(--font-body);font-weight:600;font-size:11px;letter-spacing:0.08em;color:var(--text-muted);text-transform:uppercase;margin-top:6px;}
-  .chevron-divider{height:5px;margin:18px 0;background:repeating-linear-gradient(45deg,var(--red) 0 9px,var(--lime) 9px 18px);border-radius:3px;}
-  .member-pick-list{display:flex;flex-direction:column;gap:8px;margin-top:16px;text-align:left;max-height:50vh;overflow-y:auto;}
-  .member-pick{display:flex;justify-content:space-between;align-items:center;padding:13px 15px;background:var(--surface);border:1px solid var(--border);border-radius:12px;}
-  .toast{position:fixed;bottom:calc(90px + var(--safe-bottom));left:50%;transform:translateX(-50%);background:var(--surface-2);border:1px solid var(--lime);color:var(--text);padding:11px 18px;border-radius:10px;font-size:13.5px;z-index:50;box-shadow:0 4px 16px rgba(0,0,0,0.4);max-width:88vw;text-align:center;}
-  .push-banner{background:var(--surface);border:1px solid var(--lime);border-radius:12px;padding:12px 14px;margin-bottom:12px;font-size:13.5px;line-height:1.4;}
-  .push-banner button{margin-top:8px;}
-  .hidden{display:none!important;}
+  .member-pick-list{display:flex;flex-direction:column;gap:8px;margin-top:18px;text-align:left;}
+  .member-pick{display:flex;justify-content:space-between;align-items:center;padding:12px 14px;background:var(--surface);border:1px solid var(--border);border-radius:8px;cursor:pointer;}
+  .member-pick:hover{border-color:var(--lime);}
+
+  .empty{padding:26px 10px;text-align:center;color:var(--text-muted);font-size:14px;}
+  .toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:var(--surface-2);border:1px solid var(--lime);color:var(--text);padding:10px 16px;border-radius:6px;font-size:13px;z-index:50;box-shadow:0 4px 16px rgba(0,0,0,0.4);max-width:88vw;}
+  .melding-dropdown{position:absolute;top:44px;right:16px;width:300px;max-width:80vw;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px;z-index:20;box-shadow:0 8px 24px rgba(0,0,0,0.5);max-height:320px;overflow-y:auto;}
+  .melding-item{font-size:12px;padding:8px;border-bottom:1px solid var(--border);}
+  .melding-item:last-child{border-bottom:none;}
+  .melding-time{color:var(--text-muted);font-family:var(--font-mono);font-size:10px;margin-top:2px;}
+
+  .stat-big{font-family:var(--font-mono);font-weight:700;font-size:34px;color:var(--lime);font-variant-numeric:tabular-nums;}
+  .stat-label{font-size:12px;color:var(--text-muted);}
+
+  details.filled-section summary{cursor:pointer;font-family:var(--font-mono);font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-muted);margin:24px 0 8px;}
+
+  @media(prefers-reduced-motion:reduce){ *{transition:none!important;animation:none!important;} }
 </style>
 </head>
 <body>
@@ -105,8 +166,7 @@
 (function(){
   "use strict";
 
-  // Zelfde Supabase-projecten als PloegCompleet -- deze mobiele app is een
-  // volledig apart bestand, maar praat met precies dezelfde gegevens.
+  // ---------- Supabase ----------
   var PLOEG_URL = "https://gqqflxctuikbygqnbrli.supabase.co";
   var PLOEG_KEY = "sb_publishable_8MFTS2ygpMxPwsl1-EH1aQ_GvmxQAtC";
   var DAG_URL = "https://iyquepqubfqrhybriqif.supabase.co";
@@ -114,31 +174,86 @@
   var sbPloeg = window.supabase.createClient(PLOEG_URL, PLOEG_KEY);
   var sbDag = window.supabase.createClient(DAG_URL, DAG_KEY);
 
-  // Openbare VAPID-sleutel -- alleen nodig om je telefoon een pushabonnement
-  // te laten aanmaken. Mag gewoon in de code staan (dat is het hele idee van
-  // de publieke helft van dit sleutelpaar).
+  // Pushmeldingen -- hergebruikt dezelfde push_subscriptions-tabel en dezelfde
+  // Edge Functions als de mobiele Ploeg-app. Vraagt na het inloggen om
+  // toestemming; werkt op desktop ook gewoon vanuit een los tabblad (geen
+  // "installatie" nodig, dat is alleen een iPhone-beperking).
   var VAPID_PUBLIC_KEY = "BLMZJzCHcbn1zYjZtfBSk7zNk138i_GOeGSj00czjBJ6YPT_qtKLywleKHKXuomKkfln6_2dRWY3m4GtKvl_s-0";
+  var pushGevraagd = false;
+  function urlBase64ToUint8Array(base64String){
+    var padding = "=".repeat((4 - base64String.length % 4) % 4);
+    var base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+    var raw = atob(base64), out = new Uint8Array(raw.length);
+    for(var i=0;i<raw.length;++i) out[i] = raw.charCodeAt(i);
+    return out;
+  }
+  async function vraagPushToestemming(){
+    if(pushGevraagd) return;
+    pushGevraagd = true;
+    if(!("serviceWorker" in navigator)) return;
+    try{
+      var reg = await navigator.serviceWorker.ready;
+      if(!reg.pushManager) return;
+      var toestemming = await Notification.requestPermission();
+      if(toestemming !== "granted") return;
+      var sub = await reg.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY) });
+      await sbPloeg.from("push_subscriptions").upsert({ lid_id: state.currentUserId, subscriptie: sub.toJSON(), bijgewerkt_op: new Date().toISOString() }, {onConflict:"lid_id"});
+    }catch(e){ console.warn("Pushmeldingen instellen mislukt:", e); }
+  }
 
-  var LAST_USER_KEY = "ploeg-mobiel-last-user";
+  var LAST_USER_KEY = "ploegcompleet-last-user-v2";
   var ANTWOORD_LABEL = {ja:"Ja, ik kan", kan_wel:"Kan wel, liever niet", nee:"Nee, ik kan niet"};
+  var ROLE_INFO = {
+    personeel: {label:"Personeel", omschrijving:"Kan reageren op open diensten (ja / kan wel, liever niet / nee) en de eigen dienst-historie bekijken."},
+    bevelvoerder: {label:"Bevelvoerder", omschrijving:"Kan daarnaast open diensten aanmaken, bewerken, verwijderen en toewijzen."},
+    pco: {label:"PCO", omschrijving:"Kan net als een bevelvoerder open diensten aanmaken, bewerken, verwijderen en toewijzen."},
+    roosterplanning: {label:"Planning", omschrijving:"Kan alles wat een bevelvoerder kan, plus extra accounts toevoegen en beheren."},
+    beheer: {label:"Beheer", omschrijving:"Volledige toegang tot alles, inclusief dit instellingenoverzicht."}
+  };
+  var ROLE_ORDER = ["personeel","bevelvoerder","pco","roosterplanning","beheer"];
+  var DIENSTVERBAND_LABEL = {beroeps:"Beroeps", vrijwillig:"Vrijwilliger", onbekend:"Onbekend"};
   var POST_NAMEN = {post1:"Arnhem Noord", post2:"Arnhem Zuid", post3:"Ede Stad"};
   var POST_ORDER = ["post1","post2","post3"];
 
   var state = {
-    data: null, loadError: null, currentUserId: null, pendingUserId: null, loginError: null,
-    view: "diensten", loading: true, toast: null, showForm: false, pushGevraagd: false
+    data: null,
+    loadError: null,
+    currentUserId: null,
+    pendingUserId: null,
+    loginError: null,
+    view: "diensten",
+    loading: true,
+    toast: null,
+    bellOpen: false,
+    confirmDeleteShiftId: null,
+    confirmDeleteMemberId: null,
+    editingShiftId: null,
+    showForm: false,
+    expandedShiftId: null,
+    beheerAlleenOpen: false
   };
   var toastTimer = null;
 
+  // ---------- helpers ----------
   function uid(p){ return p + "_" + Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
   function pad(n){ return String(n).padStart(2,"0"); }
   function toLocalDateStr(d){ return d.getFullYear() + "-" + pad(d.getMonth()+1) + "-" + pad(d.getDate()); }
+  function toLocalDateTimeStr(d){ return toLocalDateStr(d) + "T" + pad(d.getHours()) + ":" + pad(d.getMinutes()); }
   function parseDateOnly(str){ var parts = str.split("-").map(Number); return new Date(parts[0], parts[1]-1, parts[2]); }
   function escapeHtml(s){ return String(s == null ? "" : s).replace(/[&<>"']/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
+
+  function roleLabel(rol){ return (ROLE_INFO[rol] && ROLE_INFO[rol].label) || rol; }
+  function dienstverbandLabel(d){ return DIENSTVERBAND_LABEL[d] || d || "Onbekend"; }
   function postNaam(id){ return POST_NAMEN[id] || id; }
+  function postClass(id){ if(id==="post1") return "post-noord"; if(id==="post2") return "post-zuid"; return "post-ede"; }
   function kanDienstenBeheren(rol){ return rol==="bevelvoerder" || rol==="pco" || rol==="roosterplanning" || rol==="beheer"; }
+  function kanPersoneelBeheren(rol){ return rol==="roosterplanning" || rol==="beheer"; }
+  function kanInstellingenZien(rol){ return rol==="beheer"; }
+  function isVerhoogdeRol(rol){ return rol!=="personeel"; }
+
   function getMember(id, data){ return data.members.filter(function(m){ return m.id===id; })[0] || null; }
   function getMemberName(id, data){ var m = getMember(id,data); return m ? m.naam : "(onbekend lid)"; }
+
   function defaultDoelgroep(){ return {specialisme:"alle", aanstelling:"iedereen"}; }
   function matchesDoelgroep(member, shift){
     if(member.isExtra) return true;
@@ -154,24 +269,56 @@
     if(dg.aanstelling && dg.aanstelling!=="iedereen") parts.push("Alleen " + (dg.aanstelling==="beroeps"?"beroeps":"vrijwilligers"));
     return parts;
   }
-  function formatDateShort(dateStr){ return parseDateOnly(dateStr).toLocaleDateString("nl-NL", {weekday:"short", day:"numeric", month:"short"}); }
-  function formatDateTime(dtStr){ return new Date(dtStr).toLocaleString("nl-NL", {weekday:"short", day:"numeric", month:"short", hour:"2-digit", minute:"2-digit"}); }
+
+  function formatDateShort(dateStr){
+    var d = parseDateOnly(dateStr);
+    return d.toLocaleDateString("nl-NL", {weekday:"short", day:"numeric", month:"short"});
+  }
+  function formatDateTime(dtStr){
+    var d = new Date(dtStr);
+    return d.toLocaleString("nl-NL", {weekday:"short", day:"numeric", month:"short", hour:"2-digit", minute:"2-digit"});
+  }
   function urgencyOf(dateStr){
     var today = new Date(); today.setHours(0,0,0,0);
-    var diff = Math.round((parseDateOnly(dateStr) - today) / 86400000);
+    var d = parseDateOnly(dateStr);
+    var diff = Math.round((d - today) / 86400000);
     if(diff <= 0) return "vandaag";
     if(diff <= 4) return "komende4";
     return "verderop";
   }
   function remainingMs(deadline){ return new Date(deadline).getTime() - Date.now(); }
+  function formatRemaining(deadline){
+    var ms = remainingMs(deadline);
+    if(ms <= 0) return "Gesloten";
+    var days = Math.floor(ms/86400000), hours = Math.floor((ms%86400000)/3600000), mins = Math.floor((ms%3600000)/60000);
+    if(days>0) return "nog " + days + "d " + hours + "u";
+    if(hours>0) return "nog " + hours + "u " + mins + "m";
+    return "nog " + mins + "m";
+  }
+  function elapsedFraction(shift){
+    var start = new Date(shift.aangemaaktOp).getTime();
+    var end = new Date(shift.deadline).getTime();
+    var now = Date.now();
+    if(end <= start) return 1;
+    var f = (now-start)/(end-start);
+    return Math.max(0, Math.min(1, f));
+  }
+
   function shiftOfSlot(slotId, data){
-    for(var i=0;i<data.shifts.length;i++){ var s=data.shifts[i]; for(var j=0;j<s.slots.length;j++){ if(s.slots[j].slotId===slotId) return s; } }
+    for(var i=0;i<data.shifts.length;i++){
+      var s = data.shifts[i];
+      for(var j=0;j<s.slots.length;j++){ if(s.slots[j].slotId===slotId) return s; }
+    }
     return null;
   }
   function getSlotAssignment(slotId, data){ return data.toewijzingen.filter(function(t){ return t.slotId===slotId; })[0] || null; }
   function countReactions(slotId, data){
     var rs = data.reacties.filter(function(r){ return r.slotId===slotId; });
-    return { ja: rs.filter(function(r){return r.antwoord==="ja";}).length, kan_wel: rs.filter(function(r){return r.antwoord==="kan_wel";}).length, nee: rs.filter(function(r){return r.antwoord==="nee";}).length };
+    return {
+      ja: rs.filter(function(r){return r.antwoord==="ja";}).length,
+      kan_wel: rs.filter(function(r){return r.antwoord==="kan_wel";}).length,
+      nee: rs.filter(function(r){return r.antwoord==="nee";}).length
+    };
   }
   function computeShiftCounts(lidId, data){
     var year = new Date().getFullYear();
@@ -183,95 +330,179 @@
       return s && parseDateOnly(s.datum).getFullYear()===year;
     }).length;
   }
+  function autoSuggestForSlot(slotId, data){
+    var reacties = data.reacties.filter(function(r){ return r.slotId===slotId; });
+    var ja = reacties.filter(function(r){ return r.antwoord==="ja"; });
+    var pool = ja.length ? ja : reacties.filter(function(r){ return r.antwoord==="kan_wel"; });
+    return pool.map(function(r){
+      return {lidId:r.lidId, naam:getMemberName(r.lidId,data), antwoord:r.antwoord, tijdstip:r.tijdstip, count:computeShiftCounts(r.lidId,data)};
+    }).sort(function(a,b){ return (a.count-b.count) || (new Date(a.tijdstip)-new Date(b.tijdstip)); });
+  }
   function openShifts(data){ return data.shifts.filter(function(s){ return s.slots.some(function(sl){ return !getSlotAssignment(sl.slotId,data); }); }); }
+  function filledShifts(data){ return data.shifts.filter(function(s){ return s.slots.length>0 && s.slots.every(function(sl){ return getSlotAssignment(sl.slotId,data); }); }); }
   function hasOpenSlot(shift, data){ return shift.slots.some(function(sl){ return !getSlotAssignment(sl.slotId,data); }); }
+
+  function bronKey(r){ return r.slotId + "_" + r.lidId + "_" + r.tijdstip; }
+
   function defaultTijden(){ return {ochtend:"08:00", avond:"18:00"}; }
   function buildSlots(type, tijden){
     tijden = tijden || defaultTijden();
-    if(type==="split") return [{slotId:uid("sl"), label:"Dag ("+tijden.ochtend+"\u2013"+tijden.avond+")"},{slotId:uid("sl"), label:"Avond/Nacht ("+tijden.avond+"\u2013"+tijden.ochtend+")"}];
-    return [{slotId:uid("sl"), label:"Hele dienst ("+tijden.ochtend+"\u2013"+tijden.ochtend+")"}];
+    if(type==="split") return [{slotId:uid("sl"), label:"Dag ("+tijden.ochtend+"–"+tijden.avond+")"},{slotId:uid("sl"), label:"Avond/Nacht ("+tijden.avond+"–"+tijden.ochtend+")"}];
+    return [{slotId:uid("sl"), label:"Hele dienst ("+tijden.ochtend+"–"+tijden.ochtend+")"}];
   }
 
+  function renderBericht(sjabloon, vars){
+    return sjabloon.replace(/\{post\}/g, vars.post).replace(/\{datum\}/g, vars.datum)
+      .replace(/\{deadline\}/g, vars.deadline).replace(/\{doelgroep\}/g, vars.doelgroep);
+  }
+  function waShareUrl(shift, data){
+    var nummer = (data.instellingen && data.instellingen.whatsappNummer) ? data.instellingen.whatsappNummer.replace(/[^0-9]/g,"") : "";
+    var dgParts = doelgroepLabel(shift);
+    var dgText = dgParts.length ? (" (" + dgParts.join(", ") + ")") : "";
+    var sjabloon = (data.instellingen && data.instellingen.berichtSjabloon) || "{post}{doelgroep}, {datum}. Reageren kan tot {deadline}.";
+    var text = renderBericht(sjabloon, {post:postNaam(shift.post), datum:formatDateShort(shift.datum), deadline:formatDateTime(shift.deadline), doelgroep:dgText});
+    return "https://wa.me/" + nummer + "?text=" + encodeURIComponent(text);
+  }
+
+  // ---------- data loading (Supabase) ----------
   async function loadAllData(){
     var personenRes = await sbDag.from("kv_store").select("value").eq("key","personen").single();
-    var personen = (personenRes.data && personenRes.data.value) || [];
-    var ledenPubRes = await sbPloeg.from("leden_publiek").select("*");
-    var dienstenRes = await sbPloeg.from("diensten").select("*");
-    var slotsRes = await sbPloeg.from("dienst_slots").select("*");
-    var reactiesRes = await sbPloeg.from("reacties").select("*");
-    var toewijzingenRes = await sbPloeg.from("toewijzingen").select("*");
-    var instellingenRes = await sbPloeg.from("instellingen").select("*").eq("id",1).single();
+    if(personenRes.error) throw personenRes.error;
+    var personen = personenRes.data.value || [];
 
-    var extraById = {}; (ledenPubRes.data||[]).forEach(function(e){ extraById[e.id] = e; });
+    var configRes = await sbDag.from("kv_store").select("value").eq("key","config").single();
+    var specialismenOpties = (configRes.data && configRes.data.value && configRes.data.value.specialismen) || ["Bevelvoerder","Manschap","Duiker"];
+
+    var ledenPubRes = await sbPloeg.from("leden_publiek").select("*");
+    if(ledenPubRes.error) throw ledenPubRes.error;
+    var dienstenRes = await sbPloeg.from("diensten").select("*");
+    if(dienstenRes.error) throw dienstenRes.error;
+    var slotsRes = await sbPloeg.from("dienst_slots").select("*");
+    if(slotsRes.error) throw slotsRes.error;
+    var reactiesRes = await sbPloeg.from("reacties").select("*");
+    if(reactiesRes.error) throw reactiesRes.error;
+    var toewijzingenRes = await sbPloeg.from("toewijzingen").select("*");
+    if(toewijzingenRes.error) throw toewijzingenRes.error;
+    var meldingenRes = await sbPloeg.from("meldingen").select("*");
+    if(meldingenRes.error) throw meldingenRes.error;
+    var instellingenRes = await sbPloeg.from("instellingen").select("*").eq("id",1).single();
+    if(instellingenRes.error) throw instellingenRes.error;
+
+    var extraById = {};
+    (ledenPubRes.data||[]).forEach(function(e){ extraById[e.id] = e; });
     var dagIds = {};
     var members = personen.map(function(p){
       dagIds[p.id] = true;
       var extra = extraById[p.id] || {};
-      return { id:p.id, naam:p.naam, specialismen:p.specialismen||[], dienstverband:p.type||"onbekend",
-        rol: extra.rol || "personeel", correctie: extra.punten_correctie || 0, isExtra:false };
+      return {
+        id: p.id, naam: p.naam, email: p.email||"", post: p.postId||"", ploeg: p.ploegId||"",
+        specialismen: p.specialismen||[], dienstverband: p.type||"onbekend",
+        rol: extra.rol || "personeel", telefoon: extra.telefoon || "",
+        correctie: extra.punten_correctie || 0,
+        actief: extra.actief!==false, isExtra:false
+      };
     });
     (ledenPubRes.data||[]).forEach(function(e){
-      if(!dagIds[e.id]) members.push({id:e.id, naam:e.naam_override||"(naamloos account)", specialismen:e.specialismen||[], dienstverband:"onbekend", rol:e.rol, correctie:e.punten_correctie||0, isExtra:true});
+      if(!dagIds[e.id]){
+        members.push({id:e.id, naam:e.naam_override||"(naamloos account)", email:"", post:"", ploeg:"",
+          specialismen:e.specialismen||[], dienstverband:"onbekend", rol:e.rol, telefoon:e.telefoon||"",
+          correctie: e.punten_correctie || 0,
+          actief:e.actief!==false, isExtra:true});
+      }
     });
 
     var slotsByDienst = {};
-    (slotsRes.data||[]).forEach(function(sl){ (slotsByDienst[sl.dienst_id] = slotsByDienst[sl.dienst_id]||[]).push({slotId:sl.id, label:sl.label}); });
-    var shifts = (dienstenRes.data||[]).map(function(d){
-      return { id:d.id, post:d.post_id, datum:d.datum, type:d.type, deadline:d.deadline, notitie:d.notitie||"",
-        isSpoed: !!d.is_spoed, doelgroep:{specialisme:d.doelgroep_specialisme||"alle", aanstelling:d.doelgroep_aanstelling||"iedereen"},
-        slots: (slotsByDienst[d.id] || []).slice() };
+    (slotsRes.data||[]).forEach(function(sl){
+      (slotsByDienst[sl.dienst_id] = slotsByDienst[sl.dienst_id]||[]).push({slotId:sl.id, label:sl.label});
     });
-    var reacties = (reactiesRes.data||[]).map(function(r){ return {slotId:r.slot_id, lidId:r.lid_id, antwoord:r.antwoord, tijdstip:r.tijdstip}; });
-    var toewijzingen = (toewijzingenRes.data||[]).map(function(t){ return {slotId:t.slot_id, lidId:t.lid_id, methode:t.methode}; });
-    var inst = instellingenRes.data || {};
-    var instellingen = { tijden:{ochtend: inst.tijden_ochtend||"08:00", avond: inst.tijden_avond||"18:00"} };
+    var shifts = (dienstenRes.data||[]).map(function(d){
+      return {
+        id:d.id, post:d.post_id, datum:d.datum, type:d.type, deadline:d.deadline, notitie:d.notitie||"",
+        meldingMoment:d.melding_moment, isSpoed: !!d.is_spoed,
+        doelgroep:{specialisme:d.doelgroep_specialisme||"alle", aanstelling:d.doelgroep_aanstelling||"iedereen"},
+        aangemaaktDoor:d.aangemaakt_door||"", aangemaaktOp:d.aangemaakt_op,
+        slots: (slotsByDienst[d.id] || []).slice()
+      };
+    });
 
-    return {members:members, shifts:shifts, reacties:reacties, toewijzingen:toewijzingen, instellingen:instellingen};
+    var reacties = (reactiesRes.data||[]).map(function(r){ return {slotId:r.slot_id, lidId:r.lid_id, antwoord:r.antwoord, tijdstip:r.tijdstip}; });
+    var toewijzingen = (toewijzingenRes.data||[]).map(function(t){ return {slotId:t.slot_id, lidId:t.lid_id, toegewezenOp:t.toegewezen_op, methode:t.methode}; });
+    var meldingen = (meldingenRes.data||[]).map(function(m){ return {id:m.id, tekst:m.tekst, tijdstip:m.tijdstip, gelezen:m.gelezen, bron:m.bron}; });
+    var inst = instellingenRes.data || {};
+    var instellingen = {
+      whatsappNummer: inst.whatsapp_nummer || "",
+      tijden: {ochtend: inst.tijden_ochtend || "08:00", avond: inst.tijden_avond || "18:00"},
+      berichtSjabloon: inst.bericht_sjabloon || "🚒 Openstaande dienst – {post}{doelgroep}, {datum}. Reageren kan tot {deadline}. Open PloegCompleet om te reageren."
+    };
+
+    return {members:members, shifts:shifts, reacties:reacties, toewijzingen:toewijzingen,
+      meldingen:meldingen, instellingen:instellingen, specialismenOpties:specialismenOpties};
   }
-  async function refreshAllData(){ state.data = await loadAllData(); }
+
+  async function syncMeldingenRemote(data){
+    var known = {}; data.meldingen.forEach(function(m){ known[m.bron]=true; });
+    var toInsert = [];
+    data.shifts.forEach(function(shift){
+      var slotIds = shift.slots.map(function(sl){return sl.slotId;});
+      data.reacties.filter(function(r){ return slotIds.indexOf(r.slotId)>-1; }).forEach(function(r){
+        var key = bronKey(r);
+        if(known[key]) return;
+        var isPast = new Date(shift.deadline) <= new Date();
+        if(shift.meldingMoment==="direct" || (shift.meldingMoment==="na_sluiting" && isPast)){
+          var slot = shift.slots.filter(function(sl){return sl.slotId===r.slotId;})[0];
+          var tekst = getMemberName(r.lidId,data) + ' reageerde "' + ANTWOORD_LABEL[r.antwoord] + '" op ' + postNaam(shift.post) + ' – ' + formatDateShort(shift.datum) + (slot ? " (" + slot.label + ")" : "");
+          toInsert.push({id:uid("n"), tekst:tekst, tijdstip:new Date().toISOString(), gelezen:false, bron:key});
+          known[key]=true;
+        }
+      });
+    });
+    if(toInsert.length){
+      var res = await sbPloeg.from("meldingen").insert(toInsert);
+      if(!res.error){ data.meldingen = data.meldingen.concat(toInsert); }
+    }
+  }
+
+  async function refreshAllData(){
+    state.data = await loadAllData();
+    await syncMeldingenRemote(state.data);
+  }
+
   async function runAction(fn, toastMsg){
-    try{ await fn(); await refreshAllData(); if(toastMsg) showToast(toastMsg); else render(); }
-    catch(e){ showToast("Actie mislukt \u2013 " + (e && e.message ? e.message : "controleer de verbinding.")); }
+    try{
+      await fn();
+      await refreshAllData();
+      if(toastMsg) showToast(toastMsg, true); else render();
+    }catch(e){
+      showToast("Actie mislukt – " + (e && e.message ? e.message : "controleer de verbinding."), true);
+    }
   }
+
   async function loadInitial(){
-    try{ state.data = await loadAllData(); }
-    catch(e){ state.loadError = "Kon geen verbinding maken (" + (e && e.message ? e.message : "onbekende fout") + ")."; }
-    try{ var last = localStorage.getItem(LAST_USER_KEY); if(last && state.data && getMember(last, state.data)) state.pendingUserId = last; }catch(e){}
+    try{
+      state.data = await loadAllData();
+      await syncMeldingenRemote(state.data);
+    }catch(e){
+      state.loadError = "Kon geen verbinding maken met de database (" + (e && e.message ? e.message : "onbekende fout") + ").";
+    }
+    try{
+      var last = await window.storage.get(LAST_USER_KEY, false);
+      if(last && last.value && state.data && getMember(last.value, state.data)) state.pendingUserId = last.value;
+    }catch(e){}
     state.loading = false;
     render();
   }
-  function showToast(msg){ state.toast = msg; clearTimeout(toastTimer); toastTimer = setTimeout(function(){ state.toast=null; render(); }, 2600); render(); }
 
-  // ---------- pushmeldingen: klaarzetten (versturen gebeurt straks server-side) ----------
-  function urlBase64ToUint8Array(base64String){
-    var padding = "=".repeat((4 - base64String.length % 4) % 4);
-    var base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
-    var raw = atob(base64), out = new Uint8Array(raw.length);
-    for(var i=0;i<raw.length;++i) out[i] = raw.charCodeAt(i);
-    return out;
-  }
-  async function vraagPushToestemming(){
-    if(state.pushGevraagd) return;
-    state.pushGevraagd = true;
-    if(!("serviceWorker" in navigator)){ showToast("Deze browser ondersteunt zelfs geen service workers \u2013 waarschijnlijk een ingebouwd mini-browsertje (bijv. vanuit WhatsApp). Open de link in Safari/Chrome zelf."); return; }
-    var isStandalone = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
-    try{
-      var reg = await navigator.serviceWorker.ready;
-      if(!reg.pushManager){
-        if(!isStandalone) showToast("Meldingen niet beschikbaar \u2013 open de app via het beginscherm-icoontje, niet als gewoon tabblad.");
-        else showToast("Meldingen niet ondersteund op dit toestel/deze browser, ook al staat de app los open.");
-        return;
-      }
-      var toestemming = await Notification.requestPermission();
-      if(toestemming !== "granted"){ showToast("Meldingen: toestemming niet gegeven ("+toestemming+")."); return; }
-      var sub = await reg.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY) });
-      var res = await sbPloeg.from("push_subscriptions").upsert({ lid_id: state.currentUserId, subscriptie: sub.toJSON(), bijgewerkt_op: new Date().toISOString() }, {onConflict:"lid_id"});
-      if(res.error){ showToast("Meldingen: opslaan mislukt \u2013 "+res.error.message); return; }
-      showToast("Meldingen ingeschakeld \u2713");
-    }catch(e){ showToast("Meldingen: instellen mislukt \u2013 "+(e&&e.message?e.message:e)); }
+  function showToast(msg, skipRender){
+    state.toast = msg;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function(){ state.toast = null; render(); }, 2800);
+    render();
   }
 
-  var App = {}; window.App = App;
+  // ---------- App actions ----------
+  var App = {};
+  window.App = App;
+
   App.pickName = function(id){ state.pendingUserId = id; state.loginError = null; render(); };
   App.backToNames = function(){ state.pendingUserId = null; state.loginError = null; render(); };
   App.attemptLogin = async function(evt){
@@ -281,225 +512,744 @@
       var res = await sbPloeg.rpc("verify_pin", {p_id: state.pendingUserId, p_pin: pin});
       if(res.error) throw res.error;
       if(res.data === true){
-        state.currentUserId = state.pendingUserId; state.pendingUserId = null; state.loginError = null; state.view = "diensten";
-        try{ localStorage.setItem(LAST_USER_KEY, state.currentUserId); }catch(e){}
+        state.currentUserId = state.pendingUserId;
+        state.pendingUserId = null; state.loginError = null; state.view = "diensten";
         render();
+        try{ await window.storage.set(LAST_USER_KEY, state.currentUserId, false); }catch(e){}
         vraagPushToestemming();
-      } else { state.loginError = "Onjuiste pincode. Probeer opnieuw."; render(); }
-    }catch(e){ state.loginError = "Inloggen mislukt \u2013 controleer de verbinding."; render(); }
+      } else {
+        state.loginError = "Onjuiste pincode. Probeer opnieuw.";
+        render();
+      }
+    }catch(e){
+      state.loginError = "Inloggen mislukt – controleer de verbinding.";
+      render();
+    }
     return false;
   };
-  App.switchUser = function(){ state.currentUserId = null; state.pendingUserId = null; state.pushGevraagd = false; render(); };
-  App.testPush = function(){ state.pushGevraagd = false; vraagPushToestemming(); };
-  App.setView = function(v){ state.view = v; state.showForm=false; render(); };
+  App.switchUser = function(){ state.currentUserId = null; state.pendingUserId = null; state.loginError = null; render(); };
+  App.setView = function(v){ state.view = v; state.showForm=false; state.editingShiftId=null; state.expandedShiftId=null; render(); };
+  App.toggleExpand = function(id){ state.expandedShiftId = (state.expandedShiftId===id) ? null : id; render(); };
+  App.toggleBell = function(){
+    if(!state.bellOpen){
+      var unreadIds = state.data.meldingen.filter(function(m){ return !m.gelezen; }).map(function(m){ return m.id; });
+      if(unreadIds.length){
+        state.data.meldingen.forEach(function(m){ m.gelezen = true; });
+        sbPloeg.from("meldingen").update({gelezen:true}).in("id", unreadIds).then(function(){});
+      }
+    }
+    state.bellOpen = !state.bellOpen;
+    render();
+  };
+  App.refreshData = async function(){
+    try{ await refreshAllData(); showToast("Bijgewerkt", true); }
+    catch(e){ showToast("Vernieuwen mislukt", true); }
+  };
   App.filterMembers = function(val){
     var v = val.toLowerCase();
+    var box = document.getElementById("memberPickList");
+    if(box) box.style.display = v.length>0 ? "" : "none";
     document.querySelectorAll(".member-pick").forEach(function(el){
-      el.style.display = (el.getAttribute("data-naam")||"").toLowerCase().indexOf(v) > -1 ? "" : "none";
+      var naam = (el.getAttribute("data-naam")||"").toLowerCase();
+      el.style.display = (v.length>0 && naam.indexOf(v) > -1) ? "" : "none";
     });
   };
+  App.filterPersoneelList = function(val){
+    var v = val.toLowerCase();
+    document.querySelectorAll(".personeel-item").forEach(function(el){
+      var naam = (el.getAttribute("data-naam")||"").toLowerCase();
+      el.style.display = naam.indexOf(v) > -1 ? "" : "none";
+    });
+  };
+
   App.respond = function(slotId, antwoord){
     runAction(async function(){
-      var res = await sbPloeg.from("reacties").upsert({slot_id:slotId, lid_id:state.currentUserId, antwoord:antwoord, tijdstip:new Date().toISOString()}, {onConflict:"slot_id,lid_id"});
+      var res = await sbPloeg.from("reacties").upsert(
+        {slot_id:slotId, lid_id:state.currentUserId, antwoord:antwoord, tijdstip:new Date().toISOString()},
+        {onConflict:"slot_id,lid_id"}
+      );
       if(res.error) throw res.error;
+
       if(antwoord === "ja"){
         var shift = shiftOfSlot(slotId, state.data);
-        if(shift && shift.isSpoed && !getSlotAssignment(slotId, state.data)){
-          var r2 = await sbPloeg.from("toewijzingen").upsert({slot_id:slotId, lid_id:state.currentUserId, toegewezen_op:new Date().toISOString(), methode:"auto"}, {onConflict:"slot_id"});
+        var alreadyAssigned = getSlotAssignment(slotId, state.data);
+        if(shift && shift.isSpoed && !alreadyAssigned){
+          var r2 = await sbPloeg.from("toewijzingen").upsert(
+            {slot_id:slotId, lid_id:state.currentUserId, toegewezen_op:new Date().toISOString(), methode:"auto"},
+            {onConflict:"slot_id"}
+          );
           if(r2.error) throw r2.error;
         }
       }
     }, "Reactie opgeslagen");
   };
+
+  App.assignSlot = function(slotId, lidId, methode){
+    runAction(async function(){
+      var res = await sbPloeg.from("toewijzingen").upsert(
+        {slot_id:slotId, lid_id:lidId, toegewezen_op:new Date().toISOString(), methode:methode},
+        {onConflict:"slot_id"}
+      );
+      if(res.error) throw res.error;
+    }, "Dienst toegewezen");
+  };
+  App.autoAssign = function(slotId){
+    var ranked = autoSuggestForSlot(slotId, state.data);
+    if(!ranked.length){ showToast("Nog geen reacties om automatisch toe te wijzen."); return; }
+    App.assignSlot(slotId, ranked[0].lidId, "auto");
+  };
+
+  App.openNewShiftForm = function(){ state.showForm = true; state.editingShiftId = "new"; render(); };
+  App.editShift = function(id){ state.showForm = true; state.editingShiftId = id; render(); };
+  App.cancelForm = function(){ state.showForm = false; state.editingShiftId = null; render(); };
   App.toggleSpoedFields = function(checked){
     var wrap = document.getElementById("datumDeadlineWrap");
     if(!wrap) return;
-    wrap.classList.toggle("hidden", checked);
-    var d = wrap.querySelector('[name="datum"]'), dl = wrap.querySelector('[name="deadline"]');
-    if(d) d.required = !checked; if(dl) dl.required = !checked;
+    wrap.style.display = checked ? "none" : "";
+    var datumInput = wrap.querySelector('[name="datum"]');
+    var deadlineInput = wrap.querySelector('[name="deadline"]');
+    if(datumInput) datumInput.required = !checked;
+    if(deadlineInput) deadlineInput.required = !checked;
   };
-  App.openNewShiftForm = function(){ state.showForm = true; render(); };
-  App.cancelForm = function(){ state.showForm = false; render(); };
   App.saveShift = function(evt){
     evt.preventDefault();
     var f = evt.target;
-    var post = f.post.value, isSpoed = !!(f.spoed && f.spoed.checked);
+    var post = f.post.value;
+    var isSpoed = !!(f.spoed && f.spoed.checked);
     var datumVal, deadlineIso, meldingMoment;
+
     if(isSpoed){
       var now = new Date();
-      datumVal = toLocalDateStr(now); deadlineIso = new Date(now.getTime()+2*3600000).toISOString(); meldingMoment = "direct";
+      datumVal = toLocalDateStr(now);
+      deadlineIso = new Date(now.getTime() + 2*3600000).toISOString();
+      meldingMoment = "direct";
     } else {
       datumVal = f.datum.value;
       if(!post || !datumVal || !f.deadline.value){ showToast("Vul post, datum en deadline in."); return false; }
-      deadlineIso = new Date(f.deadline.value).toISOString(); meldingMoment = "direct";
+      deadlineIso = new Date(f.deadline.value).toISOString();
+      meldingMoment = f.meldingMoment.value;
     }
     var notitie = f.notitie.value.trim();
-    if(isSpoed) notitie = notitie ? ("Spoed \u2013 " + notitie) : "Spoedmelding";
-    var type = f.type.value, newId = uid("s");
-    var slots = buildSlots(type, state.data.instellingen.tijden).map(function(sl){ return {id:sl.slotId, dienst_id:newId, label:sl.label}; });
-    runAction(async function(){
-      var r1 = await sbPloeg.from("diensten").insert({
-        id:newId, post_id:post, datum:datumVal, type:type, deadline:deadlineIso, notitie:notitie,
-        melding_moment:meldingMoment, doelgroep_specialisme:"alle", doelgroep_aanstelling:"iedereen", is_spoed:isSpoed,
-        aangemaakt_door:getMemberName(state.currentUserId, state.data), aangemaakt_op:new Date().toISOString()
+    if(isSpoed) notitie = notitie ? ("Spoed – " + notitie) : "Spoedmelding";
+    var doelgroep = { specialisme: f.doelSpecialisme.value, aanstelling: f.doelAanstelling.value };
+
+    if(state.editingShiftId === "new"){
+      var type = f.type.value;
+      var newId = uid("s");
+      var slots = buildSlots(type, state.data.instellingen.tijden).map(function(sl){
+        return {id:sl.slotId, dienst_id:newId, label:sl.label};
       });
-      if(r1.error) throw r1.error;
-      var r2 = await sbPloeg.from("dienst_slots").insert(slots);
-      if(r2.error) throw r2.error;
-    }, "Dienst aangemaakt");
-    state.showForm = false;
+      runAction(async function(){
+        var r1 = await sbPloeg.from("diensten").insert({
+          id:newId, post_id:post, datum:datumVal, type:type, deadline:deadlineIso, notitie:notitie,
+          melding_moment:meldingMoment, doelgroep_specialisme:doelgroep.specialisme, doelgroep_aanstelling:doelgroep.aanstelling,
+          is_spoed:isSpoed,
+          aangemaakt_door:getMemberName(state.currentUserId, state.data), aangemaakt_op:new Date().toISOString()
+        });
+        if(r1.error) throw r1.error;
+        var r2 = await sbPloeg.from("dienst_slots").insert(slots);
+        if(r2.error) throw r2.error;
+      }, "Dienst opgeslagen");
+    } else {
+      var id = state.editingShiftId;
+      var editingShift = state.data.shifts.filter(function(s){ return s.id===id; })[0];
+      var slotUpdates = [];
+      if(editingShift){
+        editingShift.slots.forEach(function(slot){
+          var input = f["slotlabel_" + slot.slotId];
+          if(input && input.value && input.value !== slot.label) slotUpdates.push({id:slot.slotId, label:input.value});
+        });
+      }
+      runAction(async function(){
+        var r1 = await sbPloeg.from("diensten").update({
+          post_id:post, datum:datumVal, deadline:deadlineIso, notitie:notitie, melding_moment:meldingMoment,
+          doelgroep_specialisme:doelgroep.specialisme, doelgroep_aanstelling:doelgroep.aanstelling
+        }).eq("id", id);
+        if(r1.error) throw r1.error;
+        for(var i=0;i<slotUpdates.length;i++){
+          var r2 = await sbPloeg.from("dienst_slots").update({label:slotUpdates[i].label}).eq("id", slotUpdates[i].id);
+          if(r2.error) throw r2.error;
+        }
+      }, "Dienst bijgewerkt");
+    }
+    state.showForm = false; state.editingShiftId = null;
     return false;
   };
+  App.askDeleteShift = function(id){ state.confirmDeleteShiftId = id; render(); };
+  App.cancelDeleteShift = function(){ state.confirmDeleteShiftId = null; render(); };
+  App.confirmDeleteShift = function(id){
+    runAction(async function(){
+      var res = await sbPloeg.from("diensten").delete().eq("id", id);
+      if(res.error) throw res.error;
+    }, "Dienst verwijderd");
+    state.confirmDeleteShiftId = null;
+  };
 
-  function brandBlock(){ return '<div class="brand"><b>PLOEG</b><small>Brandweer Gelderland Midden</small></div>'; }
-  function renderLoading(){ return '<div class="login-wrap">'+brandBlock()+'<div class="chevron-divider"></div><div class="info-line">Bezig met laden\u2026</div></div>'; }
+  App.addExtraLid = function(evt){
+    evt.preventDefault();
+    var f = evt.target;
+    var naam = f.naam.value.trim(), rol = f.rol.value;
+    if(!naam){ showToast("Vul een naam in."); return false; }
+    var id = uid("x");
+    runAction(async function(){
+      var res = await sbPloeg.from("leden_extra").insert({id:id, naam_override:naam, rol:rol, pin:"1234", telefoon:""});
+      if(res.error) throw res.error;
+    }, "Extra account toegevoegd – standaard pincode 1234");
+    f.naam.value = "";
+    return false;
+  };
+  App.updateMemberRole = function(id, rol){
+    runAction(async function(){
+      var res = await sbPloeg.from("leden_extra").update({rol:rol}).eq("id", id);
+      if(res.error) throw res.error;
+    }, "Rol bijgewerkt");
+  };
+  App.updateMemberPhone = function(id, val){
+    runAction(async function(){
+      var res = await sbPloeg.from("leden_extra").update({telefoon:val.trim()}).eq("id", id);
+      if(res.error) throw res.error;
+    }, "Telefoonnummer opgeslagen");
+  };
+  App.updateMemberPin = function(id, val){
+    val = val.replace(/[^0-9]/g,"").slice(0,6);
+    if(val.length < 4){ showToast("Pincode moet minimaal 4 cijfers zijn."); return; }
+    runAction(async function(){
+      var res = await sbPloeg.from("leden_extra").update({pin:val}).eq("id", id);
+      if(res.error) throw res.error;
+    }, "Pincode bijgewerkt");
+  };
+  App.updateMemberCorrectie = function(id, val){
+    var n = parseInt(val, 10); if(isNaN(n)) n = 0;
+    runAction(async function(){
+      var res = await sbPloeg.from("leden_extra").update({punten_correctie:n}).eq("id", id);
+      if(res.error) throw res.error;
+    }, "Telling gecorrigeerd");
+  };
+  App.updateMemberSpecialismen = function(id, checkboxEl){
+    var box = checkboxEl.closest(".specialismen-box");
+    var gekozen = Array.prototype.slice.call(box.querySelectorAll("input[type=checkbox]:checked")).map(function(el){ return el.value; });
+    runAction(async function(){
+      var res = await sbPloeg.from("leden_extra").update({specialismen:gekozen}).eq("id", id);
+      if(res.error) throw res.error;
+    }, "Specialismen bijgewerkt");
+  };
+  App.askDeleteMember = function(id){ state.confirmDeleteMemberId = id; render(); };
+  App.cancelDeleteMember = function(){ state.confirmDeleteMemberId = null; render(); };
+  App.confirmDeleteMember = function(id){
+    runAction(async function(){
+      var res = await sbPloeg.from("leden_extra").delete().eq("id", id);
+      if(res.error) throw res.error;
+    }, "Account verwijderd");
+    state.confirmDeleteMemberId = null;
+    if(state.currentUserId===id) state.currentUserId = null;
+  };
+  App.updateWhatsappNummer = function(val){
+    runAction(async function(){
+      var res = await sbPloeg.from("instellingen").update({whatsapp_nummer: val.trim()}).eq("id",1);
+      if(res.error) throw res.error;
+    }, "WhatsApp-nummer opgeslagen");
+  };
+  App.previewBericht = function(sjabloon){
+    return renderBericht(sjabloon || "", {post:"Arnhem Noord", datum:"vr 8 aug", deadline:"vr 8 aug, 18:00", doelgroep:" (Alleen Bevelvoerder)"});
+  };
+  App.updateBerichtSjabloon = function(val){
+    runAction(async function(){
+      var res = await sbPloeg.from("instellingen").update({bericht_sjabloon: val}).eq("id",1);
+      if(res.error) throw res.error;
+    }, "Berichttekst opgeslagen");
+  };
+  App.updateStandaardtijden = function(key, val){
+    var col = key==="ochtend" ? "tijden_ochtend" : "tijden_avond";
+    var patch = {}; patch[col] = val;
+    runAction(async function(){
+      var res = await sbPloeg.from("instellingen").update(patch).eq("id",1);
+      if(res.error) throw res.error;
+    }, "Standaardtijd opgeslagen");
+  };
+  App.toggleBeheerOpenFilter = function(checked){ state.beheerAlleenOpen = checked; render(); };
+
+  function downloadFile(filename, content, mime){
+    var blob = new Blob([content], {type: mime});
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
+  }
+  function csvCell(v){
+    var s = String(v==null?"":v);
+    if(s.indexOf(",")>-1 || s.indexOf('"')>-1 || s.indexOf("\n")>-1){ s = '"' + s.replace(/"/g,'""') + '"'; }
+    return s;
+  }
+  App.exportCsv = function(){
+    var data = state.data;
+    var rows = [["Dienst ID","Post","Datum","Slot","Doelgroep","Sluit reactietermijn","Naam","Specialismen","Aanstelling","Antwoord","Reactietijdstip","Toegewezen aan","Toewijs methode"]];
+    data.shifts.slice().sort(function(a,b){ return parseDateOnly(a.datum)-parseDateOnly(b.datum); }).forEach(function(shift){
+      var dg = doelgroepLabel(shift).join(" / ") || "Iedereen";
+      shift.slots.forEach(function(slot){
+        var assignment = getSlotAssignment(slot.slotId, data);
+        var toegewezenAan = assignment ? getMemberName(assignment.lidId, data) : "";
+        var methode = assignment ? assignment.methode : "";
+        var reacties = data.reacties.filter(function(r){ return r.slotId===slot.slotId; });
+        if(!reacties.length){
+          rows.push([shift.id, postNaam(shift.post), shift.datum, slot.label, dg, shift.deadline, "", "", "", "", "", toegewezenAan, methode]);
+        } else {
+          reacties.forEach(function(r){
+            var lid = getMember(r.lidId, data);
+            rows.push([shift.id, postNaam(shift.post), shift.datum, slot.label, dg, shift.deadline,
+              lid?lid.naam:"(onbekend)", lid?(lid.specialismen||[]).join("; "):"", lid?dienstverbandLabel(lid.dienstverband):"",
+              ANTWOORD_LABEL[r.antwoord], formatDateTime(r.tijdstip), toegewezenAan, methode]);
+          });
+        }
+      });
+    });
+    var csv = rows.map(function(row){ return row.map(csvCell).join(","); }).join("\r\n");
+    downloadFile("ploegcompleet-reacties-"+toLocalDateStr(new Date())+".csv", "\uFEFF"+csv, "text/csv;charset=utf-8;");
+  };
+  App.exportJson = function(){
+    downloadFile("ploegcompleet-backup-"+toLocalDateStr(new Date())+".json", JSON.stringify(state.data, null, 2), "application/json");
+  };
+
+  // ---------- render: login ----------
+  function brandBlock(sub){
+    return '<div class="brand">PLOEGCOMPLEET<small>'+(sub||'Brandweer Gelderland Midden')+'</small></div>';
+  }
+  function renderLoading(){
+    return '<div class="login-wrap">'+brandBlock('bezig met laden…')+'</div>';
+  }
   function renderLoadError(){
-    return '<div class="login-wrap">'+brandBlock()+'<div class="chevron-divider"></div>'
-      + '<div class="info-line" style="border-color:var(--red);color:#FF8A80;">'+escapeHtml(state.loadError)+'</div>'
-      + '<button class="btn btn-primary" style="margin-top:14px;" onclick="location.reload()">Opnieuw proberen</button></div>';
-  }
-  function renderLogin(){
-    var members = state.data.members.slice().sort(function(a,b){ return a.naam.localeCompare(b.naam); });
-    var rows = members.map(function(m){
-      return '<div class="member-pick" data-naam="'+escapeHtml(m.naam)+'" onclick="App.pickName(\''+m.id+'\')"><span>'+escapeHtml(m.naam)+'</span></div>';
-    }).join("");
-    return '<div class="login-wrap">'+brandBlock()+'<div class="chevron-divider"></div>'
-      + '<p style="color:var(--text-muted);font-size:14px;margin-bottom:2px;">Wie ben jij?</p>'
-      + '<input type="text" placeholder="Typ je naam\u2026" oninput="App.filterMembers(this.value)" autofocus />'
-      + '<div class="member-pick-list">'+ (rows || '<div class="empty">Nog geen leden gevonden.</div>') + '</div></div>';
-  }
-  function renderPinEntry(){
-    var m = getMember(state.pendingUserId, state.data);
-    if(!m){ state.pendingUserId = null; return renderLogin(); }
-    return '<div class="login-wrap">'+brandBlock()+'<div class="chevron-divider"></div>'
-      + '<p style="font-size:17px;margin-bottom:4px;">Hoi <strong>'+escapeHtml(m.naam)+'</strong></p>'
-      + '<p style="color:var(--text-muted);font-size:13.5px;margin-top:0;">Vul je pincode in</p>'
-      + '<form onsubmit="return App.attemptLogin(event)">'
-      + '<input type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" name="pin" autofocus placeholder="\u2022\u2022\u2022\u2022" style="text-align:center;letter-spacing:0.3em;font-size:22px;" />'
-      + (state.loginError ? '<div style="color:#FF8A80;font-size:12.5px;margin-top:8px;">'+escapeHtml(state.loginError)+'</div>' : '')
-      + '<button type="submit" class="btn btn-primary" style="margin-top:14px;">Inloggen</button>'
-      + '</form>'
-      + '<button class="btn btn-ghost" style="margin-top:10px;" onclick="App.backToNames()">\u2190 Andere naam kiezen</button>'
+    return '<div class="login-wrap">'+brandBlock('kan niet verbinden')
+      + '<div class="error-line" style="margin:16px 0;text-align:left;">'+escapeHtml(state.loadError)+'</div>'
+      + '<button class="btn btn-primary" onclick="location.reload()">Opnieuw proberen</button>'
       + '</div>';
   }
 
+  function renderLogin(){
+    var members = state.data.members.slice().sort(function(a,b){ return a.naam.localeCompare(b.naam); });
+    var rows = members.map(function(m){
+      return '<div class="member-pick" tabindex="0" data-naam="'+escapeHtml(m.naam)+'" style="display:none;" onclick="App.pickName(\''+m.id+'\')" onkeydown="if(event.key===\'Enter\')App.pickName(\''+m.id+'\')">'
+        + '<span>'+escapeHtml(m.naam)+'</span>'
+        + '<span class="role-badge '+(isVerhoogdeRol(m.rol)?'admin':'')+'">'+roleLabel(m.rol)+'</span>'
+        + '</div>';
+    }).join("");
+    return '<div class="login-wrap">'
+      + brandBlock()
+      + '<div class="chevron-divider" style="margin:16px 0;"></div>'
+      + '<p style="color:var(--text-muted);font-size:14px;margin-bottom:2px;">Wie ben jij?</p>'
+      + '<input type="text" placeholder="Typ je naam om te zoeken…" oninput="App.filterMembers(this.value)" autofocus />'
+      + '<div class="member-pick-list" id="memberPickList" style="display:none;">'+ (rows || '<div class="empty">Nog geen leden gevonden.</div>') + '</div>'
+      + '</div>';
+  }
+
+  function renderPinEntry(){
+    var m = getMember(state.pendingUserId, state.data);
+    if(!m){ state.pendingUserId = null; return renderLogin(); }
+    return '<div class="login-wrap">'
+      + brandBlock()
+      + '<div class="chevron-divider" style="margin:16px 0;"></div>'
+      + '<p style="font-size:16px;margin-bottom:4px;">Hoi <strong>'+escapeHtml(m.naam)+'</strong></p>'
+      + '<p style="color:var(--text-muted);font-size:13px;margin-top:0;">Vul je pincode in</p>'
+      + '<form onsubmit="return App.attemptLogin(event)">'
+      + '<input type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" name="pin" autofocus placeholder="••••" style="text-align:center;letter-spacing:0.3em;font-size:20px;" />'
+      + (state.loginError ? '<div style="color:#FF8A80;font-size:12px;margin-top:8px;">'+escapeHtml(state.loginError)+'</div>' : '')
+      + '<div class="btn-row" style="justify-content:center;margin-top:14px;"><button type="submit" class="btn btn-primary">Inloggen</button></div>'
+      + '</form>'
+      + '<button class="btn btn-ghost" style="margin-top:10px;" onclick="App.backToNames()">← Andere naam kiezen</button>'
+      + '</div>';
+  }
+
+  // ---------- render: shift pieces ----------
   function slotBlock(slot, shift, me, data){
     var assignment = getSlotAssignment(slot.slotId, data);
     if(assignment){
-      var lid = getMember(assignment.lidId, data), mine = assignment.lidId === me.id;
+      var lid = getMember(assignment.lidId, data);
+      var mine = assignment.lidId === me.id;
       return '<div class="slot"><div class="slot-label">'+escapeHtml(slot.label)+'</div>'
-        + '<div class="assigned-banner '+(mine?'mine':'')+'">'+(mine ? '\uD83C\uDF89 Toegewezen aan jou!' : 'Toegewezen aan '+escapeHtml(lid?lid.naam:'onbekend'))+'</div></div>';
+        + '<div class="assigned-banner '+(mine?'mine':'')+'">'+(mine ? '🎉 Toegewezen aan jou!' : 'Toegewezen aan '+escapeHtml(lid?lid.naam:'onbekend'))+'</div></div>';
     }
     var deadlinePassed = remainingMs(shift.deadline) <= 0;
     var mineReactie = data.reacties.filter(function(r){ return r.slotId===slot.slotId && r.lidId===me.id; })[0];
     var counts = countReactions(slot.slotId, data);
     var buttonsOrMsg = deadlinePassed
-      ? '<div style="font-size:13px;color:var(--text-muted);">Reactietermijn is verstreken.</div>'
+      ? '<div style="font-size:12px;color:var(--text-muted);">Reactietermijn is verstreken.</div>'
       : '<div class="response-buttons">'
         + '<button class="resp-btn ja '+(mineReactie&&mineReactie.antwoord==="ja"?"selected":"")+'" onclick="App.respond(\''+slot.slotId+'\',\'ja\')">Ja, ik kan</button>'
         + '<button class="resp-btn kan_wel '+(mineReactie&&mineReactie.antwoord==="kan_wel"?"selected":"")+'" onclick="App.respond(\''+slot.slotId+'\',\'kan_wel\')">Kan wel, liever niet</button>'
         + '<button class="resp-btn nee '+(mineReactie&&mineReactie.antwoord==="nee"?"selected":"")+'" onclick="App.respond(\''+slot.slotId+'\',\'nee\')">Nee, ik kan niet</button>'
         + '</div>';
-    return '<div class="slot"><div class="slot-label">'+escapeHtml(slot.label)+'</div>'+buttonsOrMsg
-      + '<div class="counts-line">'+counts.ja+' ja &middot; '+counts.kan_wel+' kan wel &middot; '+counts.nee+' nee</div></div>';
-  }
-  function shiftCard(shift, me, data){
-    var urgency = urgencyOf(shift.datum);
-    var slotsHtml = shift.slots.map(function(slot){ return slotBlock(slot, shift, me, data); }).join("");
-    var dgTags = doelgroepLabel(shift).map(function(t){ return '<span class="doelgroep-tag">'+escapeHtml(t)+'</span>'; }).join("");
-    return '<div class="card"><div class="card-top"><div class="tag-row">'
-      + '<span class="post-tag">'+escapeHtml(postNaam(shift.post))+'</span>'
-      + (urgency==="vandaag" ? '<span class="urgent-badge">Spoed &middot; vandaag</span>' : '')
-      + (shift.isSpoed ? '<span class="urgent-badge">\u26A1 Eerste ja = toegewezen</span>' : '')
-      + dgTags + '</div></div>'
-      + '<div class="date-big" style="margin-top:8px;">'+formatDateShort(shift.datum)+'</div>'
-      + (shift.notitie ? '<div class="notitie">'+escapeHtml(shift.notitie)+'</div>' : '')
-      + slotsHtml
-      + '<div class="deadline-row"><span>Reageren tot '+formatDateTime(shift.deadline)+'</span></div>'
+    return '<div class="slot"><div class="slot-label">'+escapeHtml(slot.label)+'</div>'
+      + buttonsOrMsg
+      + '<div class="counts-line">'+counts.ja+' ja &middot; '+counts.kan_wel+' kan wel &middot; '+counts.nee+' nee</div>'
       + '</div>';
   }
-  function renderDienstenView(me, data){
+
+  function adminPanel(shift, data){
+    var rows = shift.slots.map(function(slot){
+      var assignment = getSlotAssignment(slot.slotId, data);
+      var ranked = autoSuggestForSlot(slot.slotId, data);
+      var body = "";
+      if(assignment){
+        body += '<div class="reactie-row"><span>Toegewezen: <strong>'+escapeHtml(getMemberName(assignment.lidId,data))+'</strong></span><span class="reactie-meta">'+assignment.methode+'</span></div>';
+      }
+      if(ranked.length){
+        body += ranked.map(function(r, i){
+          return '<div class="reactie-row">'
+            + '<span>'+(i===0?'<span class="suggest-star">★</span>':'')+escapeHtml(r.naam)+' – '+ANTWOORD_LABEL[r.antwoord]+' <span class="reactie-meta">('+r.count+'x dit jaar)</span></span>'
+            + '<button class="small-btn" onclick="App.assignSlot(\''+slot.slotId+'\',\''+r.lidId+'\',\'handmatig\')">Wijs toe</button>'
+            + '</div>';
+        }).join("");
+      } else if(!assignment){
+        body += '<div class="reactie-row"><span class="reactie-meta">Nog geen reacties.</span></div>';
+      }
+      var autoBtn = (!assignment && ranked.length) ? '<button class="small-btn primary" style="margin-top:8px;" onclick="App.autoAssign(\''+slot.slotId+'\')">★ Automatisch toewijzen (minste diensten)</button>' : '';
+      return '<div style="margin-bottom:10px;"><div style="font-size:12px;color:var(--text-muted);margin-bottom:4px;">'+escapeHtml(slot.label)+'</div>'+body+autoBtn+'</div>';
+    }).join("");
+    return '<div class="admin-panel"><h4>Reacties &amp; toewijzing</h4>'+rows+'</div>';
+  }
+
+  function shiftCard(shift, me, kanBeheren, data){
+    var urgency = urgencyOf(shift.datum);
+    var frac = elapsedFraction(shift);
+    var deadlinePassed = remainingMs(shift.deadline) <= 0;
+    var slotsHtml = shift.slots.map(function(slot){ return slotBlock(slot, shift, me, data); }).join("");
+    var tools = "";
+    if(kanBeheren){
+      tools += '<button class="expand-btn" onclick="App.toggleExpand(\''+shift.id+'\')">'+(state.expandedShiftId===shift.id?'Verberg reacties ↑':'Bekijk reacties ↓')+'</button>';
+      if(hasOpenSlot(shift, data)){
+        tools += '<a class="wa-link" target="_blank" rel="noopener" href="'+waShareUrl(shift, data)+'">Delen via WhatsApp</a>';
+      }
+    }
+    var panel = (kanBeheren && state.expandedShiftId===shift.id) ? adminPanel(shift, data) : "";
+    var dgTags = doelgroepLabel(shift).map(function(t){ return '<span class="doelgroep-tag">'+escapeHtml(t)+'</span>'; }).join("");
+    return '<div class="card">'
+      + '<div class="card-top">'
+      + '<div class="tag-row">'
+      + '<span class="post-tag '+postClass(shift.post)+'">'+escapeHtml(postNaam(shift.post))+'</span>'
+      + (urgency==="vandaag" ? '<span class="urgent-badge">Spoed &middot; vandaag</span>' : '')
+      + (shift.isSpoed ? '<span class="urgent-badge" title="Eerste ja krijgt de dienst direct">⚡ Eerste ja = toegewezen</span>' : '')
+      + dgTags
+      + '</div>'
+      + '</div>'
+      + '<div class="date-big" style="margin-top:6px;">'+formatDateShort(shift.datum)+'</div>'
+      + (shift.notitie ? '<div class="notitie">'+escapeHtml(shift.notitie)+'</div>' : '')
+      + slotsHtml
+      + '<div class="deadline-row"><span>Reageren kan tot '+formatDateTime(shift.deadline)+'</span><span>'+formatRemaining(shift.deadline)+'</span></div>'
+      + '<div class="deadline-track"><div class="deadline-elapsed" style="width:'+(frac*100)+'%;"></div>'+(deadlinePassed?'':'<div class="deadline-remaining" style="width:'+((1-frac)*100)+'%;"></div>')+'</div>'
+      + (tools ? '<div class="card-tools">'+tools+'</div>' : '')
+      + panel
+      + '</div>';
+  }
+
+  function renderDienstenView(me, kanBeheren, data){
     var relevant = function(s){ return matchesDoelgroep(me, s); };
     var open = openShifts(data).filter(relevant).slice().sort(function(a,b){ return parseDateOnly(a.datum)-parseDateOnly(b.datum); });
     var groups = {vandaag:[], komende4:[], verderop:[]};
     open.forEach(function(s){ groups[urgencyOf(s.datum)].push(s); });
-    var html = "";
-    if(!open.length){ html += '<div class="empty">Geen openstaande diensten voor jou. Alles is ingevuld \uD83C\uDF89</div>'; }
-    else{
-      if(groups.vandaag.length){ html += '<div class="eyebrow">Spoed &middot; vandaag</div>' + groups.vandaag.map(function(s){ return shiftCard(s, me, data); }).join(""); }
-      if(groups.komende4.length){ html += '<div class="eyebrow">Komende 4 dagen</div>' + groups.komende4.map(function(s){ return shiftCard(s, me, data); }).join(""); }
-      if(groups.verderop.length){ html += '<div class="eyebrow">Verder vooruit</div>' + groups.verderop.map(function(s){ return shiftCard(s, me, data); }).join(""); }
+
+    var html = '<div class="info-line">Reageer met <strong>Ja</strong>, <strong>Kan wel (liever niet)</strong>, of <strong>Nee</strong>. Bij meerdere ja’s krijgt voorlopig degene die dit jaar de minste diensten heeft gedraaid voorrang – definitieve regels volgen nog. Je ziet hier alleen diensten die voor jouw specialisme/aanstelling bedoeld zijn.</div>';
+
+    if(!open.length){
+      html += '<div class="empty">Geen openstaande diensten voor jou op dit moment. Alles is ingevuld! 🎉</div>';
+    } else {
+      if(groups.vandaag.length){ html += '<div class="eyebrow">Spoed &middot; vandaag</div>' + groups.vandaag.map(function(s){ return shiftCard(s, me, kanBeheren, data); }).join(""); }
+      if(groups.komende4.length){ html += '<div class="eyebrow">Komende 4 dagen</div>' + groups.komende4.map(function(s){ return shiftCard(s, me, kanBeheren, data); }).join(""); }
+      if(groups.verderop.length){ html += '<div class="eyebrow">Verder vooruit</div>' + groups.verderop.map(function(s){ return shiftCard(s, me, kanBeheren, data); }).join(""); }
+    }
+
+    var filled = filledShifts(data).filter(relevant).slice().sort(function(a,b){ return parseDateOnly(b.datum)-parseDateOnly(a.datum); }).slice(0,10);
+    if(filled.length){
+      html += '<details class="filled-section"><summary>Toegewezen diensten ('+filled.length+')</summary>' + filled.map(function(s){ return shiftCard(s, me, kanBeheren, data); }).join("") + '</details>';
     }
     return html;
   }
+
   function renderMijnView(me, data){
-    var mine = data.toewijzingen.filter(function(t){ return t.lidId===me.id; }).map(function(t){ return {toewijzing:t, shift:shiftOfSlot(t.slotId,data)}; })
-      .filter(function(x){ return x.shift; }).sort(function(a,b){ return parseDateOnly(b.shift.datum)-parseDateOnly(a.shift.datum); });
+    var mine = data.toewijzingen.filter(function(t){ return t.lidId===me.id; }).map(function(t){
+      return {toewijzing:t, shift:shiftOfSlot(t.slotId,data)};
+    }).filter(function(x){ return x.shift; }).sort(function(a,b){ return parseDateOnly(b.shift.datum)-parseDateOnly(a.shift.datum); });
     var count = computeShiftCounts(me.id, data);
-    var html = '<div class="stat-card"><div class="stat-big">'+count+'</div><div class="stat-label">diensten gedraaid dit jaar</div></div>';
-    if(!mine.length){ html += '<div class="empty">Nog geen diensten toegewezen gekregen.</div>'; }
-    else{
+    var html = '<div class="card" style="text-align:center;"><div class="stat-big">'+count+'</div><div class="stat-label">diensten gedraaid dit jaar</div></div>';
+    if(!mine.length){
+      html += '<div class="empty">Nog geen diensten toegewezen gekregen.</div>';
+    } else {
       html += mine.map(function(x){
         var slot = x.shift.slots.filter(function(sl){return sl.slotId===x.toewijzing.slotId;})[0];
-        return '<div class="list-item"><div class="list-item-top"><span class="post-tag">'+escapeHtml(postNaam(x.shift.post))+'</span><span class="date-big">'+formatDateShort(x.shift.datum)+'</span></div>'
-          + '<div style="margin-top:6px;font-size:13.5px;color:var(--text-muted);">'+(slot?escapeHtml(slot.label):'')+'</div></div>';
+        return '<div class="list-item"><div class="list-item-top">'
+          + '<span class="post-tag '+postClass(x.shift.post)+'">'+escapeHtml(postNaam(x.shift.post))+'</span>'
+          + '<span class="date-big">'+formatDateShort(x.shift.datum)+'</span>'
+          + '</div><div style="margin-top:6px;font-size:13px;color:var(--text-muted);">'+(slot?escapeHtml(slot.label):'')+'</div></div>';
       }).join("");
     }
     return html;
   }
+
+  function doelgroepFields(shift){
+    var dg = (shift && shift.doelgroep) ? shift.doelgroep : defaultDoelgroep();
+    var opties = state.data.specialismenOpties || ["Bevelvoerder","Manschap","Duiker"];
+    return '<div class="doelgroep-box">'
+      + '<div class="eyebrow">Voor wie is deze dienst?</div>'
+      + '<div class="field-row">'
+      + '<div class="field"><label>Specialisme</label><select name="doelSpecialisme">'
+        + '<option value="alle" '+(dg.specialisme==="alle"?"selected":"")+'>Alle specialismen</option>'
+        + opties.map(function(o){ return '<option value="'+escapeHtml(o)+'" '+(dg.specialisme===o?"selected":"")+'>Alleen '+escapeHtml(o)+'</option>'; }).join("")
+      + '</select></div>'
+      + '<div class="field"><label>Aanstelling</label><select name="doelAanstelling">'
+        + '<option value="iedereen" '+(dg.aanstelling==="iedereen"?"selected":"")+'>Iedereen</option>'
+        + '<option value="beroeps" '+(dg.aanstelling==="beroeps"?"selected":"")+'>Alleen beroeps</option>'
+        + '<option value="vrijwillig" '+(dg.aanstelling==="vrijwillig"?"selected":"")+'>Alleen vrijwilligers</option>'
+      + '</select></div>'
+      + '</div></div>';
+  }
+
   function shiftForm(){
+    var editing = state.editingShiftId && state.editingShiftId!=="new";
+    var shift = editing ? state.data.shifts.filter(function(s){ return s.id===state.editingShiftId; })[0] : null;
+    var spoedField = editing ? '' :
+      '<div class="field-checkbox">'
+      + '<input type="checkbox" name="spoed" id="spoedCheck" onchange="App.toggleSpoedFields(this.checked)" />'
+      + '<label for="spoedCheck">🚨 Spoedmelding – vandaag nodig, datum en sluitingstijd hoeven niet ingevuld (sluit automatisch over 2 uur)</label>'
+      + '</div>';
     var tijden = state.data.instellingen.tijden;
+    var typeField = editing ? '' :
+      '<div class="field"><label>Type</label>'
+      + '<select name="type" id="typeSelect" onchange="document.getElementById(\'slotPreview\').textContent = this.value===\'split\' ? \'Slots: Dag ('+tijden.ochtend+'–'+tijden.avond+') + Avond/Nacht ('+tijden.avond+'–'+tijden.ochtend+')\' : \'Slot: Hele dienst ('+tijden.ochtend+'–'+tijden.ochtend+')\';">'
+      + '<option value="heel" selected>Hele 24-uursdienst (standaard)</option>'
+      + '<option value="split">Opsplitsen in dag + avond/nacht (alleen bij nood)</option>'
+      + '</select><div class="preview-line" id="slotPreview">Slot: Hele dienst ('+tijden.ochtend+'–'+tijden.ochtend+')</div></div>';
+    var slotTijdenField = (editing && shift) ?
+      '<div class="doelgroep-box"><div class="eyebrow">Tijden van deze dienst</div>'
+      + shift.slots.map(function(slot){
+          return '<div class="field"><label>'+escapeHtml(slot.label.split(" (")[0])+'</label><input type="text" name="slotlabel_'+slot.slotId+'" value="'+escapeHtml(slot.label)+'" /></div>';
+        }).join("")
+      + '<div style="font-size:12px;color:var(--text-muted);">Pas de tekst aan, bv. "Hele dienst (08:00–08:00)".</div></div>'
+      : '';
+    var datumDeadline = '<div id="datumDeadlineWrap">'
+      + '<div class="field"><label>Datum</label><input type="date" name="datum" value="'+(shift?shift.datum:'')+'" required /></div>'
+      + '<div class="field"><label>Reageren mogelijk tot</label><input type="datetime-local" name="deadline" value="'+(shift?toLocalDateTimeStr(new Date(shift.deadline)):'')+'" required /></div>'
+      + '</div>';
     return '<div class="card">'
-      + '<h3 style="margin:0 0 14px;font-family:var(--font-display);font-weight:700;text-transform:uppercase;font-size:18px;">Nieuwe dienst</h3>'
+      + '<h3 style="margin-top:0;font-family:var(--font-display);text-transform:uppercase;">'+(editing?'Dienst bewerken':'Nieuwe dienst')+'</h3>'
       + '<form onsubmit="return App.saveShift(event)">'
-      + '<div class="field"><label>Post</label><select name="post">'+POST_ORDER.map(function(pid){ return '<option value="'+pid+'">'+POST_NAMEN[pid]+'</option>'; }).join("")+'</select></div>'
-      + '<div class="field-checkbox"><input type="checkbox" name="spoed" id="spoedCheck" onchange="App.toggleSpoedFields(this.checked)" /><label for="spoedCheck">\uD83D\uDEA8 Spoedmelding \u2013 vandaag nodig, sluit automatisch over 2 uur</label></div>'
-      + '<div id="datumDeadlineWrap">'
-      + '<div class="field"><label>Datum</label><input type="date" name="datum" /></div>'
-      + '<div class="field"><label>Reageren mogelijk tot</label><input type="datetime-local" name="deadline" /></div>'
-      + '</div>'
-      + '<div class="field"><label>Type</label><select name="type"><option value="heel">Hele 24-uursdienst</option><option value="split">Dag + avond/nacht apart</option></select>'
-      + '<div style="font-size:12px;color:var(--text-muted);margin-top:4px;">Standaardtijden: '+esc(tijden.ochtend)+'\u2013'+esc(tijden.avond)+'</div></div>'
-      + '<div class="field"><label>Notitie (optioneel)</label><textarea name="notitie"></textarea></div>'
-      + '<button type="submit" class="btn btn-primary">Dienst aanmaken</button>'
-      + '<button type="button" class="btn btn-ghost" style="margin-top:8px;" onclick="App.cancelForm()">Annuleren</button>'
+      + '<div class="field"><label>Post</label><select name="post">'
+        + POST_ORDER.map(function(pid){ return '<option value="'+pid+'" '+(shift&&shift.post===pid?'selected':'')+'>'+POST_NAMEN[pid]+'</option>'; }).join("")
+      + '</select></div>'
+      + spoedField
+      + datumDeadline
+      + typeField
+      + slotTijdenField
+      + doelgroepFields(shift)
+      + '<div class="field"><label>Melding aan beheerders</label><select name="meldingMoment">'
+        + '<option value="direct" '+(shift&&shift.meldingMoment==="direct"?"selected":"")+'>Direct bij elke reactie</option>'
+        + '<option value="na_sluiting" '+(shift&&shift.meldingMoment==="na_sluiting"?"selected":"")+'>Pas na sluiten reactietermijn</option>'
+      + '</select></div>'
+      + '<div class="field"><label>Notitie (optioneel)</label><textarea name="notitie">'+(shift?escapeHtml(shift.notitie):'')+'</textarea></div>'
+      + '<div class="btn-row"><button type="submit" class="btn btn-primary">Opslaan</button><button type="button" class="btn btn-ghost" onclick="App.cancelForm()">Annuleren</button></div>'
       + '</form></div>';
   }
-  function esc(s){ return escapeHtml(s); }
+
+  function renderBeheerDienstenView(data){
+    var html = '';
+    if(state.showForm){ html += shiftForm(); }
+    else{
+      html += '<div class="btn-row">'
+        + '<button class="btn btn-primary" onclick="App.openNewShiftForm()">+ Nieuwe dienst</button>'
+        + '<button class="btn" onclick="App.exportCsv()">⇓ Exporteren als CSV (reacties)</button>'
+        + '<button class="btn btn-ghost" onclick="App.exportJson()">⇓ Volledige back-up (JSON)</button>'
+        + '</div>';
+    }
+
+    var all = data.shifts.slice().sort(function(a,b){ return parseDateOnly(a.datum)-parseDateOnly(b.datum); });
+    if(state.beheerAlleenOpen){ all = all.filter(function(s){ return hasOpenSlot(s, data); }); }
+    html += '<div class="eyebrow" style="margin-top:24px;">Alle diensten</div>';
+    html += '<div class="field-checkbox" style="background:var(--surface-2);border-color:var(--border);"><input type="checkbox" id="alleenOpenCheck" '+(state.beheerAlleenOpen?"checked":"")+' onchange="App.toggleBeheerOpenFilter(this.checked)" /><label for="alleenOpenCheck">Alleen openstaande diensten tonen</label></div>';
+    if(!all.length){ html += '<div class="empty">Geen diensten om te tonen.</div>'; }
+    all.forEach(function(shift){
+      var filledCount = shift.slots.filter(function(sl){ return getSlotAssignment(sl.slotId,data); }).length;
+      var statusClass = filledCount===shift.slots.length ? "status-full" : (remainingMs(shift.deadline)<=0 ? "status-overdue" : "status-open");
+      var statusLabel = filledCount===shift.slots.length ? "Vol" : (remainingMs(shift.deadline)<=0 ? "Deadline verstreken" : "Open ("+filledCount+"/"+shift.slots.length+")");
+      var dgTags = doelgroepLabel(shift).map(function(t){ return '<span class="doelgroep-tag">'+escapeHtml(t)+'</span>'; }).join(" ");
+      html += '<div class="list-item">'
+        + '<div class="list-item-top">'
+        + '<span><span class="post-tag '+postClass(shift.post)+'">'+escapeHtml(postNaam(shift.post))+'</span> <span class="date-big">'+formatDateShort(shift.datum)+'</span></span>'
+        + '<span class="status-tag '+statusClass+'">'+statusLabel+'</span>'
+        + '</div>'
+        + (dgTags ? '<div style="margin-top:6px;">'+dgTags+'</div>' : '')
+        + (shift.notitie ? '<div class="notitie">'+escapeHtml(shift.notitie)+'</div>' : '')
+        + '<div class="btn-row">'
+        + '<button class="small-btn" onclick="App.toggleExpand(\''+shift.id+'\')">'+(state.expandedShiftId===shift.id?'Verberg reacties':'Reacties')+'</button>'
+        + '<button class="small-btn" onclick="App.editShift(\''+shift.id+'\')">Bewerken</button>'
+        + '<a class="small-btn" target="_blank" rel="noopener" href="'+waShareUrl(shift, data)+'">WhatsApp</a>'
+        + (state.confirmDeleteShiftId===shift.id
+            ? '<span style="font-size:12px;">Zeker weten? <button class="small-btn primary" onclick="App.confirmDeleteShift(\''+shift.id+'\')">Ja, verwijderen</button> <button class="small-btn" onclick="App.cancelDeleteShift()">Annuleren</button></span>'
+            : '<button class="small-btn" style="color:#FF8A80;" onclick="App.askDeleteShift(\''+shift.id+'\')">Verwijderen</button>')
+        + '</div>'
+        + (state.expandedShiftId===shift.id ? adminPanel(shift, data) : '')
+        + '</div>';
+    });
+    return html;
+  }
+
+  function renderPersoneelView(data){
+    var members = data.members.slice().sort(function(a,b){ return a.naam.localeCompare(b.naam); });
+    var html = '<div class="card">'
+      + '<h3 style="margin-top:0;font-family:var(--font-display);text-transform:uppercase;">Extra account toevoegen</h3>'
+      + '<div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">Regulier personeel komt automatisch mee uit Dagstaat. Gebruik dit alleen voor accounts die daar niet in staan (bv. een testbeheerder).</div>'
+      + '<form onsubmit="return App.addExtraLid(event)"><div class="field-row">'
+      + '<div class="field"><label>Naam</label><input type="text" name="naam" required /></div>'
+      + '<div class="field"><label>App-rechten</label><select name="rol">'
+        + ROLE_ORDER.map(function(r){ return '<option value="'+r+'" '+(r==="personeel"?"selected":"")+'>'+roleLabel(r)+'</option>'; }).join("")
+      + '</select></div>'
+      + '</div><button type="submit" class="btn btn-primary">Toevoegen</button>'
+      + '<div style="font-size:12px;color:var(--text-muted);margin-top:8px;">Standaard pincode: <strong>1234</strong>.</div>'
+      + '</form></div>';
+
+    html += '<div class="eyebrow">Personeel ('+members.length+')</div>';
+    html += '<div class="info-line">"App-rechten" bepaalt wat iemand in PloegCompleet mag doen – dat is iets anders dan een functie/specialisme uit Dagstaat, ook als de naam (bv. Bevelvoerder) toevallig hetzelfde is.</div>';
+    html += '<input type="text" placeholder="Zoek personeel…" oninput="App.filterPersoneelList(this.value)" style="margin-bottom:10px;" />';
+    var specialismenOpties = data.specialismenOpties || ["Bevelvoerder","Manschap","Duiker"];
+    members.forEach(function(m){
+      var count = computeShiftCounts(m.id, data);
+      var metaBits = [];
+      if(m.post) metaBits.push(postNaam(m.post));
+      if(m.ploeg) metaBits.push(m.ploeg.replace(/^post\d+-/,""));
+      if(!m.isExtra && m.specialismen && m.specialismen.length) metaBits.push(m.specialismen.join(", "));
+      metaBits.push(dienstverbandLabel(m.dienstverband));
+      if(m.email) metaBits.push(m.email);
+      var specialismenBox = m.isExtra ?
+        '<div class="specialismen-box" style="margin-top:8px;">'
+        + '<span class="inline-field-label">Specialismen (voor doelgroep-testen)</span>'
+        + specialismenOpties.map(function(o){
+            var checked = m.specialismen.indexOf(o)>-1;
+            var cbid = "sp_"+m.id+"_"+o.replace(/[^a-zA-Z0-9]/g,"");
+            return '<label style="display:inline-flex;align-items:center;gap:4px;margin:2px 8px 2px 0;text-transform:none;font-size:12px;"><input type="checkbox" id="'+cbid+'" value="'+escapeHtml(o)+'" '+(checked?"checked":"")+' onchange="App.updateMemberSpecialismen(\''+m.id+'\', this)" style="width:auto;" />'+escapeHtml(o)+'</label>';
+          }).join("")
+        + '</div>' : '';
+      html += '<div class="list-item personeel-item" data-naam="'+escapeHtml(m.naam)+'"><div class="list-item-top">'
+        + '<span>'+escapeHtml(m.naam)+' <span class="reactie-meta">('+count+'x dit jaar)</span> '+(m.isExtra?'<span class="role-badge extra">Extra account</span>':'')+'</span>'
+        + '<select class="mini-select" onchange="App.updateMemberRole(\''+m.id+'\',this.value)">'
+          + ROLE_ORDER.map(function(r){ return '<option value="'+r+'" '+(m.rol===r?'selected':'')+'>'+roleLabel(r)+'</option>'; }).join("")
+        + '</select>'
+        + '</div>'
+        + '<div class="meta-line">'+metaBits.map(escapeHtml).join(' &middot; ')+(m.isExtra?' &middot; (niet in Dagstaat)':'')+'</div>'
+        + '<div class="field-row" style="margin-top:8px;">'
+        + '<div><span class="inline-field-label">06-nummer</span><input class="phone-input" type="tel" placeholder="06…" value="'+escapeHtml(m.telefoon||"")+'" onchange="App.updateMemberPhone(\''+m.id+'\',this.value)" /></div>'
+        + '<div><span class="inline-field-label">Pincode</span><input class="pin-input" type="text" inputmode="numeric" maxlength="6" placeholder="••••" onchange="App.updateMemberPin(\''+m.id+'\',this.value)" /></div>'
+        + '<div><span class="inline-field-label">Correctie telling</span><input class="pin-input" type="number" step="1" value="'+m.correctie+'" onchange="App.updateMemberCorrectie(\''+m.id+'\',this.value)" title="Aantal diensten dat handmatig bij de telling van dit jaar wordt opgeteld (kan negatief)." /></div>'
+        + '</div>'
+        + specialismenBox
+        + (m.isExtra ? (
+            state.confirmDeleteMemberId===m.id
+              ? '<div style="margin-top:8px;font-size:12px;">Zeker weten? <button class="small-btn primary" onclick="App.confirmDeleteMember(\''+m.id+'\')">Ja, verwijderen</button> <button class="small-btn" onclick="App.cancelDeleteMember()">Annuleren</button></div>'
+              : '<div class="btn-row"><button class="small-btn" style="color:#FF8A80;" onclick="App.askDeleteMember(\''+m.id+'\')">Verwijderen</button></div>'
+          ) : '')
+        + '</div>';
+    });
+    return html;
+  }
+
+  function renderInstellingenView(data){
+    var wa = (data.instellingen && data.instellingen.whatsappNummer) || "";
+    var tijden = (data.instellingen && data.instellingen.tijden) || defaultTijden();
+    var html = '<div class="card">'
+      + '<h3 style="margin-top:0;font-family:var(--font-display);text-transform:uppercase;">Standaardtijden</h3>'
+      + '<div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">Gebruikt bij het aanmaken van nieuwe diensten. Tijden van een bestaande dienst pas je aan via Beheer diensten &rarr; Bewerken.</div>'
+      + '<div class="field-row">'
+      + '<div class="field"><label>Ochtend-wisseltijd</label><input type="time" value="'+escapeHtml(tijden.ochtend)+'" onchange="App.updateStandaardtijden(\'ochtend\',this.value)" /></div>'
+      + '<div class="field"><label>Avond-wisseltijd</label><input type="time" value="'+escapeHtml(tijden.avond)+'" onchange="App.updateStandaardtijden(\'avond\',this.value)" /></div>'
+      + '</div>'
+      + '<div style="font-size:12px;color:var(--text-muted);">Hele dienst: '+escapeHtml(tijden.ochtend)+'–'+escapeHtml(tijden.ochtend)+' &middot; Dag: '+escapeHtml(tijden.ochtend)+'–'+escapeHtml(tijden.avond)+' &middot; Avond/Nacht: '+escapeHtml(tijden.avond)+'–'+escapeHtml(tijden.ochtend)+'</div>'
+      + '</div>';
+    html += '<div class="card">'
+      + '<h3 style="margin-top:0;font-family:var(--font-display);text-transform:uppercase;">WhatsApp</h3>'
+      + '<div class="field"><label>WhatsApp-nummer voor "Delen via WhatsApp"</label>'
+      + '<input type="tel" value="'+escapeHtml(wa)+'" placeholder="06… (internationaal, bv. 316xxxxxxxx)" onchange="App.updateWhatsappNummer(this.value)" /></div>'
+      + '<div style="font-size:12px;color:var(--text-muted);">Alle "Delen via WhatsApp"-knoppen openen voorlopig een bericht naar dit ene nummer. Laat leeg om weer een contactkiezer te tonen.</div>'
+      + '<div class="field" style="margin-top:14px;"><label>Berichttekst</label>'
+      + '<textarea id="berichtSjabloonInput" oninput="document.getElementById(\'berichtVoorbeeld\').textContent = App.previewBericht(this.value);" onchange="App.updateBerichtSjabloon(this.value)">'+escapeHtml(data.instellingen.berichtSjabloon)+'</textarea></div>'
+      + '<div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;">Plaatshouders: <code>{post}</code> <code>{datum}</code> <code>{deadline}</code> <code>{doelgroep}</code>. Dit sjabloon wordt straks ook gebruikt voor pushmeldingen en e-mail, zodra die er zijn.</div>'
+      + '<div class="preview-line" id="berichtVoorbeeld">'+escapeHtml(App.previewBericht(data.instellingen.berichtSjabloon))+'</div>'
+      + '</div>';
+    html += '<div class="card">'
+      + '<h3 style="margin-top:0;font-family:var(--font-display);text-transform:uppercase;">Dashboard-koppeling</h3>'
+      + '<div style="font-size:12px;color:var(--text-muted);">De externe dashboard-site kan open diensten (post, datum, wel/geen duiker, notitie) ophalen via:</div>'
+      + '<div style="font-family:var(--font-mono);font-size:11px;background:var(--surface-2);border:1px solid var(--border);border-radius:6px;padding:8px;margin-top:6px;word-break:break-all;">'+escapeHtml(PLOEG_URL)+'/rest/v1/dashboard_open_diensten</div>'
+      + '</div>';
+    html += '<div class="info-line">Overzicht van rollen en rechten binnen PloegCompleet.</div>';
+    ROLE_ORDER.forEach(function(r){
+      var info = ROLE_INFO[r];
+      var count = data.members.filter(function(m){ return m.rol===r; }).length;
+      html += '<div class="card"><div class="card-top">'
+        + '<span class="role-badge '+(r!=="personeel"?"admin":"")+'" style="font-size:12px;padding:4px 9px;">'+info.label+'</span>'
+        + '<span class="reactie-meta">'+count+' perso'+'on'+(count===1?'':'en')+'</span>'
+        + '</div><div style="margin-top:8px;font-size:13px;color:var(--text-muted);">'+info.omschrijving+'</div></div>';
+    });
+    return html;
+  }
+
+  function renderMeldingenDropdown(data){
+    var items = data.meldingen.slice().sort(function(a,b){ return new Date(b.tijdstip)-new Date(a.tijdstip); }).slice(0,20);
+    var body = items.length ? items.map(function(m){
+      return '<div class="melding-item">'+escapeHtml(m.tekst)+'<div class="melding-time">'+formatDateTime(m.tijdstip)+'</div></div>';
+    }).join("") : '<div class="melding-item">Geen meldingen.</div>';
+    return '<div class="melding-dropdown">'+body+'</div>';
+  }
 
   function renderMain(){
     var data = state.data;
     var me = getMember(state.currentUserId, data);
     if(!me){ state.currentUserId = null; return renderLogin(); }
     var kanBeheren = kanDienstenBeheren(me.rol);
+    var kanPersoneel = kanPersoneelBeheren(me.rol);
+    var kanInstellingen = kanInstellingenZien(me.rol);
+    var unread = data.meldingen.filter(function(m){ return !m.gelezen; }).length;
 
-    var top = '<div class="topbar"><div class="brand">PLOEG<small>'+escapeHtml(me.naam)+'</small></div><div style="display:flex;gap:8px;"><button class="icon-btn" onclick="App.testPush()" title="Meldingen (opnieuw) inschakelen">\uD83D\uDD14</button><button class="icon-btn" onclick="App.switchUser()" title="Wisselen">\u21BB</button></div></div>';
+    var header = '<div class="header">'
+      + '<div class="header-row">'
+      + brandBlock()
+      + '<div class="header-actions">'
+      + '<button class="icon-btn" title="Vernieuwen" onclick="App.refreshData()">↻</button>'
+      + (kanBeheren ? '<button class="icon-btn" title="Meldingen" onclick="App.toggleBell()">🔔'+(unread?'<span class="badge-dot">'+unread+'</span>':'')+'</button>' : '')
+      + '<button class="user-chip" onclick="App.switchUser()">'+escapeHtml(me.naam)+' <span class="role">&middot; '+roleLabel(me.rol)+'</span> &#8646;</button>'
+      + (state.bellOpen ? renderMeldingenDropdown(data) : '')
+      + '</div></div>'
+      + '<div class="chevron-divider"></div>'
+      + '<div class="tabs">'
+      + '<button class="tab '+(state.view==="diensten"?"active":"")+'" onclick="App.setView(\'diensten\')">Diensten</button>'
+      + '<button class="tab '+(state.view==="mijn"?"active":"")+'" onclick="App.setView(\'mijn\')">Mijn diensten</button>'
+      + (kanBeheren ? '<button class="tab '+(state.view==="beheer-diensten"?"active":"")+'" onclick="App.setView(\'beheer-diensten\')">Beheer diensten</button>' : '')
+      + (kanPersoneel ? '<button class="tab '+(state.view==="personeel"?"active":"")+'" onclick="App.setView(\'personeel\')">Personeel</button>' : '')
+      + (kanInstellingen ? '<button class="tab '+(state.view==="instellingen"?"active":"")+'" onclick="App.setView(\'instellingen\')">Instellingen</button>' : '')
+      + '</div></div>';
+
     var body;
-    if(state.showForm && kanBeheren) body = shiftForm();
-    else if(state.view==="mijn") body = renderMijnView(me, data);
-    else body = renderDienstenView(me, data);
+    if(state.view==="mijn") body = renderMijnView(me, data);
+    else if(state.view==="beheer-diensten" && kanBeheren) body = renderBeheerDienstenView(data);
+    else if(state.view==="personeel" && kanPersoneel) body = renderPersoneelView(data);
+    else if(state.view==="instellingen" && kanInstellingen) body = renderInstellingenView(data);
+    else body = renderDienstenView(me, kanBeheren, data);
 
-    var nav = '<div class="bottomnav">'
-      + '<button class="nav-btn '+(state.view==="diensten"&&!state.showForm?"active":"")+'" onclick="App.setView(\'diensten\')"><span class="nav-icon">\uD83D\uDCCB</span>Diensten</button>'
-      + '<button class="nav-btn '+(state.view==="mijn"&&!state.showForm?"active":"")+'" onclick="App.setView(\'mijn\')"><span class="nav-icon">\uD83D\uDC64</span>Mijn diensten</button>'
-      + '</div>'
-      + (kanBeheren && !state.showForm ? '<button class="nav-fab" onclick="App.openNewShiftForm()" title="Nieuwe dienst">+</button>' : '');
-
-    return top + '<div class="content">' + body + '</div>' + nav + (state.toast ? '<div class="toast">'+escapeHtml(state.toast)+'</div>' : '');
+    return header + '<div class="content">' + body + '</div>' + (state.toast ? '<div class="toast">'+escapeHtml(state.toast)+'</div>' : '');
   }
 
   function render(){
     var root = document.getElementById("app");
     if(state.loading){ root.innerHTML = renderLoading(); return; }
     if(state.loadError){ root.innerHTML = renderLoadError(); return; }
-    if(!state.currentUserId){ root.innerHTML = state.pendingUserId ? renderPinEntry() : renderLogin(); return; }
+    if(!state.currentUserId){
+      root.innerHTML = state.pendingUserId ? renderPinEntry() : renderLogin();
+      return;
+    }
     root.innerHTML = renderMain();
   }
 
-  setInterval(function(){ if(!state.loading && !state.loadError && state.currentUserId && !state.showForm){ render(); } }, 60000);
+  setInterval(function(){
+    if(!state.loading && !state.loadError && state.currentUserId && !state.showForm){ render(); }
+  }, 60000);
+
   if("serviceWorker" in navigator){
-    navigator.serviceWorker.register("sw.js").catch(function(){ /* PWA-installatie is een bonus, geen vereiste */ });
+    navigator.serviceWorker.register("sw.js").catch(function(){ /* pushmeldingen zijn een bonus, geen vereiste */ });
   }
+
   loadInitial();
 })();
 </script>
