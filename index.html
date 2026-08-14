@@ -253,10 +253,15 @@
   async function vraagPushToestemming(){
     if(state.pushGevraagd) return;
     state.pushGevraagd = true;
-    if(!("serviceWorker" in navigator)){ showToast("Meldingen niet ondersteund in deze browser/context."); return; }
+    if(!("serviceWorker" in navigator)){ showToast("Deze browser ondersteunt zelfs geen service workers \u2013 waarschijnlijk een ingebouwd mini-browsertje (bijv. vanuit WhatsApp). Open de link in Safari/Chrome zelf."); return; }
+    var isStandalone = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
     try{
       var reg = await navigator.serviceWorker.ready;
-      if(!reg.pushManager){ showToast("Meldingen niet ondersteund op dit toestel/deze browser."); return; }
+      if(!reg.pushManager){
+        if(!isStandalone) showToast("Meldingen niet beschikbaar \u2013 open de app via het beginscherm-icoontje, niet als gewoon tabblad.");
+        else showToast("Meldingen niet ondersteund op dit toestel/deze browser, ook al staat de app los open.");
+        return;
+      }
       var toestemming = await Notification.requestPermission();
       if(toestemming !== "granted"){ showToast("Meldingen: toestemming niet gegeven ("+toestemming+")."); return; }
       var sub = await reg.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY) });
