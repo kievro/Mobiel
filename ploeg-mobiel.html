@@ -284,7 +284,8 @@
     }catch(e){ state.loginError = "Inloggen mislukt \u2013 controleer de verbinding."; render(); }
     return false;
   };
-  App.switchUser = function(){ state.currentUserId = null; state.pendingUserId = null; render(); };
+  App.switchUser = function(){ state.currentUserId = null; state.pendingUserId = null; state.pushGevraagd = false; render(); };
+  App.testPush = function(){ state.pushGevraagd = false; vraagPushToestemming(); };
   App.setView = function(v){ state.view = v; state.showForm=false; render(); };
   App.filterMembers = function(val){
     var v = val.toLowerCase();
@@ -467,7 +468,7 @@
     if(!me){ state.currentUserId = null; return renderLogin(); }
     var kanBeheren = kanDienstenBeheren(me.rol);
 
-    var top = '<div class="topbar"><div class="brand">PLOEG<small>'+escapeHtml(me.naam)+'</small></div><button class="icon-btn" onclick="App.switchUser()" title="Wisselen">\u21BB</button></div>';
+    var top = '<div class="topbar"><div class="brand">PLOEG<small>'+escapeHtml(me.naam)+'</small></div><div style="display:flex;gap:8px;"><button class="icon-btn" onclick="App.testPush()" title="Meldingen (opnieuw) inschakelen">\uD83D\uDD14</button><button class="icon-btn" onclick="App.switchUser()" title="Wisselen">\u21BB</button></div></div>';
     var body;
     if(state.showForm && kanBeheren) body = shiftForm();
     else if(state.view==="mijn") body = renderMijnView(me, data);
