@@ -9,7 +9,7 @@
 <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Ploeg">
+<meta name="apple-mobile-web-app-title" content="PloegCompleet">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
@@ -126,7 +126,7 @@
 
   var state = {
     data: null, loadError: null, currentUserId: null, pendingUserId: null, loginError: null,
-    view: "diensten", loading: true, toast: null, showForm: false, pushGevraagd: false
+    view: "diensten", loading: true, toast: null, showForm: false, pushGevraagd: false, moetPincodeWijzigen: false
   };
   var toastTimer = null;
 
@@ -273,20 +273,45 @@
 
   var App = {}; window.App = App;
   App.pickName = function(id){ state.pendingUserId = id; state.loginError = null; render(); };
-  App.backToNames = function(){ state.pendingUserId = null; state.loginError = null; render(); };
+  App.backToNames = function(){ state.pendingUserId = null; state.loginError = null; state.moetPincodeWijzigen = false; render(); };
   App.attemptLogin = async function(evt){
     evt.preventDefault();
     var pin = evt.target.pin.value.trim();
     try{
       var res = await sbPloeg.rpc("verify_pin", {p_id: state.pendingUserId, p_pin: pin});
       if(res.error) throw res.error;
-      if(res.data === true){
-        state.currentUserId = state.pendingUserId; state.pendingUserId = null; state.loginError = null; state.view = "diensten";
+      var uitkomst = res.data;
+      if(uitkomst && uitkomst.ok){
+        if(uitkomst.moetWijzigen){
+          state.loginError = null;
+          state.moetPincodeWijzigen = true;
+          render();
+          return false;
+        }
+        state.currentUserId = state.pendingUserId; state.pendingUserId = null; state.loginError = null; state.view = "diensten"; state.moetPincodeWijzigen = false;
         try{ localStorage.setItem(LAST_USER_KEY, state.currentUserId); }catch(e){}
         render();
         vraagPushToestemming();
       } else { state.loginError = "Onjuiste pincode. Probeer opnieuw."; render(); }
     }catch(e){ state.loginError = "Inloggen mislukt \u2013 controleer de verbinding."; render(); }
+    return false;
+  };
+  App.stelNieuwePincodeIn = async function(evt){
+    evt.preventDefault();
+    var f = evt.target;
+    var p1 = f.pin1.value.trim(), p2 = f.pin2.value.trim();
+    var foutEl = document.getElementById("nieuwPinFout");
+    if(p1.length < 4){ foutEl.textContent = "Minimaal 4 cijfers."; return false; }
+    if(p1 === "1234"){ foutEl.textContent = "Kies een andere code dan de standaardcode 1234."; return false; }
+    if(p1 !== p2){ foutEl.textContent = "De twee codes komen niet overeen."; return false; }
+    try{
+      var res = await sbPloeg.rpc("set_pin", {p_id: state.pendingUserId, p_pin: p1});
+      if(res.error) throw res.error;
+      state.currentUserId = state.pendingUserId; state.pendingUserId = null; state.moetPincodeWijzigen = false; state.view = "diensten";
+      try{ localStorage.setItem(LAST_USER_KEY, state.currentUserId); }catch(e){}
+      render();
+      vraagPushToestemming();
+    }catch(e){ foutEl.textContent = "Opslaan mislukt, probeer opnieuw."; }
     return false;
   };
   App.switchUser = function(){ state.currentUserId = null; state.pendingUserId = null; state.pushGevraagd = false; render(); };
@@ -351,7 +376,7 @@
     return false;
   };
 
-  function brandBlock(){ return '<div class="brand"><b>PLOEG</b><small>Brandweer Gelderland Midden</small></div>'; }
+  function brandBlock(){ return '<div class="brand"><b>PloegCompleet</b><small>Brandweer Gelderland Midden</small></div>'; }
   function renderLoading(){ return '<div class="login-wrap">'+brandBlock()+'<div class="chevron-divider"></div><div class="info-line">Bezig met laden\u2026</div></div>'; }
   function renderLoadError(){
     return '<div class="login-wrap">'+brandBlock()+'<div class="chevron-divider"></div>'
@@ -380,6 +405,21 @@
       + '<button type="submit" class="btn btn-primary" style="margin-top:14px;">Inloggen</button>'
       + '</form>'
       + '<button class="btn btn-ghost" style="margin-top:10px;" onclick="App.backToNames()">\u2190 Andere naam kiezen</button>'
+      + '</div>';
+  }
+
+  function renderNieuwePincodeScherm(){
+    var m = getMember(state.pendingUserId, state.data);
+    if(!m){ state.pendingUserId = null; state.moetPincodeWijzigen = false; return renderLogin(); }
+    return '<div class="login-wrap">'+brandBlock()+'<div class="chevron-divider"></div>'
+      + '<p style="font-size:17px;margin-bottom:4px;">Nieuwe pincode instellen</p>'
+      + '<p style="color:var(--text-muted);font-size:13.5px;margin-top:0;">Eerste keer (of na een reset) \u2014 kies een eigen pincode van minimaal 4 cijfers, niet 1234.</p>'
+      + '<form onsubmit="return App.stelNieuwePincodeIn(event)">'
+      + '<input type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" name="pin1" autofocus placeholder="Nieuwe pincode" style="text-align:center;letter-spacing:0.3em;font-size:20px;margin-bottom:8px;" />'
+      + '<input type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" name="pin2" placeholder="Herhaal pincode" style="text-align:center;letter-spacing:0.3em;font-size:20px;" />'
+      + '<div id="nieuwPinFout" style="color:#FF8A80;font-size:12.5px;margin-top:8px;"></div>'
+      + '<button type="submit" class="btn btn-primary" style="margin-top:14px;">Opslaan &amp; doorgaan</button>'
+      + '</form>'
       + '</div>';
   }
 
@@ -473,7 +513,7 @@
     if(!me){ state.currentUserId = null; return renderLogin(); }
     var kanBeheren = kanDienstenBeheren(me.rol);
 
-    var top = '<div class="topbar"><div class="brand">PLOEG<small>'+escapeHtml(me.naam)+'</small></div><div style="display:flex;gap:8px;"><button class="icon-btn" onclick="App.testPush()" title="Meldingen (opnieuw) inschakelen">\uD83D\uDD14</button><button class="icon-btn" onclick="App.switchUser()" title="Wisselen">\u21BB</button></div></div>';
+    var top = '<div class="topbar"><div class="brand">PloegCompleet<small>'+escapeHtml(me.naam)+'</small></div><div style="display:flex;gap:8px;"><button class="icon-btn" onclick="App.testPush()" title="Meldingen (opnieuw) inschakelen">\uD83D\uDD14</button><button class="icon-btn" onclick="App.switchUser()" title="Wisselen">\u21BB</button></div></div>';
     var body;
     if(state.showForm && kanBeheren) body = shiftForm();
     else if(state.view==="mijn") body = renderMijnView(me, data);
@@ -492,7 +532,11 @@
     var root = document.getElementById("app");
     if(state.loading){ root.innerHTML = renderLoading(); return; }
     if(state.loadError){ root.innerHTML = renderLoadError(); return; }
-    if(!state.currentUserId){ root.innerHTML = state.pendingUserId ? renderPinEntry() : renderLogin(); return; }
+    if(!state.currentUserId){
+      if(state.pendingUserId && state.moetPincodeWijzigen){ root.innerHTML = renderNieuwePincodeScherm(); return; }
+      root.innerHTML = state.pendingUserId ? renderPinEntry() : renderLogin();
+      return;
+    }
     root.innerHTML = renderMain();
   }
 
