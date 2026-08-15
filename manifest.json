@@ -1,6 +1,6 @@
 {
-  "name": "Ploeg — Brandweer Gelderland Midden",
-  "short_name": "Ploeg",
+  "name": "PloegCompleet — Brandweer Gelderland Midden",
+  "short_name": "PloegCompleet",
   "description": "Reageer op openstaande diensten en bekijk je eigen diensten.",
   "start_url": "./index.html",
   "scope": "./",
