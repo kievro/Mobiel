@@ -45,6 +45,7 @@
   .date-big{font-family:var(--font-body);font-size:16px;font-weight:700;text-transform:capitalize;}
   .urgent-badge{background:var(--red-dim);color:#FF8A80;border:1px solid var(--red);font-family:var(--font-body);font-weight:700;font-size:11px;padding:3px 8px;border-radius:4px;text-transform:uppercase;}
   .notitie{font-size:13.5px;color:var(--text-muted);margin-top:6px;font-style:italic;}
+  .meta-line{font-size:12px;color:var(--text-muted);margin-top:4px;}
 
   .slot{margin-top:12px;padding-top:12px;border-top:1px dashed var(--border);}
   .slot:first-child{border-top:none;margin-top:9px;padding-top:0;}
@@ -189,6 +190,8 @@
   function buildSlots(type, tijden){
     tijden = tijden || defaultTijden();
     if(type==="split") return [{slotId:uid("sl"), label:"Dag ("+tijden.ochtend+"\u2013"+tijden.avond+")"},{slotId:uid("sl"), label:"Avond/Nacht ("+tijden.avond+"\u2013"+tijden.ochtend+")"}];
+    if(type==="dag") return [{slotId:uid("sl"), label:"Dag ("+tijden.ochtend+"\u2013"+tijden.avond+")"}];
+    if(type==="avond") return [{slotId:uid("sl"), label:"Avond/Nacht ("+tijden.avond+"\u2013"+tijden.ochtend+")"}];
     return [{slotId:uid("sl"), label:"Hele dienst ("+tijden.ochtend+"\u2013"+tijden.ochtend+")"}];
   }
 
@@ -219,6 +222,7 @@
     var shifts = (dienstenRes.data||[]).map(function(d){
       return { id:d.id, post:d.post_id, datum:d.datum, type:d.type, deadline:d.deadline, notitie:d.notitie||"",
         isSpoed: !!d.is_spoed, doelgroep:{specialisme:d.doelgroep_specialisme||"alle", aanstelling:d.doelgroep_aanstelling||"iedereen"},
+        aangemaaktDoor:d.aangemaakt_door||"",
         slots: (slotsByDienst[d.id] || []).slice() };
     });
     var reacties = (reactiesRes.data||[]).map(function(r){ return {slotId:r.slot_id, lidId:r.lid_id, antwoord:r.antwoord, tijdstip:r.tijdstip}; });
@@ -453,6 +457,7 @@
       + (shift.isSpoed ? '<span class="urgent-badge">\u26A1 Eerste ja = toegewezen</span>' : '')
       + dgTags + '</div></div>'
       + '<div class="date-big" style="margin-top:8px;">'+formatDateShort(shift.datum)+'</div>'
+      + (shift.aangemaaktDoor ? '<div class="meta-line">Gemeld door '+escapeHtml(shift.aangemaaktDoor)+'</div>' : '')
       + (shift.notitie ? '<div class="notitie">'+escapeHtml(shift.notitie)+'</div>' : '')
       + slotsHtml
       + '<div class="deadline-row"><span>Reageren tot '+formatDateTime(shift.deadline)+'</span></div>'
@@ -498,7 +503,7 @@
       + '<div class="field"><label>Datum</label><input type="date" name="datum" /></div>'
       + '<div class="field"><label>Reageren mogelijk tot</label><input type="datetime-local" name="deadline" /></div>'
       + '</div>'
-      + '<div class="field"><label>Type</label><select name="type"><option value="heel">Hele 24-uursdienst</option><option value="split">Dag + avond/nacht apart</option></select>'
+      + '<div class="field"><label>Type</label><select name="type"><option value="heel">Hele 24-uursdienst</option><option value="split">Dag + avond/nacht apart</option><option value="dag">Alleen dag</option><option value="avond">Alleen avond/nacht</option></select>'
       + '<div style="font-size:12px;color:var(--text-muted);margin-top:4px;">Standaardtijden: '+esc(tijden.ochtend)+'\u2013'+esc(tijden.avond)+'</div></div>'
       + '<div class="field"><label>Notitie (optioneel)</label><textarea name="notitie"></textarea></div>'
       + '<button type="submit" class="btn btn-primary">Dienst aanmaken</button>'
