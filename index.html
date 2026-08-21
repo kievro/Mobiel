@@ -80,9 +80,10 @@
   input,select,textarea{background:var(--surface-2);border:1px solid var(--border);color:var(--text);padding:12px 12px;border-radius:10px;font-size:15px;width:100%;}
   textarea{resize:vertical;min-height:60px;}
   .field-checkbox{display:flex;flex-direction:row;align-items:center;gap:10px;margin-bottom:14px;background:var(--red-dim);border:1px solid var(--red);border-radius:10px;padding:12px 13px;}
-  .checkbox-lijst{max-height:180px;overflow-y:auto;background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:8px 12px;}
-  .checkbox-rij{display:block;font-size:14px;padding:6px 0;}
-  .checkbox-rij input{margin-right:8px;}
+  .checkbox-lijst{max-height:180px;overflow-y:auto;overflow-x:hidden;background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:8px 12px;}
+  .checkbox-rij{display:flex;align-items:center;justify-content:flex-start;gap:8px;font-size:14px;padding:6px 0;width:100%;box-sizing:border-box;}
+  .checkbox-rij input{margin:0;flex-shrink:0;width:16px;height:16px;}
+  .checkbox-rij span{flex:1 1 auto;text-align:left;}
   .field-checkbox input{width:auto;}
   .field-checkbox label{text-transform:none;font-size:13.5px;color:var(--text);font-weight:400;}
 
@@ -504,7 +505,7 @@
     var meldingsontvangersHtml = '<div class="field"><label>Wie krijgt een melding bij een reactie?</label>'
       + '<div class="checkbox-lijst">' + kandidaten.map(function(m){
           var isIk = m.id === state.currentUserId;
-          return '<label class="checkbox-rij"><input type="checkbox" name="meldingsontvanger" value="'+m.id+'" '+(isIk?'checked':'')+'/> '+esc(m.naam)+(isIk?' (jij)':'')+'</label>';
+          return '<label class="checkbox-rij"><input type="checkbox" name="meldingsontvanger" value="'+m.id+'" '+(isIk?'checked':'')+'/><span>'+esc(m.naam)+(isIk?' (jij)':'')+'</span></label>';
         }).join('') + '</div>'
       + '<div style="font-size:12px;color:var(--text-muted);margin-top:4px;">Standaard alleen jijzelf.</div></div>';
     return '<div class="card">'
