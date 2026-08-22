@@ -30,7 +30,14 @@
   .topbar{position:sticky;top:0;z-index:10;background:var(--bg);padding:calc(14px + var(--safe-top)) 18px 12px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border);}
   .topbar .brand{font-family:var(--font-display);font-weight:700;letter-spacing:0.04em;font-size:19px;text-transform:uppercase;}
   .topbar .brand small{display:block;font-family:var(--font-body);font-weight:600;font-size:10px;letter-spacing:0.06em;color:var(--text-muted);text-transform:uppercase;margin-top:2px;}
-  .icon-btn{background:var(--surface);border:1px solid var(--border);border-radius:10px;width:38px;height:38px;display:flex;align-items:center;justify-content:center;font-size:16px;}
+  .icon-btn{background:var(--surface);border:1px solid var(--border);border-radius:10px;width:38px;height:38px;display:flex;align-items:center;justify-content:center;font-size:16px;position:relative;}
+  .bel-badge{position:absolute;top:-4px;right:-4px;background:var(--red);color:#fff;font-size:10px;font-weight:700;border-radius:9px;min-width:18px;height:18px;display:flex;align-items:center;justify-content:center;padding:0 4px;}
+  .melding-dropdown{position:absolute;right:16px;top:60px;width:min(340px, calc(100vw - 32px));max-height:70vh;overflow-y:auto;background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.4);z-index:50;}
+  .melding-item{font-size:13px;padding:12px 14px;border-bottom:1px solid var(--border);line-height:1.4;}
+  .melding-item:last-child{border-bottom:none;}
+  .melding-item.melding-relevant{background:rgba(215,225,0,0.1);border-left:3px solid var(--lime);padding-left:11px;font-weight:600;}
+  .melding-ster{display:block;font-size:10px;font-weight:700;color:var(--lime);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:3px;}
+  .melding-time{font-size:11px;color:var(--text-muted);margin-top:3px;font-weight:400;}
 
   .content{flex:1;padding:14px 16px calc(90px + var(--safe-bottom));overflow-y:auto;}
   .eyebrow{font-family:var(--font-body);font-weight:600;font-size:12px;letter-spacing:0.07em;text-transform:uppercase;color:var(--text-muted);margin:18px 0 8px;}
@@ -52,9 +59,9 @@
   .slot-label{font-family:var(--font-display);font-weight:700;text-transform:uppercase;font-size:14.5px;margin-bottom:8px;}
   .response-buttons{display:flex;flex-direction:column;gap:8px;}
   .resp-btn{padding:13px 10px;border-radius:10px;border:1px solid var(--border);background:var(--surface-2);color:var(--text);font-size:15px;font-weight:600;cursor:pointer;text-align:center;}
-  .resp-btn.ja.selected{background:var(--lime);color:#12161B;border-color:var(--lime);font-weight:700;}
-  .resp-btn.kan_wel.selected{background:var(--amber);color:#12161B;border-color:var(--amber);font-weight:700;}
-  .resp-btn.nee.selected{background:#3a4048;color:var(--text);border-color:#3a4048;}
+  .resp-btn.ja.selected{background:var(--lime);color:#12161B;border-color:var(--lime);border-width:2px;font-weight:700;}
+  .resp-btn.kan_wel.selected{background:var(--amber);color:#12161B;border-color:var(--amber);border-width:2px;font-weight:700;}
+  .resp-btn.nee.selected{background:#3a4048;color:var(--text);border-color:#AEB8C2;border-width:2px;font-weight:700;}
   .counts-line{font-size:12.5px;color:var(--text-muted);margin-top:8px;}
 
   .assigned-banner{padding:11px 12px;border-radius:10px;background:rgba(215,225,0,0.08);border:1px solid var(--lime);font-size:14px;font-weight:600;}
@@ -131,7 +138,7 @@
 
   var state = {
     data: null, loadError: null, currentUserId: null, pendingUserId: null, loginError: null,
-    view: "diensten", loading: true, toast: null, showForm: false, pushGevraagd: false, moetPincodeWijzigen: false
+    view: "diensten", loading: true, toast: null, showForm: false, pushGevraagd: false, moetPincodeWijzigen: false, bellOpen: false
   };
   var toastTimer = null;
 
@@ -208,6 +215,7 @@
     var reactiesRes = await sbPloeg.from("reacties").select("*");
     var toewijzingenRes = await sbPloeg.from("toewijzingen").select("*");
     var instellingenRes = await sbPloeg.from("instellingen").select("*").eq("id",1).single();
+    var meldingenRes = await sbPloeg.from("meldingen").select("*");
 
     var extraById = {}; (ledenPubRes.data||[]).forEach(function(e){ extraById[e.id] = e; });
     var dagIds = {};
@@ -226,23 +234,49 @@
     var shifts = (dienstenRes.data||[]).map(function(d){
       return { id:d.id, post:d.post_id, datum:d.datum, type:d.type, deadline:d.deadline, notitie:d.notitie||"",
         isSpoed: !!d.is_spoed, doelgroep:{specialisme:d.doelgroep_specialisme||"alle", aanstelling:d.doelgroep_aanstelling||"iedereen"},
-        aangemaaktDoor:d.aangemaakt_door||"",
+        aangemaaktDoor:d.aangemaakt_door||"", meldingsontvangers:d.meldingsontvangers||[], meldingMoment:d.melding_moment,
         slots: (slotsByDienst[d.id] || []).slice() };
     });
     var reacties = (reactiesRes.data||[]).map(function(r){ return {slotId:r.slot_id, lidId:r.lid_id, antwoord:r.antwoord, tijdstip:r.tijdstip}; });
     var toewijzingen = (toewijzingenRes.data||[]).map(function(t){ return {slotId:t.slot_id, lidId:t.lid_id, methode:t.methode}; });
+    var meldingen = (meldingenRes.data||[]).map(function(m){ return {id:m.id, tekst:m.tekst, tijdstip:m.tijdstip, gelezen:m.gelezen, bron:m.bron, relevantVoor:m.relevant_voor||[]}; });
     var inst = instellingenRes.data || {};
     var instellingen = { tijden:{ochtend: inst.tijden_ochtend||"08:00", avond: inst.tijden_avond||"18:00"} };
 
-    return {members:members, shifts:shifts, reacties:reacties, toewijzingen:toewijzingen, instellingen:instellingen};
+    return {members:members, shifts:shifts, reacties:reacties, toewijzingen:toewijzingen, meldingen:meldingen, instellingen:instellingen};
   }
-  async function refreshAllData(){ state.data = await loadAllData(); }
+  function bronKey(r){ return r.slotId + "_" + r.lidId + "_" + r.tijdstip; }
+
+  async function syncMeldingenRemote(data){
+    var known = {}; data.meldingen.forEach(function(m){ known[m.bron]=true; });
+    var toInsert = [];
+    data.shifts.forEach(function(shift){
+      var slotIds = shift.slots.map(function(sl){return sl.slotId;});
+      data.reacties.filter(function(r){ return slotIds.indexOf(r.slotId)>-1; }).forEach(function(r){
+        var key = bronKey(r);
+        if(known[key]) return;
+        var isPast = new Date(shift.deadline) <= new Date();
+        if(shift.meldingMoment==="direct" || (shift.meldingMoment==="na_sluiting" && isPast)){
+          var slot = shift.slots.filter(function(sl){return sl.slotId===r.slotId;})[0];
+          var tekst = getMemberName(r.lidId,data) + ' reageerde "' + ANTWOORD_LABEL[r.antwoord] + '" op ' + postNaam(shift.post) + ' \u2013 ' + formatDateShort(shift.datum) + (slot ? " (" + slot.label + ")" : "");
+          toInsert.push({id:uid("n"), tekst:tekst, tijdstip:new Date().toISOString(), gelezen:false, bron:key, relevant_voor: shift.meldingsontvangers||[]});
+          known[key]=true;
+        }
+      });
+    });
+    if(toInsert.length){
+      var res = await sbPloeg.from("meldingen").insert(toInsert);
+      if(!res.error){ data.meldingen = data.meldingen.concat(toInsert); }
+    }
+  }
+
+  async function refreshAllData(){ state.data = await loadAllData(); await syncMeldingenRemote(state.data); }
   async function runAction(fn, toastMsg){
     try{ await fn(); await refreshAllData(); if(toastMsg) showToast(toastMsg); else render(); }
     catch(e){ showToast("Actie mislukt \u2013 " + (e && e.message ? e.message : "controleer de verbinding.")); }
   }
   async function loadInitial(){
-    try{ state.data = await loadAllData(); }
+    try{ state.data = await loadAllData(); await syncMeldingenRemote(state.data); }
     catch(e){ state.loadError = "Kon geen verbinding maken (" + (e && e.message ? e.message : "onbekende fout") + ")."; }
     try{ var last = localStorage.getItem(LAST_USER_KEY); if(last && state.data && getMember(last, state.data)) state.pendingUserId = last; }catch(e){}
     state.loading = false;
@@ -323,6 +357,17 @@
     return false;
   };
   App.switchUser = function(){ state.currentUserId = null; state.pendingUserId = null; state.pushGevraagd = false; render(); };
+  App.toggleBell = function(){
+    if(!state.bellOpen){
+      var unreadIds = state.data.meldingen.filter(function(m){ return !m.gelezen; }).map(function(m){ return m.id; });
+      if(unreadIds.length){
+        state.data.meldingen.forEach(function(m){ if(unreadIds.indexOf(m.id)!==-1) m.gelezen = true; });
+        sbPloeg.from("meldingen").update({gelezen:true}).in("id", unreadIds).then(function(){});
+      }
+    }
+    state.bellOpen = !state.bellOpen;
+    render();
+  };
   App.testPush = function(){ state.pushGevraagd = false; vraagPushToestemming(); };
   App.setView = function(v){ state.view = v; state.showForm=false; render(); };
   App.filterMembers = function(val){
@@ -444,12 +489,13 @@
     var deadlinePassed = remainingMs(shift.deadline) <= 0;
     var mineReactie = data.reacties.filter(function(r){ return r.slotId===slot.slotId && r.lidId===me.id; })[0];
     var counts = countReactions(slot.slotId, data);
+    var jaSel = mineReactie&&mineReactie.antwoord==="ja", kanSel = mineReactie&&mineReactie.antwoord==="kan_wel", neeSel = mineReactie&&mineReactie.antwoord==="nee";
     var buttonsOrMsg = deadlinePassed
       ? '<div style="font-size:13px;color:var(--text-muted);">Reactietermijn is verstreken.</div>'
       : '<div class="response-buttons">'
-        + '<button class="resp-btn ja '+(mineReactie&&mineReactie.antwoord==="ja"?"selected":"")+'" onclick="App.respond(\''+slot.slotId+'\',\'ja\')">Ja, ik kan</button>'
-        + '<button class="resp-btn kan_wel '+(mineReactie&&mineReactie.antwoord==="kan_wel"?"selected":"")+'" onclick="App.respond(\''+slot.slotId+'\',\'kan_wel\')">Kan wel, liever niet</button>'
-        + '<button class="resp-btn nee '+(mineReactie&&mineReactie.antwoord==="nee"?"selected":"")+'" onclick="App.respond(\''+slot.slotId+'\',\'nee\')">Nee, ik kan niet</button>'
+        + '<button class="resp-btn ja '+(jaSel?"selected":"")+'" onclick="App.respond(\''+slot.slotId+'\',\'ja\')">'+(jaSel?'\u2713 ':'')+'Ja, ik kan</button>'
+        + '<button class="resp-btn kan_wel '+(kanSel?"selected":"")+'" onclick="App.respond(\''+slot.slotId+'\',\'kan_wel\')">'+(kanSel?'\u2713 ':'')+'Kan wel, liever niet</button>'
+        + '<button class="resp-btn nee '+(neeSel?"selected":"")+'" onclick="App.respond(\''+slot.slotId+'\',\'nee\')">'+(neeSel?'\u2713 ':'')+'Nee, ik kan niet</button>'
         + '</div>';
     return '<div class="slot"><div class="slot-label">'+escapeHtml(slot.label)+'</div>'+buttonsOrMsg
       + '<div class="counts-line">'+counts.ja+' ja &middot; '+counts.kan_wel+' kan wel &middot; '+counts.nee+' nee</div></div>';
@@ -532,8 +578,13 @@
     var me = getMember(state.currentUserId, data);
     if(!me){ state.currentUserId = null; return renderLogin(); }
     var kanBeheren = kanDienstenBeheren(me.rol);
+    var unread = data.meldingen.filter(function(m){ return !m.gelezen; }).length;
 
-    var top = '<div class="topbar"><div class="brand">PloegCompleet<small>'+escapeHtml(me.naam)+'</small></div><div style="display:flex;gap:8px;"><button class="icon-btn" onclick="App.testPush()" title="Meldingen (opnieuw) inschakelen">\uD83D\uDD14</button><button class="icon-btn" onclick="App.switchUser()" title="Wisselen">\u21BB</button></div></div>';
+    var top = '<div class="topbar"><div class="brand">PloegCompleet<small>'+escapeHtml(me.naam)+'</small></div><div style="display:flex;gap:8px;">'
+      + (kanBeheren ? '<button class="icon-btn" title="Meldingen" onclick="App.toggleBell()">\uD83D\uDD14'+(unread?'<span class="bel-badge">'+unread+'</span>':'')+'</button>' : '')
+      + '<button class="icon-btn" onclick="App.testPush()" title="Pushmeldingen (opnieuw) inschakelen">\u2699\uFE0F</button>'
+      + '<button class="icon-btn" onclick="App.switchUser()" title="Wisselen">\u21BB</button></div></div>'
+      + (state.bellOpen ? renderMeldingenDropdown(data) : '');
     var body;
     if(state.showForm && kanBeheren) body = shiftForm();
     else if(state.view==="mijn") body = renderMijnView(me, data);
@@ -546,6 +597,22 @@
       + (kanBeheren && !state.showForm ? '<button class="nav-fab" onclick="App.openNewShiftForm()" title="Nieuwe dienst">+</button>' : '');
 
     return top + '<div class="content">' + body + '</div>' + nav + (state.toast ? '<div class="toast">'+escapeHtml(state.toast)+'</div>' : '');
+  }
+
+  function renderMeldingenDropdown(data){
+    var items = data.meldingen.slice().sort(function(a,b){
+      var relA = (a.relevantVoor||[]).indexOf(state.currentUserId) !== -1;
+      var relB = (b.relevantVoor||[]).indexOf(state.currentUserId) !== -1;
+      if(relA !== relB) return relA ? -1 : 1;
+      return new Date(b.tijdstip)-new Date(a.tijdstip);
+    }).slice(0,20);
+    var body = items.length ? items.map(function(m){
+      var isRelevant = (m.relevantVoor||[]).indexOf(state.currentUserId) !== -1;
+      return '<div class="melding-item'+(isRelevant?' melding-relevant':'')+'">'
+        + (isRelevant ? '<span class="melding-ster">\u2605 Voor jou</span>' : '')
+        + escapeHtml(m.tekst)+'<div class="melding-time">'+new Date(m.tijdstip).toLocaleString('nl-NL',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})+'</div></div>';
+    }).join("") : '<div class="melding-item">Geen meldingen.</div>';
+    return '<div class="melding-dropdown">'+body+'</div>';
   }
 
   function render(){
