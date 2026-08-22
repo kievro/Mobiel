@@ -196,6 +196,10 @@
     }).length;
   }
   function openShifts(data){ return data.shifts.filter(function(s){ return s.slots.some(function(sl){ return !getSlotAssignment(sl.slotId,data); }); }); }
+  function isVerstreken(shift){
+    var vandaag = new Date(); vandaag.setHours(0,0,0,0);
+    return parseDateOnly(shift.datum) < vandaag;
+  }
   function hasOpenSlot(shift, data){ return shift.slots.some(function(sl){ return !getSlotAssignment(sl.slotId,data); }); }
   function defaultTijden(){ return {ochtend:"08:00", avond:"18:00"}; }
   function buildSlots(type, tijden){
@@ -518,7 +522,7 @@
   }
   function renderDienstenView(me, data){
     var relevant = function(s){ return matchesDoelgroep(me, s); };
-    var open = openShifts(data).filter(relevant).slice().sort(function(a,b){ return parseDateOnly(a.datum)-parseDateOnly(b.datum); });
+    var open = openShifts(data).filter(relevant).filter(function(s){ return !isVerstreken(s); }).slice().sort(function(a,b){ return parseDateOnly(a.datum)-parseDateOnly(b.datum); });
     var groups = {vandaag:[], komende4:[], verderop:[]};
     open.forEach(function(s){ groups[urgencyOf(s.datum)].push(s); });
     var html = "";
