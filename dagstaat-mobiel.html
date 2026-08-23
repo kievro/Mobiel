@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Dagstaat Mobiel</title>
+<link rel="manifest" href="dagstaat-mobiel-manifest.json">
+<meta name="theme-color" content="#12161B">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#12161B; --surface:#1B2129; --surface-2:#232B34; --border:#2E3843;
+    --text:#EDEFF1; --text-muted:#8A96A3;
+    --red:#E33629; --red-dim:#3A1613; --lime:#D7E100; --amber:#F0A93A;
+    --font-display:'Barlow Condensed',Arial,sans-serif; --font-body:'Open Sans',Arial,sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:var(--font-body);}
+  h1,h2{font-family:var(--font-display);margin:0;}
+  .hidden{display:none !important;}
+  .naam-item{padding:10px 14px;background:var(--surface-2);border:1px solid var(--border);border-radius:6px;margin-top:6px;cursor:pointer;font-size:14px;color:var(--text);}
+  .naam-item:hover{border-color:var(--red);}
+
+  #app{max-width:520px;margin:0 auto;padding:14px 14px 40px;}
+  .topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;}
+  .brand{font-family:var(--font-display);font-weight:700;font-size:18px;text-transform:uppercase;}
+  .brand small{display:block;font-family:var(--font-body);font-weight:400;font-size:10.5px;color:var(--text-muted);text-transform:none;}
+  select#postSelect{background:var(--surface-2);border:1px solid var(--border);color:var(--text);padding:8px 10px;border-radius:8px;font-size:13px;font-family:inherit;}
+
+  .datum-nav{display:flex;align-items:center;justify-content:space-between;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:14px;}
+  .datum-nav button{background:var(--surface-2);border:1px solid var(--border);color:var(--text);width:36px;height:36px;border-radius:8px;font-size:16px;cursor:pointer;}
+  .datum-nav .datum-label{font-family:var(--font-display);font-weight:700;font-size:16px;text-align:center;flex:1;}
+  .datum-nav .datum-sub{display:block;font-family:var(--font-body);font-weight:400;font-size:11px;color:var(--text-muted);}
+  .btn-vandaag{font-size:11px;color:var(--lime);text-decoration:underline;background:none;border:none;cursor:pointer;display:block;margin:0 auto 12px;}
+
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:14px;}
+  .card h2{font-size:17px;text-transform:uppercase;display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+  .ploeg-badge{font-family:var(--font-body);font-weight:600;font-size:12px;background:rgba(215,225,0,0.12);border:1px solid var(--lime);color:var(--lime);padding:2px 8px;border-radius:5px;}
+  .eyebrow{font-family:var(--font-body);font-weight:700;font-size:10.5px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);margin-bottom:3px;}
+  .empty{color:var(--text-muted);font-size:13px;padding:10px 0;}
+
+  .bijzonderheden-box{background:var(--red-dim);border:1px solid var(--red);border-radius:6px;padding:8px 12px;margin:10px 0;}
+  .bijzonderheden-box .eyebrow{margin:0 0 3px;color:#FF8A80;}
+  .bijzonderheden-box .txt{font-size:13.5px;font-weight:400;line-height:1.4;white-space:pre-wrap;}
+
+  .oefening-box{background:rgba(215,225,0,0.08);border:1px solid var(--lime);border-radius:6px;padding:6px 12px;margin:10px 0;}
+  .oefening-box .eyebrow{margin:0 0 3px;color:var(--lime);}
+  .oefening-row{font-size:13px;font-weight:400;margin-top:2px;}
+  .oefening-row .blok{color:var(--text-muted);font-family:var(--font-body);font-weight:600;font-size:10.5px;text-transform:uppercase;margin-right:6px;}
+
+  .blokrooster-wrap{overflow-x:auto;margin-top:8px;border-radius:6px;border:1px solid var(--border);-webkit-overflow-scrolling:touch;}
+  .blokrooster{border-collapse:collapse;width:100%;min-width:480px;font-size:12.5px;font-weight:400;}
+  .blokrooster th{font-family:var(--font-body);font-weight:600;font-size:10px;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-muted);text-align:left;padding:6px;border-bottom:1px solid var(--border);background:var(--surface-2);}
+  .blokrooster .blok-tijd{font-size:9px;font-weight:400;text-transform:none;letter-spacing:0;opacity:0.75;display:block;font-variant-numeric:tabular-nums;}
+  .blokrooster td{padding:6px;border-bottom:1px solid var(--border);vertical-align:middle;line-height:1.3;}
+  .blokrooster tr:last-child td{border-bottom:none;}
+  .blokrooster .br-functie-col{font-family:var(--font-body);font-size:11px;font-weight:600;color:#fff;}
+  .blokrooster .br-naam{font-weight:600;}
+  .bv-badge{display:inline-block;font-family:var(--font-body);font-size:9px;font-weight:700;background:rgba(240,169,58,0.18);color:var(--amber);border:1px solid var(--amber);border-radius:3px;padding:1px 4px;margin-left:3px;}
+  .blok-leeg{color:var(--text-muted);opacity:0.4;}
+
+  .footer-note{font-size:11px;color:var(--text-muted);text-align:center;margin-top:6px;}
+</style>
+</head>
+<body>
+
+<div id="toegangsScherm" style="min-height:100vh;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:14px;padding:20px;">
+  <div class="brand" style="text-align:center;">DAGSTAAT MOBIEL<small>Brandweer Gelderland Midden</small></div>
+  <div id="loginNaamStap">
+    <p style="color:var(--text-muted);font-size:14px;margin:0 0 10px;text-align:center;">Wie ben jij?</p>
+    <input type="text" id="naamZoek" placeholder="Typ je naam…" autofocus style="width:260px;text-align:center;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:10px 16px;font-size:15px;box-sizing:border-box;">
+    <div id="naamLijst" style="max-height:240px;overflow-y:auto;margin-top:10px;width:260px;"></div>
+  </div>
+  <div id="loginPinStap" class="hidden">
+    <p id="loginHoiTekst" style="color:var(--text);font-size:15px;margin:0 0 4px;text-align:center;"></p>
+    <p style="color:var(--text-muted);font-size:13px;margin:0 0 10px;text-align:center;">Vul je pincode in</p>
+    <form id="pinForm" style="display:flex;flex-direction:column;gap:10px;align-items:center;">
+      <input type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" id="pinInvoer" placeholder="••••" style="text-align:center;letter-spacing:0.3em;font-size:22px;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:10px 16px;width:160px;">
+      <div id="pinFout" style="color:var(--red);font-size:13px;min-height:18px;text-align:center;"></div>
+      <button type="submit" style="font-family:var(--font-display);font-weight:700;text-transform:uppercase;background:var(--red);color:#fff;border:none;border-radius:6px;padding:10px 24px;font-size:15px;cursor:pointer;">Inloggen</button>
+      <button type="button" id="btnAndereNaam" style="background:none;border:none;color:var(--text-muted);font-size:12px;cursor:pointer;text-decoration:underline;">← Andere naam kiezen</button>
+    </form>
+  </div>
+  <div id="loginNieuwPinStap" class="hidden">
+    <p style="color:var(--text);font-size:15px;margin:0 0 4px;text-align:center;">Nieuwe pincode instellen</p>
+    <p style="color:var(--text-muted);font-size:12.5px;margin:0 0 10px;text-align:center;max-width:280px;">Eerste keer, of na een reset — kies een eigen pincode van minimaal 4 cijfers, niet 1234.</p>
+    <form id="nieuwPinForm" style="display:flex;flex-direction:column;gap:10px;align-items:center;">
+      <input type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" id="nieuwPin1" placeholder="Nieuwe pincode" style="text-align:center;letter-spacing:0.3em;font-size:18px;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:9px 14px;width:160px;">
+      <input type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" id="nieuwPin2" placeholder="Herhaal pincode" style="text-align:center;letter-spacing:0.3em;font-size:18px;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:9px 14px;width:160px;">
+      <div id="nieuwPinFout" style="color:var(--red);font-size:13px;min-height:18px;text-align:center;"></div>
+      <button type="submit" style="font-family:var(--font-display);font-weight:700;text-transform:uppercase;background:var(--red);color:#fff;border:none;border-radius:6px;padding:10px 24px;font-size:15px;cursor:pointer;">Opslaan &amp; doorgaan</button>
+    </form>
+  </div>
+</div>
+
+<div id="app" class="hidden">
+  <div class="topbar">
+    <div class="brand">DAGSTAAT<small id="ingelogdAls"></small></div>
+    <select id="postSelect">
+      <option value="post1">Arnhem Noord</option>
+      <option value="post2">Arnhem Zuid</option>
+      <option value="post3">Ede Stad</option>
+    </select>
+  </div>
+
+  <div class="datum-nav">
+    <button id="btnVorigeDag">‹</button>
+    <div>
+      <div class="datum-label" id="datumLabel">–</div>
+      <span class="datum-sub" id="datumSub">–</span>
+    </div>
+    <button id="btnVolgendeDag">›</button>
+  </div>
+  <button class="btn-vandaag" id="btnVandaag">Naar vandaag</button>
+
+  <div id="inhoud"><div class="empty">Bezig met laden…</div></div>
+  <div class="footer-note" id="footerNote"></div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+(function(){
+  var DAG_URL = "https://iyquepqubfqrhybriqif.supabase.co";
+  var DAG_KEY = "sb_publishable_Pb0fFfxZQggKnFCtJYMH9A_avw0GaPn";
+  var DAG_KEY_HEADERS = {"apikey":DAG_KEY,"Authorization":"Bearer "+DAG_KEY};
+  var supa = window.supabase.createClient(DAG_URL, DAG_KEY);
+  var POST_NAMEN = {post1:"Arnhem Noord", post2:"Arnhem Zuid", post3:"Ede Stad"};
+
+  async function sbSelect(path){
+    var res = await fetch(DAG_URL + "/rest/v1/" + path, {headers: DAG_KEY_HEADERS});
+    if(!res.ok) throw new Error("Supabase fout ("+res.status+")");
+    return res.json();
+  }
+
+  function escapeHtml(s){ return String(s==null?"":s).replace(/[&<>"']/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
+  function slugify(label){ return String(label).toLowerCase().replace(/\s+/g,"-"); }
+  function pad(n){ return n<10 ? "0"+n : ""+n; }
+  function toDatumKey(d){ return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate()); }
+
+  function mode(arr){
+    if(!arr.length) return null;
+    var counts = {}; arr.forEach(function(x){ var k = x.typeId+"||"+x.tekst; counts[k] = (counts[k]||0)+1; });
+    var best = null, bestCount = 0;
+    Object.keys(counts).forEach(function(k){ if(counts[k]>bestCount){ bestCount=counts[k]; best=k; } });
+    var parts = best.split("||");
+    return {typeId:parts[0], tekst:parts[1]};
+  }
+
+  var BLOKKEN_BASIS = [
+    {id:"blok1", naam:"Blok 1", tijdFallback:"08:45\u201310:00"},
+    {id:"blok2", naam:"Blok 2", tijdFallback:"10:15\u201312:00"},
+    {id:"blok3", naam:"Blok 3", tijdFallback:"13:00\u201315:00"},
+    {id:"blok4", naam:"Blok 4", tijdFallback:"15:15\u201317:00"},
+    {id:"avond", naam:"Avond", tijdFallback:"19:00\u201321:00"}
+  ];
+  function blokkenMetTijden(werkblokken){
+    return BLOKKEN_BASIS.map(function(b){
+      var w = (werkblokken||[]).filter(function(x){ return x.id===b.id; })[0];
+      var tijd = b.tijdFallback;
+      if(w){
+        if(w.tijd) tijd = w.tijd;
+        else if(w.van && w.tot) tijd = w.van+"\u2013"+w.tot;
+        else if(w.start && w.eind) tijd = w.start+"\u2013"+w.eind;
+      }
+      return {id:b.id, naam:b.naam, tijd:tijd};
+    });
+  }
+
+  var TYPE_KLEUREN_TERUGVAL = {"t-vrij":"#262b33","t-oef":"rgba(200,142,40,0.55)","t-verg":"rgba(46,139,122,0.5)","t-ond":"rgba(46,139,122,0.5)","t-ov":"rgba(46,139,122,0.35)","t-con":"transparent"};
+  function kleurVoorType(typeId, activiteitTypes){
+    var t = (activiteitTypes||[]).filter(function(a){ return a.id===typeId; })[0];
+    if(t && (t.kleur||t.color)) return t.kleur||t.color;
+    if(TYPE_KLEUREN_TERUGVAL[typeId] !== undefined) return TYPE_KLEUREN_TERUGVAL[typeId];
+    return "transparent";
+  }
+  function tekstKleurVoor(typeId, kleur, activiteitTypes){
+    var t = (activiteitTypes||[]).filter(function(a){ return a.id===typeId; })[0];
+    if(t && t.tekstKleur) return t.tekstKleur;
+    if(!kleur || kleur === "transparent") return "";
+    var hex = kleur.replace("#","");
+    if(hex.length===3) hex = hex.split("").map(function(c){ return c+c; }).join("");
+    if(hex.length!==6) return "";
+    var r = parseInt(hex.substr(0,2),16), g = parseInt(hex.substr(2,2),16), b = parseInt(hex.substr(4,2),16);
+    var luminantie = (0.299*r + 0.587*g + 0.114*b)/255;
+    return luminantie > 0.6 ? "#14181f" : "#ffffff";
+  }
+
+  function renderBlokRooster(dag, personenById, functieGroepen, activiteitTypes, werkblokken){
+    var cellen = dag.cellen || {};
+    var vi = (dag.voertuigIndeling && dag.voertuigIndeling.dag) || {};
+    var blokken = blokkenMetTijden(werkblokken);
+
+    var volgordeIndex = {}, functiesPerPid = {}, teller = 0;
+    functieGroepen.forEach(function(groep){
+      (groep.functies||[]).forEach(function(label){
+        var pid = vi[slugify(label)];
+        teller++;
+        if(!pid) return;
+        if(volgordeIndex[pid] === undefined) volgordeIndex[pid] = teller;
+        (functiesPerPid[pid] = functiesPerPid[pid] || []).push(label);
+      });
+    });
+
+    var pids = Object.keys(functiesPerPid).sort(function(a,b){ return volgordeIndex[a]-volgordeIndex[b]; });
+    if(!pids.length) return '<div class="empty">Geen voertuigfuncties ingedeeld.</div>';
+
+    var avondHeeftInhoud = pids.some(function(pid){
+      var entry = (cellen[pid]||{}).avond;
+      return entry && (entry.tekst || entry.typeId);
+    });
+    blokken = blokken.filter(function(b){ return b.id!=="avond" || avondHeeftInhoud; });
+
+    var headerHtml = '<tr><th>Functie</th><th>Naam</th>' + blokken.map(function(b){
+      return '<th>'+b.naam+'<br><span class="blok-tijd">'+b.tijd+'</span></th>';
+    }).join("") + '</tr>';
+
+    var rowsHtml = pids.map(function(pid){
+      var persoon = personenById[pid];
+      var naam = (persoon && persoon.naam) || pid;
+      var isBevelvoerder = persoon && persoon.specialismen && persoon.specialismen.indexOf("Bevelvoerder") !== -1;
+      var naamHtml = escapeHtml(naam) + (isBevelvoerder ? ' <span class="bv-badge">BV</span>' : '');
+      var functieTekst = functiesPerPid[pid].join(" / ");
+      var cellenHtml = blokken.map(function(b){
+        var entry = (cellen[pid]||{})[b.id];
+        var type = entry ? (activiteitTypes||[]).filter(function(a){ return a.id===entry.typeId; })[0] : null;
+        var tekst = entry ? (entry.tekst || (type ? type.naam : "")) : "";
+        var kleur = entry ? kleurVoorType(entry.typeId, activiteitTypes) : "transparent";
+        var tekstKleur = entry ? tekstKleurVoor(entry.typeId, kleur, activiteitTypes) : "";
+        var stijl = "background:"+kleur+";"+(tekstKleur?"color:"+tekstKleur+";":"");
+        return '<td style="'+stijl+'">'+(tekst ? escapeHtml(tekst) : '<span class="blok-leeg">\u2013</span>')+'</td>';
+      }).join("");
+      return '<tr><td class="br-functie-col">'+escapeHtml(functieTekst)+'</td><td class="br-naam">'+naamHtml+'</td>'+cellenHtml+'</tr>';
+    }).join("");
+
+    return '<div class="blokrooster-wrap"><table class="blokrooster"><thead>'+headerHtml+'</thead><tbody>'+rowsHtml+'</tbody></table></div>';
+  }
+
+  function renderDagstaat(dag, personenById, postConfig, werkblokken, activiteitTypes, postNaam, datumLabel){
+    if(!dag){
+      return '<div class="card"><h2>Dagstaat</h2><div class="empty">Geen dagstaat gevonden voor '+escapeHtml(datumLabel)+' bij '+escapeHtml(postNaam)+'.</div></div>';
+    }
+    var ploegNaam = (dag.ploegAanDienst||"").replace(/^post\d+-ploeg-/,"Ploeg ");
+    var functieGroepen = (postConfig && postConfig.voertuigFuncties) || [];
+    var roosterHtml = renderBlokRooster(dag, personenById, functieGroepen, activiteitTypes, werkblokken);
+
+    var oefTypeId = null;
+    (activiteitTypes||[]).forEach(function(t){ if(t.naam === "Oefening") oefTypeId = t.id; });
+    var vi = (dag.voertuigIndeling && dag.voertuigIndeling.dag) || {};
+    var toegewezenPids = {};
+    functieGroepen.forEach(function(groep){
+      (groep.functies||[]).forEach(function(label){
+        var pid = vi[slugify(label)];
+        if(pid) toegewezenPids[pid] = true;
+      });
+    });
+    var cellen = dag.cellen || {};
+    var perBlok = {};
+    Object.keys(cellen).forEach(function(pid){
+      if(!toegewezenPids[pid]) return;
+      Object.keys(cellen[pid]).forEach(function(blokId){
+        var entry = cellen[pid][blokId];
+        if(!entry || !entry.typeId) return;
+        (perBlok[blokId] = perBlok[blokId] || []).push(entry);
+      });
+    });
+    var oefTypeNaam = null;
+    (activiteitTypes||[]).forEach(function(t){ if(t.id===oefTypeId) oefTypeNaam = t.naam; });
+    var oefeningen = [];
+    (werkblokken||[]).forEach(function(blok){
+      var m = mode(perBlok[blok.id] || []);
+      if(m && m.typeId === oefTypeId){
+        var weergave = m.tekst || oefTypeNaam || "";
+        if(weergave) oefeningen.push('<div class="oefening-row"><span class="blok">'+escapeHtml(blok.naam)+'</span>'+escapeHtml(weergave)+'</div>');
+      }
+    });
+
+    return '<div class="card">'
+      + '<h2>Dagstaat <span class="ploeg-badge">'+escapeHtml(ploegNaam||"\u2013")+'</span></h2>'
+      + (dag.bijzonderheden ? '<div class="bijzonderheden-box"><div class="eyebrow">Bijzonderheden</div><div class="txt">'+escapeHtml(dag.bijzonderheden)+'</div></div>' : '')
+      + (oefeningen.length ? '<div class="oefening-box"><div class="eyebrow">\uD83C\uDFAF Oefening</div>'+oefeningen.join("")+'</div>' : '')
+      + roosterHtml
+      + '</div>';
+  }
+
+  // ---------- Datum & post state ----------
+  var huidigeDatum = new Date(); huidigeDatum.setHours(0,0,0,0);
+  var POST_KEY = "dagstaat-mobiel-post";
+  function huidigePost(){ return document.getElementById("postSelect").value; }
+
+  function renderDatumLabel(){
+    var vandaag = new Date(); vandaag.setHours(0,0,0,0);
+    var isVandaag = huidigeDatum.getTime() === vandaag.getTime();
+    document.getElementById("datumLabel").textContent = huidigeDatum.toLocaleDateString("nl-NL",{weekday:"long",day:"numeric",month:"long"});
+    document.getElementById("datumSub").textContent = isVandaag ? "Vandaag" : huidigeDatum.toLocaleDateString("nl-NL",{year:"numeric"});
+  }
+
+  async function laadEnRender(){
+    var inhoud = document.getElementById("inhoud");
+    inhoud.innerHTML = '<div class="empty">Bezig met laden…</div>';
+    renderDatumLabel();
+    try{
+      var postId = huidigePost();
+      var datumKey = toDatumKey(huidigeDatum);
+      var [personenRes, configRes, dagRes] = await Promise.all([
+        sbSelect("kv_store?key=eq.personen&select=value"),
+        sbSelect("kv_store?key=eq.config&select=value"),
+        sbSelect("kv_store?key=eq.dag:"+postId+":"+datumKey+"&select=value")
+      ]);
+      var personen = (personenRes[0] && personenRes[0].value) || [];
+      var config = (configRes[0] && configRes[0].value) || {};
+      var dag = (dagRes[0] && dagRes[0].value) || null;
+      var personenById = {}; personen.forEach(function(p){ personenById[p.id]=p; });
+      if(dag && dag.extraPersonen){ dag.extraPersonen.forEach(function(ep){ personenById[ep.personId] = {id:ep.personId, naam:ep.naam}; }); }
+      var postConfig = (config.posten||[]).filter(function(p){ return p.id===postId; })[0];
+      var datumLabel = huidigeDatum.toLocaleDateString("nl-NL",{day:"numeric",month:"long"});
+
+      inhoud.innerHTML = renderDagstaat(dag, personenById, postConfig, config.werkblokken, config.activiteitTypes, POST_NAMEN[postId], datumLabel);
+      document.getElementById("footerNote").textContent = "Bijgewerkt " + new Date().toLocaleTimeString("nl-NL",{hour:"2-digit",minute:"2-digit"});
+    }catch(e){
+      inhoud.innerHTML = '<div class="card"><div class="empty">Kon niet laden: '+escapeHtml(e.message||"onbekende fout")+'</div></div>';
+    }
+  }
+
+  function startApp(){
+    document.getElementById("toegangsScherm").classList.add("hidden");
+    document.getElementById("app").classList.remove("hidden");
+    var opgeslagenPost = null;
+    try{ opgeslagenPost = localStorage.getItem(POST_KEY); }catch(e){}
+    if(opgeslagenPost) document.getElementById("postSelect").value = opgeslagenPost;
+
+    document.getElementById("postSelect").addEventListener("change", function(){
+      try{ localStorage.setItem(POST_KEY, this.value); }catch(e){}
+      laadEnRender();
+    });
+    document.getElementById("btnVorigeDag").addEventListener("click", function(){ huidigeDatum = new Date(huidigeDatum.getTime()-86400000); laadEnRender(); });
+    document.getElementById("btnVolgendeDag").addEventListener("click", function(){ huidigeDatum = new Date(huidigeDatum.getTime()+86400000); laadEnRender(); });
+    document.getElementById("btnVandaag").addEventListener("click", function(){ huidigeDatum = new Date(); huidigeDatum.setHours(0,0,0,0); laadEnRender(); });
+
+    laadEnRender();
+    setInterval(laadEnRender, 120000); // elke 2 minuten verversen
+  }
+
+  // ---------- Persoonlijke pincode-login (zelfde systeem als Dagstaat/Dashboard/Bezetting) ----------
+  var INGELOGD_KEY = "dagstaat-mobiel-ingelogd-persoon";
+  var loginState = { personen: [], gekozenId: null };
+
+  function toonNaamLijst(filter){
+    var lijstEl = document.getElementById("naamLijst");
+    var gefilterd = loginState.personen.filter(function(p){
+      return !filter || p.naam.toLowerCase().indexOf(filter.toLowerCase()) !== -1;
+    }).slice(0, 30);
+    lijstEl.innerHTML = gefilterd.map(function(p){
+      return '<div class="naam-item" data-id="'+p.id+'">'+escapeHtml(p.naam)+'</div>';
+    }).join("");
+    lijstEl.querySelectorAll(".naam-item").forEach(function(el){
+      el.addEventListener("click", function(){ kiesNaam(el.dataset.id); });
+    });
+  }
+
+  function kiesNaam(id){
+    var persoon = loginState.personen.filter(function(p){ return p.id===id; })[0];
+    if(!persoon) return;
+    loginState.gekozenId = id;
+    document.getElementById("loginHoiTekst").textContent = "Hoi " + persoon.naam;
+    document.getElementById("loginNaamStap").classList.add("hidden");
+    document.getElementById("loginPinStap").classList.remove("hidden");
+    document.getElementById("pinInvoer").value = "";
+    document.getElementById("pinFout").textContent = "";
+    document.getElementById("pinInvoer").focus();
+  }
+
+  async function initLogin(){
+    try{
+      var alreadyId = null;
+      try{ alreadyId = localStorage.getItem(INGELOGD_KEY); }catch(e){}
+
+      var personenRes = await sbSelect("kv_store?key=eq.personen&select=value");
+      loginState.personen = ((personenRes[0] && personenRes[0].value) || []).slice().sort(function(a,b){ return a.naam.localeCompare(b.naam); });
+
+      var gekozenPersoon = alreadyId && loginState.personen.filter(function(p){ return p.id===alreadyId; })[0];
+      if(gekozenPersoon){
+        document.getElementById("ingelogdAls").textContent = gekozenPersoon.naam;
+        startApp();
+        return;
+      }
+      toonNaamLijst("");
+    }catch(e){
+      document.getElementById("loginNaamStap").innerHTML = '<div style="color:var(--red);font-size:13px;">Kon personeelslijst niet laden: '+escapeHtml(e.message)+'</div>';
+    }
+  }
+
+  document.getElementById("naamZoek").addEventListener("input", function(){ toonNaamLijst(this.value); });
+  document.getElementById("btnAndereNaam").addEventListener("click", function(){
+    document.getElementById("loginPinStap").classList.add("hidden");
+    document.getElementById("loginNaamStap").classList.remove("hidden");
+    document.getElementById("naamZoek").value = "";
+    toonNaamLijst("");
+    document.getElementById("naamZoek").focus();
+  });
+
+  document.getElementById("pinForm").addEventListener("submit", async function(evt){
+    evt.preventDefault();
+    var pin = document.getElementById("pinInvoer").value.trim();
+    var foutEl = document.getElementById("pinFout");
+    try{
+      var { data: res, error } = await supa.rpc("verify_pin", {p_persoon_id: loginState.gekozenId, p_pin: pin});
+      if(error) throw error;
+      if(res && res.ok){
+        if(res.moetWijzigen){
+          document.getElementById("loginPinStap").classList.add("hidden");
+          document.getElementById("loginNieuwPinStap").classList.remove("hidden");
+          document.getElementById("nieuwPin1").focus();
+        } else {
+          try{ localStorage.setItem(INGELOGD_KEY, loginState.gekozenId); }catch(e){}
+          var p = loginState.personen.filter(function(x){ return x.id===loginState.gekozenId; })[0];
+          document.getElementById("ingelogdAls").textContent = p ? p.naam : "";
+          startApp();
+        }
+      } else {
+        var reden = res && res.reden;
+        if(reden === "vergrendeld") foutEl.textContent = "Te vaak fout — probeer over 15 minuten opnieuw.";
+        else if(reden === "onbekend") foutEl.textContent = "Onbekende gebruiker.";
+        else foutEl.textContent = "Onjuiste pincode. Probeer opnieuw.";
+        document.getElementById("pinInvoer").value = "";
+      }
+    }catch(e){ foutEl.textContent = "Inloggen mislukt — controleer de verbinding."; }
+    return false;
+  });
+
+  document.getElementById("nieuwPinForm").addEventListener("submit", async function(evt){
+    evt.preventDefault();
+    var p1 = document.getElementById("nieuwPin1").value.trim();
+    var p2 = document.getElementById("nieuwPin2").value.trim();
+    var foutEl = document.getElementById("nieuwPinFout");
+    if(p1.length < 4){ foutEl.textContent = "Minimaal 4 cijfers."; return false; }
+    if(p1 === "1234"){ foutEl.textContent = "Kies een andere code dan de standaardcode 1234."; return false; }
+    if(p1 !== p2){ foutEl.textContent = "De twee codes komen niet overeen."; return false; }
+    try{
+      var { error } = await supa.rpc("set_pin", {p_persoon_id: loginState.gekozenId, p_pin: p1, p_moet_wijzigen: false});
+      if(error) throw error;
+      try{ localStorage.setItem(INGELOGD_KEY, loginState.gekozenId); }catch(e){}
+      var p = loginState.personen.filter(function(x){ return x.id===loginState.gekozenId; })[0];
+      document.getElementById("ingelogdAls").textContent = p ? p.naam : "";
+      startApp();
+    }catch(e){ foutEl.textContent = "Opslaan mislukt, probeer opnieuw."; }
+    return false;
+  });
+
+  initLogin();
+})();
+</script>
+</body>
+</html>
