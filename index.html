@@ -296,6 +296,12 @@
     for(var i=0;i<raw.length;++i) out[i] = raw.charCodeAt(i);
     return out;
   }
+  async function markeerActief(lidId){
+    try{
+      await sbPloeg.from("leden_extra").upsert({id:lidId, laatst_actief:new Date().toISOString()}, {onConflict:"id"});
+    }catch(e){ /* dit is puur informatief, mag nooit het inloggen zelf blokkeren */ }
+  }
+
   async function vraagPushToestemming(){
     if(state.pushGevraagd) return;
     state.pushGevraagd = true;
@@ -337,6 +343,7 @@
         state.currentUserId = state.pendingUserId; state.pendingUserId = null; state.loginError = null; state.view = "diensten"; state.moetPincodeWijzigen = false;
         try{ localStorage.setItem(LAST_USER_KEY, state.currentUserId); }catch(e){}
         render();
+        markeerActief(state.currentUserId);
         vraagPushToestemming();
       } else { state.loginError = "Onjuiste pincode. Probeer opnieuw."; render(); }
     }catch(e){ state.loginError = "Inloggen mislukt \u2013 controleer de verbinding."; render(); }
@@ -356,6 +363,7 @@
       state.currentUserId = state.pendingUserId; state.pendingUserId = null; state.moetPincodeWijzigen = false; state.view = "diensten";
       try{ localStorage.setItem(LAST_USER_KEY, state.currentUserId); }catch(e){}
       render();
+      markeerActief(state.currentUserId);
       vraagPushToestemming();
     }catch(e){ foutEl.textContent = "Opslaan mislukt, probeer opnieuw."; }
     return false;
@@ -384,6 +392,7 @@
     runAction(async function(){
       var res = await sbPloeg.from("reacties").upsert({slot_id:slotId, lid_id:state.currentUserId, antwoord:antwoord, tijdstip:new Date().toISOString()}, {onConflict:"slot_id,lid_id"});
       if(res.error) throw res.error;
+      sbPloeg.from("reacties_log").insert({slot_id:slotId, lid_id:state.currentUserId, antwoord:antwoord}).then(function(){});
       if(antwoord === "ja"){
         var shift = shiftOfSlot(slotId, state.data);
         if(shift && shift.isSpoed && !getSlotAssignment(slotId, state.data)){
