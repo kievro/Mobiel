@@ -300,6 +300,9 @@
     try{
       await sbPloeg.from("leden_extra").upsert({id:lidId, laatst_actief:new Date().toISOString()}, {onConflict:"id"});
     }catch(e){ /* dit is puur informatief, mag nooit het inloggen zelf blokkeren */ }
+    try{
+      await sbPloeg.from("login_log").insert({lid_id:lidId, app:"mobiel", user_agent:navigator.userAgent});
+    }catch(e){ /* idem: nooit het inloggen blokkeren */ }
   }
 
   async function vraagPushToestemming(){
