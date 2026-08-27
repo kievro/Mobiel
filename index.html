@@ -32,7 +32,8 @@
   .topbar .brand small{display:block;font-family:var(--font-body);font-weight:600;font-size:10px;letter-spacing:0.06em;color:var(--text-muted);text-transform:uppercase;margin-top:2px;}
   .icon-btn{background:var(--surface);border:1px solid var(--border);border-radius:10px;width:38px;height:38px;display:flex;align-items:center;justify-content:center;font-size:16px;position:relative;}
   .bel-badge{position:absolute;top:-4px;right:-4px;background:var(--red);color:#fff;font-size:10px;font-weight:700;border-radius:9px;min-width:18px;height:18px;display:flex;align-items:center;justify-content:center;padding:0 4px;}
-  .melding-dropdown{position:absolute;right:16px;top:60px;width:min(340px, calc(100vw - 32px));max-height:70vh;overflow-y:auto;background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.4);z-index:50;}
+  .melding-backdrop{position:fixed;inset:0;z-index:49;background:transparent;}
+  .melding-dropdown{position:absolute;right:16px;top:66px;width:min(340px, calc(100vw - 32px));max-height:70vh;overflow-y:auto;background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.4);z-index:50;}
   .melding-item{font-size:13px;padding:12px 14px;border-bottom:1px solid var(--border);line-height:1.4;}
   .melding-item:last-child{border-bottom:none;}
   .melding-item.melding-relevant{background:rgba(215,225,0,0.1);border-left:3px solid var(--lime);padding-left:11px;font-weight:600;}
@@ -46,6 +47,11 @@
 
   .card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:15px 16px;margin-bottom:12px;}
   .card-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap;}
+  .card-klein{padding:0;}
+  .card-compact-kop{display:flex;align-items:center;gap:10px;padding:13px 16px;cursor:pointer;}
+  .card-compact-rechts{flex:1;display:flex;flex-direction:column;align-items:flex-end;gap:2px;}
+  .card-compact-status{font-size:11.5px;color:var(--text-muted);}
+  .chevron{font-size:11px;color:var(--text-muted);flex-shrink:0;}
   .tag-row{display:flex;gap:6px;flex-wrap:wrap;}
   .post-tag{font-family:var(--font-display);font-weight:700;text-transform:uppercase;font-size:13px;letter-spacing:0.03em;padding:3px 9px;border-radius:5px;border:1px solid var(--border);background:var(--surface-2);}
   .doelgroep-tag{font-family:var(--font-body);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:0.04em;padding:3px 8px;border-radius:4px;border:1px dashed var(--text-muted);color:var(--text-muted);}
@@ -97,6 +103,7 @@
   .btn{font-family:var(--font-display);font-weight:700;text-transform:uppercase;letter-spacing:0.03em;padding:13px 16px;border-radius:10px;border:1px solid var(--border);background:var(--surface-2);color:var(--text);font-size:15px;width:100%;}
   .btn-primary{background:var(--red);border-color:var(--red);color:#fff;}
   .btn-ghost{background:transparent;}
+  .small-btn{font-family:var(--font-body);font-weight:600;font-size:12.5px;padding:7px 12px;border-radius:8px;border:1px solid var(--border);background:var(--surface-2);color:var(--text);}
 
   .login-wrap{padding:60px 24px 30px;max-width:420px;margin:0 auto;text-align:center;}
   .login-wrap .brand{display:flex;flex-direction:column;align-items:center;}
@@ -133,12 +140,13 @@
 
   var LAST_USER_KEY = "ploeg-mobiel-last-user";
   var ANTWOORD_LABEL = {ja:"Ja, ik kan", kan_wel:"Kan wel, liever niet", nee:"Nee, ik kan niet"};
-  var POST_NAMEN = {post1:"Arnhem Noord", post2:"Arnhem Zuid", post3:"Ede Stad", onbekend:"Nog niet bekend"};
+  var POST_NAMEN = {post1:"Arnhem Noord", post2:"Arnhem Zuid", post3:"Ede Stad", onbekend:"Post onbekend"};
   var POST_ORDER = ["post1","post2","post3","onbekend"];
 
   var state = {
     data: null, loadError: null, currentUserId: null, pendingUserId: null, loginError: null,
-    view: "diensten", loading: true, toast: null, showForm: false, pushGevraagd: false, moetPincodeWijzigen: false, bellOpen: false
+    view: "diensten", loading: true, toast: null, showForm: false, pushGevraagd: false, moetPincodeWijzigen: false, bellOpen: false,
+    expandedShiftId: null
   };
   var toastTimer = null;
 
@@ -391,6 +399,10 @@
       el.style.display = (el.getAttribute("data-naam")||"").toLowerCase().indexOf(v) > -1 ? "" : "none";
     });
   };
+  App.toggleExpand = function(shiftId){
+    state.expandedShiftId = (state.expandedShiftId === shiftId) ? null : shiftId;
+    render();
+  };
   App.respond = function(slotId, antwoord){
     runAction(async function(){
       var res = await sbPloeg.from("reacties").upsert({slot_id:slotId, lid_id:state.currentUserId, antwoord:antwoord, tijdstip:new Date().toISOString()}, {onConflict:"slot_id,lid_id"});
@@ -518,14 +530,29 @@
   }
   function shiftCard(shift, me, data){
     var urgency = urgencyOf(shift.datum);
+    var opengeklapt = state.expandedShiftId === shift.id;
+    var aantalOpen = shift.slots.filter(function(sl){ return !getSlotAssignment(sl.slotId,data); }).length;
+    var statusTekst = aantalOpen===0 ? "Volledig ingevuld" : (aantalOpen===shift.slots.length ? aantalOpen+" plek"+(aantalOpen===1?"":"ken")+" open" : aantalOpen+" van "+shift.slots.length+" plekken open");
+
+    var compacteKop = '<div class="card-compact-kop" onclick="App.toggleExpand(\''+shift.id+'\')">'
+      + '<div class="tag-row">'
+        + '<span class="post-tag">'+escapeHtml(postNaam(shift.post))+'</span>'
+        + (urgency==="vandaag" ? '<span class="urgent-badge">Spoed</span>' : '')
+        + (shift.isSpoed ? '<span class="urgent-badge">\u26A1</span>' : '')
+      + '</div>'
+      + '<div class="card-compact-rechts">'
+        + '<span class="date-big" style="font-size:16px;">'+formatDateShort(shift.datum)+'</span>'
+        + '<span class="card-compact-status">'+statusTekst+'</span>'
+      + '</div>'
+      + '<span class="chevron">'+(opengeklapt?'\u25B2':'\u25BC')+'</span>'
+      + '</div>';
+
+    if(!opengeklapt) return '<div class="card card-klein">'+compacteKop+'</div>';
+
     var slotsHtml = shift.slots.map(function(slot){ return slotBlock(slot, shift, me, data); }).join("");
     var dgTags = doelgroepLabel(shift).map(function(t){ return '<span class="doelgroep-tag">'+escapeHtml(t)+'</span>'; }).join("");
-    return '<div class="card"><div class="card-top"><div class="tag-row">'
-      + '<span class="post-tag">'+escapeHtml(postNaam(shift.post))+'</span>'
-      + (urgency==="vandaag" ? '<span class="urgent-badge">Spoed &middot; vandaag</span>' : '')
-      + (shift.isSpoed ? '<span class="urgent-badge">\u26A1 Eerste ja = toegewezen</span>' : '')
-      + dgTags + '</div></div>'
-      + '<div class="date-big" style="margin-top:8px;">'+formatDateShort(shift.datum)+'</div>'
+    return '<div class="card">'+compacteKop
+      + (dgTags ? '<div class="tag-row" style="margin-top:6px;">'+dgTags+'</div>' : '')
       + (shift.aangemaaktDoor ? '<div class="meta-line">Gemeld door '+escapeHtml(shift.aangemaaktDoor)+'</div>' : '')
       + (shift.notitie ? '<div class="notitie">'+escapeHtml(shift.notitie)+'</div>' : '')
       + slotsHtml
@@ -546,6 +573,54 @@
     }
     return html;
   }
+  App.exportNaarAgenda = function(shiftId, slotId){
+    var shift = state.data.shifts.filter(function(s){ return s.id===shiftId; })[0];
+    var slot = shift && shift.slots.filter(function(sl){ return sl.slotId===slotId; })[0];
+    if(!shift || !slot) return;
+
+    var match = /\(([\d:]+)[\u2013-]([\d:]+)\)/.exec(slot.label||"");
+    var startTijd = match ? match[1] : "08:00";
+    var eindTijd = match ? match[2] : "18:00";
+    var startDatum = new Date(shift.datum+"T"+startTijd+":00");
+    var eindDatum = new Date(shift.datum+"T"+eindTijd+":00");
+    if(eindDatum.getTime() <= startDatum.getTime()) eindDatum = new Date(eindDatum.getTime()+86400000); // avond/nacht loopt door naar de volgende dag
+
+    function p2(n){ return String(n).padStart(2,"0"); }
+    function fmtIcs(d){ return d.getFullYear()+p2(d.getMonth()+1)+p2(d.getDate())+"T"+p2(d.getHours())+p2(d.getMinutes())+"00"; }
+    function escIcs(s){ return String(s||"").replace(/[\\;,]/g, function(c){ return "\\"+c; }).replace(/\n/g,"\\n"); }
+    function dienstTypeTekst(label){
+      var kern = String(label||"").replace(/\s*\([^)]*\)/,"").trim();
+      if(/hele dienst/i.test(kern)) return "24-uursdienst";
+      if(/nacht/i.test(kern)) return "Nachtdienst";
+      if(/dag/i.test(kern)) return "Dagdienst";
+      return kern || "Dienst";
+    }
+
+    var typeTekst = dienstTypeTekst(slot.label);
+    var titel = (shift.post === "onbekend")
+      ? typeTekst + " (post nog onbekend)"
+      : typeTekst + " \u2013 " + postNaam(shift.post);
+    var ics = [
+      "BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//PloegCompleet//NL","CALSCALE:GREGORIAN",
+      "BEGIN:VEVENT",
+      "UID:"+shift.id+"-"+slot.slotId+"@ploegcompleet",
+      "DTSTAMP:"+fmtIcs(new Date()),
+      "DTSTART:"+fmtIcs(startDatum),
+      "DTEND:"+fmtIcs(eindDatum),
+      "SUMMARY:"+escIcs(titel),
+      "LOCATION:"+escIcs(postNaam(shift.post)),
+      "DESCRIPTION:"+escIcs(shift.notitie||""),
+      "END:VEVENT","END:VCALENDAR"
+    ].join("\r\n");
+
+    var blob = new Blob([ics], {type:"text/calendar;charset=utf-8"});
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url; a.download = "dienst-"+shift.datum+".ics";
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 2000);
+  };
+
   function renderMijnView(me, data){
     var mine = data.toewijzingen.filter(function(t){ return t.lidId===me.id; }).map(function(t){ return {toewijzing:t, shift:shiftOfSlot(t.slotId,data)}; })
       .filter(function(x){ return x.shift; }).sort(function(a,b){ return parseDateOnly(b.shift.datum)-parseDateOnly(a.shift.datum); });
@@ -555,8 +630,11 @@
     else{
       html += mine.map(function(x){
         var slot = x.shift.slots.filter(function(sl){return sl.slotId===x.toewijzing.slotId;})[0];
+        var toekomstig = !isVerstreken(x.shift);
         return '<div class="list-item"><div class="list-item-top"><span class="post-tag">'+escapeHtml(postNaam(x.shift.post))+'</span><span class="date-big">'+formatDateShort(x.shift.datum)+'</span></div>'
-          + '<div style="margin-top:6px;font-size:13.5px;color:var(--text-muted);">'+(slot?escapeHtml(slot.label):'')+'</div></div>';
+          + '<div style="margin-top:6px;font-size:13.5px;color:var(--text-muted);">'+(slot?escapeHtml(slot.label):'')+'</div>'
+          + (toekomstig ? '<button class="small-btn" style="margin-top:8px;" onclick="App.exportNaarAgenda(\''+x.shift.id+'\',\''+x.toewijzing.slotId+'\')">\uD83D\uDCC5 Voeg toe aan agenda</button>' : '')
+          + '</div>';
       }).join("");
     }
     return html;
@@ -600,7 +678,7 @@
       + (kanBeheren ? '<button class="icon-btn" title="Meldingen" onclick="App.toggleBell()">\uD83D\uDD14'+(unread?'<span class="bel-badge">'+unread+'</span>':'')+'</button>' : '')
       + '<button class="icon-btn" onclick="App.testPush()" title="Pushmeldingen (opnieuw) inschakelen">\u2699\uFE0F</button>'
       + '<button class="icon-btn" onclick="App.switchUser()" title="Wisselen">\u21BB</button></div></div>'
-      + (state.bellOpen ? renderMeldingenDropdown(data) : '');
+      + (state.bellOpen ? '<div class="melding-backdrop" onclick="App.toggleBell()"></div>' + renderMeldingenDropdown(data) : '');
     var body;
     if(state.showForm && kanBeheren) body = shiftForm();
     else if(state.view==="mijn") body = renderMijnView(me, data);
