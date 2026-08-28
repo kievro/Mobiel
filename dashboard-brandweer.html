@@ -642,6 +642,18 @@
     tekst = tekst.replace(/\s+/g, " ").trim();
     if(!tekst) tekst = String(melding.tekst||"").trim(); // val terug als alles per ongeluk was weggefilterd
 
+    // Kruising van 2 straten (bv. "Galvanistraat Marconistraat"): Nominatim
+    // begrijpt zulke aaneengeschakelde straatnamen vaak niet. Gebruik dan
+    // alleen de eerste straat -- dat geeft altijd een geldig, dichtbijgelegen punt.
+    var straatSuffixen = /(straat|laan|weg|plein|kade|singel|dijk|hof|dreef|pad|steeg|gracht|plantsoen|markt|erf|baan)$/i;
+    var woorden = tekst.split(/\s+/);
+    for(var i=0; i<woorden.length-1; i++){
+      if(straatSuffixen.test(woorden[i]) && straatSuffixen.test(woorden[i+1])){
+        tekst = woorden.slice(0, i+1).join(" ");
+        break;
+      }
+    }
+
     return tekst + ", " + plaats;
   }
 
