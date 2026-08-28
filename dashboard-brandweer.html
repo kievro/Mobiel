@@ -219,7 +219,7 @@
   var POST_NAMEN = {post1:"Arnhem Noord", post2:"Arnhem Zuid", post3:"Ede Stad"};
   var POST_ORDER = ["post1","post2","post3"];
   // Arnhem Noord & Zuid liggen allebei in/rond Arnhem; Ede Stad rond Ede.
-  var POST_COORDS = {post1:{lat:51.9851,lon:5.8987}, post2:{lat:51.9553,lon:5.9349}, post3:{lat:52.0392,lon:5.6675}};
+  var POST_COORDS = {post1:{lat:51.977671685917606,lon:5.915895849266014}, post2:{lat:51.95462482585045,lon:5.89386650410565}, post3:{lat:52.04076151802857,lon:5.6719244847486765}};
   var WEATHERCODE = {
     0:["\u2600\uFE0F","Helder"], 1:["\uD83C\uDF24\uFE0F","Overwegend helder"], 2:["\u26C5","Half bewolkt"], 3:["\u2601\uFE0F","Bewolkt"],
     45:["\uD83C\uDF2B\uFE0F","Mist"], 48:["\uD83C\uDF2B\uFE0F","Mist met rijp"],
@@ -658,7 +658,7 @@
         var routeData = await routeRes.json();
         if(routeData.routes && routeData.routes.length){
           var coords = routeData.routes[0].geometry.coordinates.map(function(c){ return [c[1], c[0]]; });
-          L.polyline(coords, {color:"#D7E100", weight:5, opacity:0.85}).addTo(ROUTE_KAART_INSTANTIE);
+          L.polyline(coords, {color:"#000000", weight:5, opacity:0.9}).addTo(ROUTE_KAART_INSTANTIE);
           var km = (routeData.routes[0].distance/1000).toFixed(1);
           var min = Math.round(routeData.routes[0].duration/60);
           document.getElementById("routeOverlayAfstand").textContent = km + " km \u00b7 " + min + " min rijden";
