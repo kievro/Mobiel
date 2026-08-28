@@ -1,0 +1,943 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Dashboard Brandweer Gelderland Midden</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  :root{
+    --bg:#12161B; --surface:#1B2129; --surface-2:#232B34; --border:#2E3843;
+    --text:#EDEFF1; --text-muted:#8A96A3;
+    --red:#E33629; --red-dim:#3A1613; --lime:#D7E100; --amber:#F0A93A; --blue-grey:#5B7083;
+    --font-display:'Barlow Condensed',Arial,sans-serif; --font-body:'Open Sans',Arial,sans-serif; --font-mono:'Open Sans',Arial,sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:var(--font-body);height:100%;}
+  body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;}
+  #app{min-height:100vh;display:flex;flex-direction:column;padding:0 0 18px;}
+
+  .header{padding:20px 28px 0;display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;}
+  .brand{font-family:var(--font-display);font-weight:700;letter-spacing:0.05em;font-size:25px;text-transform:uppercase;line-height:1.05;}
+  .brand small{display:block;font-family:var(--font-body);font-size:12px;letter-spacing:0.08em;color:var(--text-muted);text-transform:uppercase;margin-top:6px;font-weight:600;}
+  .clock-wrap{text-align:right;}
+  .clock{font-family:var(--font-body);font-size:46px;font-weight:700;line-height:1;color:var(--lime);letter-spacing:0.03em;font-variant-numeric:tabular-nums;}
+  .date{font-family:var(--font-body);font-size:14px;font-weight:600;color:var(--text-muted);margin-top:6px;text-transform:capitalize;}
+
+  .post-naam{font-family:var(--font-display);font-weight:700;text-transform:uppercase;letter-spacing:0.03em;font-size:27px;color:var(--lime);align-self:center;}
+
+  .chevron-divider{height:6px;margin:14px 0 0;background:repeating-linear-gradient(45deg,var(--red) 0 10px,var(--lime) 10px 20px);}
+
+  .grid{display:grid;grid-template-columns:1.7fr 1fr;gap:18px;padding:18px 28px 0;flex:1;min-height:0;}
+  @media(max-width:900px){ .grid{grid-template-columns:1fr;} }
+  .onderrij{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:18px;}
+  @media(max-width:1300px){ .onderrij{grid-template-columns:1fr 1fr;} }
+  @media(max-width:700px){ .onderrij{grid-template-columns:1fr;} }
+  .onderrij .card{max-height:34vh;display:flex;flex-direction:column;overflow:hidden;}
+  .onderrij.onderrij-alleen .card{max-height:62vh;}
+  .onderrij .card h2{flex-shrink:0;}
+  .scroll-wrap{flex:1;overflow:hidden;position:relative;min-height:0;}
+  .scroll-inner.scrollend{animation-name:verticaal-scrollen;animation-timing-function:linear;animation-iteration-count:infinite;}
+  @keyframes verticaal-scrollen{from{transform:translateY(0);}to{transform:translateY(-50%);}}
+  @media(prefers-reduced-motion:reduce){ .scroll-inner.scrollend{animation:none;} }
+
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:18px 20px;margin-bottom:18px;}
+  .card h2{margin:0 0 14px;font-family:var(--font-display);font-weight:700;text-transform:uppercase;font-size:21px;letter-spacing:0.03em;color:var(--text);display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;}
+  .eyebrow{font-family:var(--font-body);font-weight:600;font-size:12.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--text-muted);margin:8px 0 4px;}
+  .eyebrow:first-child{margin-top:0;}
+
+  .ploeg-badge{font-family:var(--font-body);font-weight:600;font-size:13px;background:rgba(215,225,0,0.12);border:1px solid var(--lime);color:var(--lime);padding:3px 9px;border-radius:5px;}
+
+  .bijzonderheden-box{background:var(--red-dim);border:1px solid var(--red);border-radius:6px;padding:8px 12px;margin-bottom:10px;}
+  .bijzonderheden-box .eyebrow{margin:0 0 3px;color:#FF8A80;}
+  .bijzonderheden-box .txt{font-size:14.5px;font-weight:400;line-height:1.4;white-space:pre-wrap;}
+
+  .oefening-box{background:rgba(215,225,0,0.08);border:1px solid var(--lime);border-radius:6px;padding:6px 12px;margin-bottom:10px;}
+  .oefening-box .eyebrow{margin:0 0 3px;color:var(--lime);}
+  .oefening-row{font-size:13.5px;font-weight:400;margin-top:2px;}
+  .oefening-row .blok{color:var(--text-muted);font-family:var(--font-body);font-weight:600;font-size:11px;text-transform:uppercase;margin-right:6px;}
+
+  .vt-tables{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:2px;}
+  @media(max-width:700px){ .vt-tables{grid-template-columns:1fr;} }
+  .vt-table-title{font-family:var(--font-body);font-weight:600;font-size:10.5px;text-transform:uppercase;letter-spacing:0.07em;color:var(--text-muted);margin-bottom:2px;}
+  .vt-row{display:flex;justify-content:space-between;align-items:baseline;padding:3px 0;border-bottom:1px solid var(--border);font-size:13.5px;font-weight:400;gap:8px;}
+  .vt-row:last-child{border-bottom:none;}
+  .vt-functie{color:var(--text-muted);font-family:var(--font-body);font-weight:600;font-size:10.5px;text-transform:uppercase;white-space:nowrap;}
+  .vt-naam{font-weight:600;text-align:right;}
+
+  .blokrooster-wrap{overflow-x:auto;margin-top:6px;border-radius:6px;border:1px solid var(--border);}
+  .blokrooster{border-collapse:collapse;width:100%;font-size:13px;font-weight:400;table-layout:fixed;}
+  .blokrooster th{font-family:var(--font-body);font-weight:600;font-size:10.5px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);text-align:left;padding:6px 6px;border-bottom:1px solid var(--border);background:var(--surface-2);}
+  .blokrooster .blok-tijd{font-size:9.5px;font-weight:400;text-transform:none;letter-spacing:0;opacity:0.75;display:block;font-variant-numeric:tabular-nums;}
+  .blokrooster td{padding:6px 6px;border-bottom:1px solid var(--border);vertical-align:middle;white-space:normal;line-height:1.35;overflow-wrap:break-word;}
+  .blokrooster tr:last-child td{border-bottom:none;}
+  .blokrooster th:nth-child(1), .blokrooster td:nth-child(1){width:78px;}
+  .blokrooster th:nth-child(2), .blokrooster td:nth-child(2){width:130px;}
+  .blokrooster .br-functie-col{font-family:var(--font-body);font-size:11.5px;font-weight:600;color:#ffffff;white-space:normal;line-height:1.35;}
+  .blokrooster .br-naam{font-weight:600;white-space:normal;overflow-wrap:break-word;}
+  .bv-badge{display:inline-block;font-family:var(--font-body);font-size:9.5px;font-weight:700;letter-spacing:0.03em;background:rgba(240,169,58,0.18);color:var(--amber);border:1px solid var(--amber);border-radius:3px;padding:1px 4px;vertical-align:middle;margin-left:3px;}
+  .deadline-tag{display:block;margin-top:5px;font-family:var(--font-body);font-weight:600;font-size:12.5px;color:var(--amber);font-variant-numeric:tabular-nums;}
+  .deadline-tag.deadline-verstreken{color:var(--text-muted);}
+  .dienst-item.dienst-verstreken{opacity:0.45;text-decoration:line-through;}
+  .blok-leeg{color:var(--text-muted);opacity:0.4;}
+
+  .weer-main{display:flex;align-items:center;gap:16px;}
+  .weer-icon{font-size:52px;line-height:1;}
+  .weer-temp{font-family:var(--font-body);font-size:40px;font-weight:700;font-variant-numeric:tabular-nums;}
+  .weer-desc{font-size:16px;font-weight:600;color:var(--text-muted);}
+  .weer-extra{margin-top:12px;font-size:14.5px;font-weight:400;color:var(--text-muted);display:flex;gap:18px;font-variant-numeric:tabular-nums;}
+
+  .dienst-item{padding:7px 10px 7px 12px;border-bottom:1px solid var(--border);border-left:3px solid var(--blue-grey);background:rgba(91,112,131,0.05);border-radius:0 6px 6px 0;margin-bottom:5px;}
+  .dienst-item:last-child{border-bottom:none;}
+  .dienst-item.dienst-verstreken{border-left-color:var(--border);background:none;}
+  .dienst-item.dienst-klikbaar{cursor:default;}
+  .dienst-item.dienst-spoed{border-left:5px solid var(--red);background:rgba(227,54,41,0.16);padding:14px 14px 14px 16px;margin:4px 0 10px;border-radius:8px;box-shadow:0 0 0 1px var(--red), 0 0 22px rgba(227,54,41,0.35);animation:spoed-gloed 1.8s ease-in-out infinite;}
+  @keyframes spoed-gloed{0%,100%{box-shadow:0 0 0 1px var(--red), 0 0 14px rgba(227,54,41,0.25);}50%{box-shadow:0 0 0 2px var(--red), 0 0 30px rgba(227,54,41,0.55);}}
+  .dienst-top{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;}
+  .post-tag{font-family:var(--font-display);font-weight:600;text-transform:uppercase;font-size:13.5px;letter-spacing:0.03em;padding:2px 8px;border-radius:4px;border:1px solid var(--blue-grey);color:#AEC3D6;background:rgba(91,112,131,0.15);}
+  .datum-tag{font-family:var(--font-body);font-size:14.5px;font-weight:700;color:var(--text);text-transform:capitalize;}
+  .datum-tag.datum-tag-spoed{font-size:18px;color:#fff;}
+  .spoed-tag{display:inline-flex;align-items:center;font-family:var(--font-display);font-weight:700;text-transform:uppercase;font-size:15px;letter-spacing:0.04em;background:var(--red);color:#fff;padding:5px 12px;border-radius:5px;animation:spoed-puls 1.6s ease-in-out infinite;}
+  .card-spoed{border-color:var(--red);box-shadow:0 0 0 1px var(--red);}
+  @keyframes spoed-puls{0%,100%{opacity:1;}50%{opacity:.55;}}
+  .duik-tag{font-family:var(--font-body);font-weight:600;font-size:12px;color:var(--lime);border:1px dashed var(--lime);padding:2px 7px;border-radius:4px;}
+  .dienst-chevron{display:none;}
+  .dienst-detail{margin-top:6px;padding-top:6px;border-top:1px dashed var(--border);}
+  .notitie{font-size:13.5px;font-weight:400;color:var(--text-muted);margin-top:0;font-style:italic;}
+  .empty{color:var(--text-muted);font-size:15px;font-weight:400;padding:8px 0;}
+
+  .footer-note{padding:10px 28px 0;font-family:var(--font-body);font-weight:400;font-size:12px;color:var(--text-muted);text-align:right;}
+  .pagina-indicator{margin-left:10px;}
+  .pagina-indicator .punt{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--border);margin-left:4px;}
+  .pagina-indicator .punt.actief{background:var(--lime);}
+
+  .ticker-wrap{width:100%;overflow:hidden;border-top:1px solid var(--border);border-bottom:1px solid var(--border);}
+  .ticker-track{display:flex;width:max-content;animation:ticker-scroll 40s linear infinite;}
+  .ticker-track:hover{animation-play-state:paused;}
+  .ticker-row-ambulance .ticker-track{animation-duration:60s;} /* rustiger, want gele tekst op geel is minder rustig leesbaar */
+  .ticker-item{white-space:nowrap;padding:5px 40px;font-family:var(--font-body);font-size:17px;text-transform:uppercase;letter-spacing:0.01em;display:flex;align-items:center;gap:10px;font-weight:700;}
+  .ticker-item .ticker-time{opacity:0.75;font-weight:400;font-variant-numeric:tabular-nums;}
+  .ticker-row-brandweer{background:#C81E1E;color:#FFFFFF;}
+  .ticker-row-ambulance{background:#F4D03F;color:#1B2129;}
+  .ticker-row-politie{background:#1B4F9C;color:#FFFFFF;}
+
+  .waarschuwing-badge{display:inline-flex;align-items:center;gap:6px;font-family:var(--font-body);font-size:12.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;padding:6px 12px;border-radius:5px;margin-top:12px;}
+  .waarschuwing-blok{margin-top:2px;}
+  .waarschuwing-omschrijving{font-family:var(--font-body);font-weight:400;font-size:13.5px;line-height:1.4;color:var(--text-muted);margin:6px 2px 4px;}
+  .waarschuwing-groen{background:#4CAF50;color:#0B1A0D;}
+  .waarschuwing-geel{background:#F0D832;color:#14181f;}
+  .waarschuwing-oranje{background:#E8952E;color:#14181f;}
+  .waarschuwing-rood{background:#E33629;color:#FFFFFF;}
+  @keyframes ticker-scroll{from{transform:translateX(0);}to{transform:translateX(-50%);}}
+  .hidden{display:none !important;}
+  .route-overlay{position:fixed;inset:0;z-index:200;background:var(--bg);display:flex;flex-direction:column;padding:24px 28px;}
+  .route-overlay-kop{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;}
+  .route-overlay-eyebrow{font-family:var(--font-body);font-weight:700;font-size:13px;text-transform:uppercase;letter-spacing:0.05em;color:var(--red);}
+  .route-overlay-tekst{font-family:var(--font-display);font-weight:700;font-size:26px;color:var(--text);margin-top:4px;max-width:80vw;}
+  .route-overlay-afstand{font-family:var(--font-display);font-weight:700;font-size:22px;color:var(--lime);text-align:right;white-space:nowrap;}
+  .route-kaart{flex:1;border-radius:12px;overflow:hidden;border:1px solid var(--border);}
+  .naam-item{padding:10px 14px;background:var(--surface);border:1px solid var(--border);border-radius:6px;margin-top:6px;cursor:pointer;font-size:14px;color:var(--text);}
+  .naam-item:hover{border-color:var(--red);}
+  .postwissel{position:fixed;right:14px;bottom:14px;display:flex;gap:8px;z-index:30;}
+  .postwissel-knop{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--font-display);font-weight:700;font-size:13px;cursor:pointer;border:2px solid transparent;opacity:0.55;background:var(--surface);color:var(--text-muted);}
+  .postwissel-knop.actief{opacity:1;}
+  .postwissel-knop[data-post="post1"]{border-color:var(--blue-grey);}
+  .postwissel-knop[data-post="post1"].actief{background:var(--blue-grey);color:#fff;}
+  .postwissel-knop[data-post="post2"]{border-color:var(--amber);}
+  .postwissel-knop[data-post="post2"].actief{background:var(--amber);color:#14181f;}
+  .postwissel-knop[data-post="post3"]{border-color:var(--lime);}
+  .postwissel-knop[data-post="post3"].actief{background:var(--lime);color:#14181f;}
+</style>
+</head>
+<body>
+<div id="toegangsScherm" style="min-height:100vh;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:14px;padding:20px;">
+  <div class="brand" style="text-align:center;">DASHBOARD<small>Brandweer Gelderland Midden</small></div>
+  <div id="loginNaamStap">
+    <p style="color:var(--text-muted);font-size:14px;margin:0 0 10px;text-align:center;">Wie ben jij?</p>
+    <input type="text" id="naamZoek" placeholder="Typ je naam…" autofocus style="width:260px;text-align:center;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:10px 16px;font-size:15px;box-sizing:border-box;">
+    <div id="naamLijst" style="max-height:240px;overflow-y:auto;margin-top:10px;width:260px;"></div>
+  </div>
+  <div id="loginPinStap" class="hidden">
+    <p id="loginHoiTekst" style="color:var(--text);font-size:15px;margin:0 0 4px;text-align:center;"></p>
+    <p style="color:var(--text-muted);font-size:13px;margin:0 0 10px;text-align:center;">Vul je pincode in</p>
+    <form id="pinForm" style="display:flex;flex-direction:column;gap:10px;align-items:center;">
+      <input type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" id="pinInvoer" autofocus placeholder="••••" style="text-align:center;letter-spacing:0.3em;font-size:22px;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:10px 16px;width:160px;">
+      <div id="pinFout" style="color:var(--red);font-size:13px;min-height:18px;text-align:center;"></div>
+      <button type="submit" style="font-family:var(--font-display);font-weight:700;text-transform:uppercase;background:var(--red);color:#fff;border:none;border-radius:6px;padding:10px 24px;font-size:15px;cursor:pointer;">Inloggen</button>
+      <button type="button" id="btnAndereNaam" style="background:none;border:none;color:var(--text-muted);font-size:12px;cursor:pointer;text-decoration:underline;">← Andere naam kiezen</button>
+    </form>
+  </div>
+  <div id="loginNieuwPinStap" class="hidden">
+    <p style="color:var(--text);font-size:15px;margin:0 0 4px;text-align:center;">Nieuwe pincode instellen</p>
+    <p style="color:var(--text-muted);font-size:12.5px;margin:0 0 10px;text-align:center;max-width:280px;">Eerste keer, of na een reset — kies een eigen pincode van minimaal 4 cijfers, niet 1234.</p>
+    <form id="nieuwPinForm" style="display:flex;flex-direction:column;gap:10px;align-items:center;">
+      <input type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" id="nieuwPin1" placeholder="Nieuwe pincode" style="text-align:center;letter-spacing:0.3em;font-size:18px;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:9px 14px;width:160px;">
+      <input type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" id="nieuwPin2" placeholder="Herhaal pincode" style="text-align:center;letter-spacing:0.3em;font-size:18px;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:9px 14px;width:160px;">
+      <div id="nieuwPinFout" style="color:var(--red);font-size:13px;min-height:18px;text-align:center;"></div>
+      <button type="submit" style="font-family:var(--font-display);font-weight:700;text-transform:uppercase;background:var(--red);color:#fff;border:none;border-radius:6px;padding:10px 24px;font-size:15px;cursor:pointer;">Opslaan &amp; doorgaan</button>
+    </form>
+  </div>
+</div>
+<div id="app" class="hidden">
+  <div class="header">
+    <div class="brand">DASHBOARD<small>Brandweer Gelderland Midden</small></div>
+    <div class="post-naam" id="postNaam"></div>
+    <div class="clock-wrap"><div class="clock" id="clock">--:--</div><div class="date" id="dateLine"></div></div>
+  </div>
+  <div class="chevron-divider"></div>
+  <div class="ticker-wrap ticker-row-brandweer"><div class="ticker-track" id="tickerBrandweer"><div class="ticker-item">Brandweer &mdash; laden&hellip;</div></div></div>
+  <div class="grid" id="grid"></div>
+
+  <div id="routeOverlay" class="route-overlay hidden">
+    <div class="route-overlay-kop">
+      <div>
+        <div class="route-overlay-eyebrow" id="routeOverlayPlaats">P2000-melding</div>
+        <div class="route-overlay-tekst" id="routeOverlayTekst"></div>
+      </div>
+      <div class="route-overlay-afstand" id="routeOverlayAfstand"></div>
+    </div>
+    <div id="routeKaart" class="route-kaart"></div>
+  </div>
+  <div class="footer-note"><span id="footerNote"></span><span class="pagina-indicator" id="paginaIndicator"></span></div>
+  <div class="postwissel" id="postwissel">
+    <div class="postwissel-knop" data-post="post1" title="Arnhem Noord">N</div>
+    <div class="postwissel-knop" data-post="post2" title="Arnhem Zuid">Z</div>
+    <div class="postwissel-knop" data-post="post3" title="Ede Stad">E</div>
+  </div>
+</div>
+<script>
+(function(){
+  "use strict";
+  var PLOEG_URL = "https://gqqflxctuikbygqnbrli.supabase.co";
+  var PLOEG_KEY_HEADERS = {"apikey":"sb_publishable_8MFTS2ygpMxPwsl1-EH1aQ_GvmxQAtC","Authorization":"Bearer sb_publishable_8MFTS2ygpMxPwsl1-EH1aQ_GvmxQAtC"};
+  var DAG_URL = "https://iyquepqubfqrhybriqif.supabase.co";
+  var DAG_KEY_HEADERS = {"apikey":"sb_publishable_Pb0fFfxZQggKnFCtJYMH9A_avw0GaPn","Authorization":"Bearer sb_publishable_Pb0fFfxZQggKnFCtJYMH9A_avw0GaPn"};
+
+  var POST_NAMEN = {post1:"Arnhem Noord", post2:"Arnhem Zuid", post3:"Ede Stad"};
+  var POST_ORDER = ["post1","post2","post3"];
+  // Arnhem Noord & Zuid liggen allebei in/rond Arnhem; Ede Stad rond Ede.
+  var POST_COORDS = {post1:{lat:51.9851,lon:5.8987}, post2:{lat:51.9553,lon:5.9349}, post3:{lat:52.0392,lon:5.6675}};
+  var WEATHERCODE = {
+    0:["\u2600\uFE0F","Helder"], 1:["\uD83C\uDF24\uFE0F","Overwegend helder"], 2:["\u26C5","Half bewolkt"], 3:["\u2601\uFE0F","Bewolkt"],
+    45:["\uD83C\uDF2B\uFE0F","Mist"], 48:["\uD83C\uDF2B\uFE0F","Mist met rijp"],
+    51:["\uD83C\uDF26\uFE0F","Lichte motregen"], 53:["\uD83C\uDF26\uFE0F","Motregen"], 55:["\uD83C\uDF27\uFE0F","Dichte motregen"],
+    61:["\uD83C\uDF27\uFE0F","Lichte regen"], 63:["\uD83C\uDF27\uFE0F","Regen"], 65:["\uD83C\uDF27\uFE0F","Zware regen"],
+    71:["\uD83C\uDF28\uFE0F","Lichte sneeuw"], 73:["\uD83C\uDF28\uFE0F","Sneeuw"], 75:["\uD83C\uDF28\uFE0F","Zware sneeuw"],
+    80:["\uD83C\uDF26\uFE0F","Buien"], 81:["\uD83C\uDF27\uFE0F","Flinke buien"], 82:["\u26C8\uFE0F","Zware buien"],
+    95:["\u26C8\uFE0F","Onweer"], 96:["\u26C8\uFE0F","Onweer met hagel"], 99:["\u26C8\uFE0F","Zwaar onweer"]
+  };
+
+  function qs(name, fallback){ var v = new URLSearchParams(location.search).get(name); return v || fallback; }
+  var POST_ID = qs("post", "post1");
+  if(!POST_NAMEN[POST_ID]) POST_ID = "post1";
+
+  function pad(n){ return String(n).padStart(2,"0"); }
+  function todayStr(){ var d=new Date(); return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate()); }
+  function escapeHtml(s){ return String(s==null?"":s).replace(/[&<>"']/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
+  function slugify(label){ return String(label).toLowerCase().replace(/\s+/g,"-"); }
+
+  async function sbSelect(baseUrl, headers, path){
+    var res = await fetch(baseUrl + "/rest/v1/" + path, {headers: headers});
+    if(!res.ok) throw new Error("Supabase fout ("+res.status+")");
+    return res.json();
+  }
+
+  async function sbRpc(baseUrl, headers, functieNaam, params){
+    var res = await fetch(baseUrl + "/rest/v1/rpc/" + functieNaam, {
+      method: "POST",
+      headers: Object.assign({}, headers, {"Content-Type":"application/json"}),
+      body: JSON.stringify(params)
+    });
+    if(!res.ok) throw new Error("Supabase fout ("+res.status+")");
+    return res.json();
+  }
+
+  function updateClock(){
+    var now = new Date();
+    document.getElementById("clock").textContent = pad(now.getHours()) + ":" + pad(now.getMinutes());
+    document.getElementById("dateLine").textContent = now.toLocaleDateString("nl-NL", {weekday:"long", day:"numeric", month:"long"});
+  }
+
+  function mode(arr){
+    if(!arr.length) return null;
+    var counts = {}; arr.forEach(function(x){ var k = x.typeId+"||"+x.tekst; counts[k] = (counts[k]||0)+1; });
+    var best = null, bestCount = 0;
+    Object.keys(counts).forEach(function(k){ if(counts[k]>bestCount){ bestCount=counts[k]; best=k; } });
+    var parts = best.split("||");
+    return {typeId:parts[0], tekst:parts[1]};
+  }
+
+  var BLOKKEN_BASIS = [
+    {id:"blok1", naam:"Blok 1", tijdFallback:"08:45\u201310:00"},
+    {id:"blok2", naam:"Blok 2", tijdFallback:"10:15\u201312:00"},
+    {id:"blok3", naam:"Blok 3", tijdFallback:"13:00\u201315:00"},
+    {id:"blok4", naam:"Blok 4", tijdFallback:"15:15\u201317:00"},
+    {id:"avond", naam:"Avond", tijdFallback:"19:00\u201321:00"}
+  ];
+
+  function blokkenMetTijden(werkblokken){
+    return BLOKKEN_BASIS.map(function(b){
+      var w = (werkblokken||[]).filter(function(x){ return x.id===b.id; })[0];
+      var tijd = b.tijdFallback;
+      if(w){
+        if(w.tijd) tijd = w.tijd;
+        else if(w.van && w.tot) tijd = w.van+"\u2013"+w.tot;
+        else if(w.start && w.eind) tijd = w.start+"\u2013"+w.eind;
+      }
+      return {id:b.id, naam:b.naam, tijd:tijd};
+    });
+  }
+
+  // Kleur komt bij voorkeur uit de planning zelf (activiteitTypes), zodat
+  // wijzigingen die je daar instelt automatisch meekomen op het dashboard.
+  // Alleen als een type daar niet (meer) in staat, gebruiken we een terugval.
+  var TYPE_KLEUREN_TERUGVAL = {
+    "t-vrij": "#262b33",
+    "t-oef":  "rgba(200,142,40,0.55)",
+    "t-verg": "rgba(46,139,122,0.5)",
+    "t-ond":  "rgba(46,139,122,0.5)",
+    "t-ov":   "rgba(46,139,122,0.35)",
+    "t-con":  "transparent"
+  };
+  function kleurVoorType(typeId, activiteitTypes){
+    var t = (activiteitTypes||[]).filter(function(a){ return a.id===typeId; })[0];
+    if(t && (t.kleur||t.color)) return t.kleur||t.color;
+    if(TYPE_KLEUREN_TERUGVAL[typeId] !== undefined) return TYPE_KLEUREN_TERUGVAL[typeId];
+    return "transparent";
+  }
+
+  // Bepaalt een leesbare tekstkleur: gebruikt de tekstKleur uit de planning als
+  // die er is, anders wordt automatisch op basis van helderheid gekozen tussen
+  // wit en donker (voorkomt bv. lichte tekst op een licht-grijze achtergrond).
+  function tekstKleurVoor(typeId, kleur, activiteitTypes){
+    var t = (activiteitTypes||[]).filter(function(a){ return a.id===typeId; })[0];
+    if(t && t.tekstKleur) return t.tekstKleur;
+    if(!kleur || kleur === "transparent") return "";
+    var hex = kleur.replace("#","");
+    if(hex.length===3) hex = hex.split("").map(function(c){ return c+c; }).join("");
+    if(hex.length!==6) return "";
+    var r = parseInt(hex.substr(0,2),16), g = parseInt(hex.substr(2,2),16), b = parseInt(hex.substr(4,2),16);
+    var luminantie = (0.299*r + 0.587*g + 0.114*b)/255;
+    return luminantie > 0.6 ? "#14181f" : "#ffffff";
+  }
+
+  // Rooster op basis van de voertuigfuncties (in de volgorde zoals in de
+  // planning ingesteld: TS BV, TS CH, MS 1-4, HW.., HV.., FRB.., enz).
+  // Wie geen voertuigfunctie heeft (vrije dienst) verschijnt niet in dit rooster.
+  // Iemand met meerdere functies (bv. HV BD + HW BD + FRB MS) krijgt ÉÉN rij,
+  // met alle functies samengevoegd -- de volgorde van de rijen volgt de eerst
+  // toegewezen functie van die persoon, zodat het overzicht netjes per
+  // functiegroep gesorteerd blijft (TS boven, dan MS, dan HW, enz).
+  function renderBlokRooster(dag, personenById, functieGroepen, activiteitTypes, werkblokken){
+    var cellen = dag.cellen || {};
+    var vi = (dag.voertuigIndeling && dag.voertuigIndeling.dag) || {};
+    var blokken = blokkenMetTijden(werkblokken);
+
+    var volgordeIndex = {}; // pid -> laagste volgorde-nummer van zijn functies
+    var functiesPerPid = {}; // pid -> [labels]
+    var teller = 0;
+    functieGroepen.forEach(function(groep){
+      (groep.functies||[]).forEach(function(label){
+        var pid = vi[slugify(label)];
+        teller++;
+        if(!pid) return;
+        if(volgordeIndex[pid] === undefined) volgordeIndex[pid] = teller;
+        (functiesPerPid[pid] = functiesPerPid[pid] || []).push(label);
+      });
+    });
+
+    var pids = Object.keys(functiesPerPid).sort(function(a,b){ return volgordeIndex[a]-volgordeIndex[b]; });
+    if(!pids.length) return '<div class="empty" style="font-size:15px;">Geen voertuigfuncties ingedeeld.</div>';
+
+    // "Avond" alleen tonen als er voor minstens één van de getoonde personen
+    // daadwerkelijk iets is ingevuld (tekst of een type) -- anders scheelt dat
+    // een lege kolom op dagen zonder avondactiviteit.
+    var avondHeeftInhoud = pids.some(function(pid){
+      var entry = (cellen[pid]||{}).avond;
+      return entry && (entry.tekst || entry.typeId);
+    });
+    blokken = blokken.filter(function(b){ return b.id!=="avond" || avondHeeftInhoud; });
+
+    var headerHtml = '<tr><th>Functie</th><th>Naam</th>' + blokken.map(function(b){
+      return '<th>'+b.naam+'<br><span class="blok-tijd">'+b.tijd+'</span></th>';
+    }).join("") + '</tr>';
+
+    var rowsHtml = pids.map(function(pid){
+      var persoon = personenById[pid];
+      var naam = (persoon && persoon.naam) || pid;
+      var isBevelvoerder = persoon && persoon.specialismen && persoon.specialismen.indexOf("Bevelvoerder") !== -1;
+      var naamHtml = escapeHtml(naam) + (isBevelvoerder ? ' <span class="bv-badge" title="Bevelvoerder">BV</span>' : '');
+      var functieTekst = functiesPerPid[pid].join(" / ");
+      var cellenHtml = blokken.map(function(b){
+        var entry = (cellen[pid]||{})[b.id];
+        var type = entry ? (activiteitTypes||[]).filter(function(a){ return a.id===entry.typeId; })[0] : null;
+        // Bij een "puur kleur"-keuze in de planning (geen eigen tekst getypt) staat er
+        // alleen een typeId, geen tekst -- dan tonen we de naam van het type zelf,
+        // exact zoals de Dagstaat-app dat ook doet.
+        var tekst = entry ? (entry.tekst || (type ? type.naam : "")) : "";
+        var kleur = entry ? kleurVoorType(entry.typeId, activiteitTypes) : "transparent";
+        var tekstKleur = entry ? tekstKleurVoor(entry.typeId, kleur, activiteitTypes) : "";
+        var stijl = "background:"+kleur+";"+(tekstKleur?"color:"+tekstKleur+";":"");
+        return '<td style="'+stijl+'">'+(tekst ? escapeHtml(tekst) : '<span class="blok-leeg">\u2013</span>')+'</td>';
+      }).join("");
+      return '<tr><td class="br-functie-col">'+escapeHtml(functieTekst)+'</td><td class="br-naam">'+naamHtml+'</td>'+cellenHtml+'</tr>';
+    }).join("");
+
+    return '<div class="blokrooster-wrap"><table class="blokrooster"><thead>'+headerHtml+'</thead><tbody>'+rowsHtml+'</tbody></table></div>';
+  }
+
+  function renderDagstaat(dag, personenById, postConfig, werkblokken, activiteitTypes){
+    if(!dag){
+      return '<div class="card"><h2>Dagstaat</h2><div class="empty">Geen dagstaat gevonden voor vandaag bij '+escapeHtml(POST_NAMEN[POST_ID])+'.</div></div>';
+    }
+    var ploegNaam = (dag.ploegAanDienst||"").replace(/^post\d+-ploeg-/,"Ploeg ");
+    var functieGroepen = (postConfig && postConfig.voertuigFuncties) || [];
+    var roosterHtml = renderBlokRooster(dag, personenById, functieGroepen, activiteitTypes, werkblokken);
+
+    // Oefening-type-id opzoeken en oefeningen van vandaag verzamelen.
+    // Belangrijk: we kijken alleen naar mensen MET een voertuigfunctie (zelfde
+    // groep als in de tabel) -- anders trekken vrije-dienst-mensen de
+    // meerderheid scheef (die hebben allemaal "Vrije dienst" als tekst).
+    var oefTypeId = null;
+    (activiteitTypes||[]).forEach(function(t){ if(t.naam === "Oefening") oefTypeId = t.id; });
+    var vi = (dag.voertuigIndeling && dag.voertuigIndeling.dag) || {};
+    var toegewezenPids = {};
+    functieGroepen.forEach(function(groep){
+      (groep.functies||[]).forEach(function(label){
+        var pid = vi[slugify(label)];
+        if(pid) toegewezenPids[pid] = true;
+      });
+    });
+    var cellen = dag.cellen || {};
+    var perBlok = {};
+    Object.keys(cellen).forEach(function(pid){
+      if(!toegewezenPids[pid]) return; // alleen ingedeelde mensen meetellen
+      Object.keys(cellen[pid]).forEach(function(blokId){
+        var entry = cellen[pid][blokId];
+        if(!entry || !entry.typeId) return; // heeft in elk geval een type nodig; eigen tekst is optioneel
+        (perBlok[blokId] = perBlok[blokId] || []).push(entry);
+      });
+    });
+    var oefTypeNaam = null;
+    (activiteitTypes||[]).forEach(function(t){ if(t.id===oefTypeId) oefTypeNaam = t.naam; });
+    var oefeningen = [];
+    (werkblokken||[]).forEach(function(blok){
+      var m = mode(perBlok[blok.id] || []);
+      if(m && m.typeId === oefTypeId){
+        var weergave = m.tekst || oefTypeNaam || "";
+        if(weergave) oefeningen.push('<div class="oefening-row"><span class="blok">'+escapeHtml(blok.naam)+'</span>'+escapeHtml(weergave)+'</div>');
+      }
+    });
+
+    var html = '<div class="card">'
+      + '<h2>Dagstaat <span class="ploeg-badge">'+escapeHtml(ploegNaam||"\u2013")+'</span></h2>'
+      + (dag.bijzonderheden ? '<div class="bijzonderheden-box"><div class="eyebrow">Bijzonderheden vandaag</div><div class="txt">'+escapeHtml(dag.bijzonderheden)+'</div></div>' : '')
+      + (oefeningen.length ? '<div class="oefening-box"><div class="eyebrow">\uD83C\uDFAF Oefening vandaag</div>'+oefeningen.join("")+'</div>' : '')
+      + roosterHtml
+      + '</div>';
+    return html;
+  }
+
+  function renderUurVerwachting(w){
+    if(!w || !w.hourly || !w.hourly.time) return "";
+    var nu = new Date();
+    var items = [];
+    for(var i=0;i<w.hourly.time.length && items.length<8;i++){
+      var t = new Date(w.hourly.time[i]);
+      if(t < nu) continue; // alleen komende uren tonen
+      var info = WEATHERCODE[w.hourly.weather_code[i]] || ["\u26C5",""];
+      items.push('<div style="text-align:center;min-width:48px;">'
+        + '<div style="font-family:var(--font-body);font-weight:600;font-size:12.5px;color:var(--text-muted);font-variant-numeric:tabular-nums;">'+t.toLocaleTimeString("nl-NL",{hour:"2-digit"})+'</div>'
+        + '<div style="font-size:22px;margin:3px 0;">'+info[0]+'</div>'
+        + '<div style="font-family:var(--font-body);font-weight:700;font-size:14px;font-variant-numeric:tabular-nums;">'+Math.round(w.hourly.temperature_2m[i])+'\u00B0</div>'
+        + '</div>');
+    }
+    if(!items.length) return "";
+    return '<div style="display:flex;gap:6px;margin-top:14px;overflow-x:auto;padding-bottom:2px;">'+items.join("")+'</div>';
+  }
+
+  function dedupliceerWaarschuwingen(lijst){
+    // Bij een update van KNMI (bv. nieuwe eindtijd) komt er soms een extra rij bij
+    // i.p.v. dat de bestaande rij wordt bijgewerkt. Per titel+provincie houden we
+    // daarom alleen de versie met de laatste (verste) geldig_tot aan.
+    var perWaarschuwing = {};
+    (lijst||[]).forEach(function(ww){
+      var key = (ww.titel||"") + "||" + (ww.provincie||"");
+      var bestaande = perWaarschuwing[key];
+      var isNieuwer = !bestaande || (ww.geldig_tot && (!bestaande.geldig_tot || new Date(ww.geldig_tot) > new Date(bestaande.geldig_tot)));
+      if(isNieuwer) perWaarschuwing[key] = ww;
+    });
+    return Object.keys(perWaarschuwing).map(function(k){ return perWaarschuwing[k]; });
+  }
+
+  function renderWeer(w, waarschuwingenRuw){
+    if(!w){ return '<div class="card"><h2>Weer</h2><div class="empty">Weerbericht niet beschikbaar.</div></div>'; }
+    var code = w.current.weather_code;
+    var info = WEATHERCODE[code] || ["\u26C5","Onbekend"];
+    var waarschuwingen = dedupliceerWaarschuwingen(waarschuwingenRuw);
+
+    var badgeHtml;
+    if(!waarschuwingen.length){
+      badgeHtml = '<span class="waarschuwing-badge waarschuwing-groen">\u2713 Geen weerswaarschuwing actief</span>';
+    } else {
+      var symboolPerKleur = {geel:'\u26A0', oranje:'\u26A0\u26A0', rood:'\u26A0\u26A0\u26A0'};
+      badgeHtml = waarschuwingen.map(function(ww){
+        var kleurNl = (ww.kleur||"").toLowerCase().replace("yellow","geel").replace("orange","oranje").replace("red","rood");
+        var klasse = "waarschuwing-" + kleurNl;
+        var symbool = symboolPerKleur[kleurNl] || '\u25CF';
+        var tot = ww.geldig_tot ? new Date(ww.geldig_tot).toLocaleString("nl-NL",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}) : "";
+        return '<div class="waarschuwing-blok">'
+          + '<span class="waarschuwing-badge '+klasse+'">'+symbool+' Code '+escapeHtml(kleurNl)+' \u2014 '+escapeHtml(ww.titel||"")+(tot?' (tot '+tot+')':'')+'</span>'
+          + (ww.omschrijving ? '<div class="waarschuwing-omschrijving">'+escapeHtml(ww.omschrijving)+'</div>' : '')
+          + '</div>';
+      }).join("");
+    }
+
+    return '<div class="card">'
+      + '<h2>Weer vandaag <span class="eyebrow" style="margin:0;">'+escapeHtml(POST_NAMEN[POST_ID])+'</span></h2>'
+      + '<div class="weer-main"><div class="weer-icon">'+info[0]+'</div><div><div class="weer-temp">'+Math.round(w.current.temperature_2m)+'\u00B0C</div><div class="weer-desc">'+info[1]+'</div></div></div>'
+      + '<div class="weer-extra"><span>Min '+Math.round(w.daily.temperature_2m_min[0])+'\u00B0 &middot; Max '+Math.round(w.daily.temperature_2m_max[0])+'\u00B0</span><span>Neerslagkans '+w.daily.precipitation_probability_max[0]+'%</span></div>'
+      + renderUurVerwachting(w)
+      + '<div>'+badgeHtml+'</div>'
+      + '</div>';
+  }
+
+  function renderDiensten(list){
+    var nu = new Date();
+    // Diensten waarvan de deadline meer dan 24 uur geleden is, niet meer tonen
+    var zichtbaar = list.filter(function(d){
+      if(!d.deadline) return true;
+      var uurVerschil = (nu - new Date(d.deadline)) / 3600000;
+      return uurVerschil < 24;
+    });
+    // Altijd op dichtstbijzijnde datum sorteren, ongeacht de volgorde die binnenkomt
+    zichtbaar.sort(function(a,b){ return new Date(a.datum) - new Date(b.datum); });
+
+    if(!zichtbaar.length){ return '<div class="card"><h2>Openstaande diensten</h2><div class="empty">Alles is ingevuld \uD83C\uDF89</div></div>'; }
+    var heeftSpoed = zichtbaar.some(function(d){ return d.is_spoed || d.spoed; });
+    var items = zichtbaar.map(function(d, i){
+      var verstreken = d.deadline && new Date(d.deadline) < nu;
+      var isSpoed = !!(d.is_spoed || d.spoed);
+      var deadlineHtml = "";
+      if(d.deadline){
+        var dl = new Date(d.deadline);
+        deadlineHtml = '<span class="deadline-tag'+(verstreken?' deadline-verstreken':'')+'">Reageren voor '
+          + dl.toLocaleDateString("nl-NL",{day:"numeric",month:"short"}) + ' '
+          + dl.toLocaleTimeString("nl-NL",{hour:"2-digit",minute:"2-digit"}) + '</span>';
+      }
+      return '<div class="dienst-item'+(verstreken?' dienst-verstreken':'')+(isSpoed?' dienst-spoed':'')+'">'
+        + '<div class="dienst-top">'
+        + '<span class="datum-tag'+(isSpoed?' datum-tag-spoed':'')+'">'+new Date(d.datum+"T00:00:00").toLocaleDateString("nl-NL",{weekday:"short",day:"numeric",month:"short"})+'</span>'
+        + '<span class="post-tag">'+escapeHtml(d.post_naam)+'</span>'
+        + (isSpoed ? '<span class="spoed-tag">\u26A1 SPOED \u2013 NU NODIG</span>' : '')
+        + (d.duik_dienst ? '<span class="duik-tag">Duiker</span>' : '')
+        + '</div>'
+        + '<div class="dienst-detail">'
+        + (d.notitie ? '<div class="notitie">'+escapeHtml(d.notitie)+'</div>' : '')
+        + deadlineHtml
+        + '</div>'
+        + '</div>';
+    }).join("");
+    return '<div class="card'+(heeftSpoed?' card-spoed':'')+'"><h2>'+(heeftSpoed?'\uD83D\uDEA8 ':'')+'Openstaande diensten <span class="eyebrow" style="margin:0;">alle posten</span></h2>'+items+'</div>';
+  }
+
+  function renderTickerRij(elementId, meldingen, leegTekst){
+    var track = document.getElementById(elementId);
+    if(!meldingen.length){
+      track.innerHTML = '<div class="ticker-item">'+leegTekst+'</div>';
+      return;
+    }
+    var items = meldingen.map(function(m){
+      var tijd = m.gemeld_op ? new Date(m.gemeld_op).toLocaleTimeString("nl-NL",{hour:"2-digit",minute:"2-digit"}) : "";
+      return '<div class="ticker-item"><span class="ticker-time">'+tijd+'</span>'
+        + escapeHtml(m.plaats||"") + ' &mdash; ' + escapeHtml(m.tekst||"") + '</div>';
+    });
+    // Content dupliceren zodat de scroll-animatie naadloos doorloopt
+    track.innerHTML = items.join("") + items.join("");
+  }
+
+  var LAATST_GETOONDE_P2000_ID = null;
+
+  async function loadTicker(){
+    try{
+      var twaalfUurGeleden = new Date(Date.now() - 12*60*60*1000).toISOString();
+      var alles = await sbSelect(DAG_URL, DAG_KEY_HEADERS, "p2000_meldingen?select=*&dienst=eq.brandweer&gemeld_op=gte."+twaalfUurGeleden+"&order=gemeld_op.desc&limit=10");
+      renderTickerRij("tickerBrandweer", alles, "Geen actuele brandweermeldingen.");
+
+      if(alles.length){
+        var nieuwste = alles[0];
+        if(LAATST_GETOONDE_P2000_ID === null){
+          // Eerste keer laden: alleen onthouden, niet meteen de kaart tonen (anders opent
+          // die telkens bij het opstarten van het scherm, voor een melding die al oud is).
+          LAATST_GETOONDE_P2000_ID = nieuwste.id;
+        } else if(nieuwste.id !== LAATST_GETOONDE_P2000_ID){
+          LAATST_GETOONDE_P2000_ID = nieuwste.id;
+          toonRouteOverlay(nieuwste);
+        }
+      }
+    }catch(e){
+      var track = document.getElementById("tickerBrandweer");
+      if(track) track.innerHTML = '<div class="ticker-item">Meldingen kunnen niet geladen worden.</div>';
+    }
+  }
+
+  var ROUTE_OVERLAY_TIMER = null;
+  var ROUTE_KAART_INSTANTIE = null;
+
+  var P2000_MELDING_WOORDEN = ["BRANDMELDING","OMS","AUTOBRAND","BUITENBRAND","BINNENBRAND","SCHOORSTEENBRAND",
+    "DIA","HULPVERLENING","ONGEVAL","OVERLAST","REANIMATIE","WATEROVERLAST","STORMSCHADE","LIFTOPSLUITING",
+    "PERSOON","TE","WATER","GASLEKKAGE","DIER","NOOD","MELDING","BRAND","LIFT"];
+
+  function escapeRegex(s){ return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
+
+  function schoonAdresTekst(melding){
+    var tekst = String(melding.tekst||"").trim();
+    var plaats = String(melding.plaats||"").trim();
+    tekst = tekst.replace(/\s+\d{4,}\s*$/,"").trim(); // voertuignummer aan het eind eraf
+    tekst = tekst.replace(/^P\s*\d+\s*BON-\d+\s*/i, "").trim(); // vaste P2000-kop (prioriteit + bonnummer) eraf
+
+    if(plaats){
+      // De plaatsnaam staat standaard nog een keer herhaald aan het eind van de
+      // tekst -- alles daarvóór is het eigenlijke adres, of dat nu een straat,
+      // een gebouwnaam of een snelweg (A12, N224, enz.) is.
+      var regexPlaats = new RegExp("(.*)\\b" + escapeRegex(plaats) + "\\b\\s*$", "i");
+      var match = regexPlaats.exec(tekst);
+      if(match && match[1].trim()) tekst = match[1].trim();
+    }
+
+    // Bekende P2000-meldingswoorden (type melding) er nog uit filteren, waar ze ook staan
+    var gefilterd = tekst.split(/\s+/).filter(function(w){
+      return P2000_MELDING_WOORDEN.indexOf(w.toUpperCase().replace(/[.,]/g,"")) === -1;
+    }).join(" ");
+    if(gefilterd.trim()) tekst = gefilterd.trim();
+
+    return tekst + ", " + plaats;
+  }
+
+  async function toonRouteOverlay(melding){
+    try{
+      document.getElementById("routeOverlayPlaats").textContent = "P2000-melding \u2014 " + (melding.plaats||"");
+      document.getElementById("routeOverlayTekst").textContent = melding.tekst || "";
+      document.getElementById("routeOverlayAfstand").textContent = "";
+      document.getElementById("routeOverlay").classList.remove("hidden");
+      clearTimeout(ROUTE_OVERLAY_TIMER);
+      ROUTE_OVERLAY_TIMER = setTimeout(verbergRouteOverlay, 180000); // 3 minuten, dan vanzelf terug naar het normale scherm
+
+      var zoekTekst = schoonAdresTekst(melding);
+      var geoRes = await fetch("https://nominatim.openstreetmap.org/search?format=json&countrycodes=nl&limit=1&q=" + encodeURIComponent(zoekTekst));
+      var geoData = await geoRes.json();
+      if(!geoData.length){
+        document.getElementById("routeOverlayAfstand").textContent = "Adres niet gevonden";
+        return;
+      }
+      var incidentLat = parseFloat(geoData[0].lat), incidentLon = parseFloat(geoData[0].lon);
+      var postCoord = POST_COORDS[POST_ID];
+
+      if(!ROUTE_KAART_INSTANTIE){
+        ROUTE_KAART_INSTANTIE = L.map("routeKaart", {zoomControl:false, attributionControl:false});
+        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png").addTo(ROUTE_KAART_INSTANTIE);
+      }
+      ROUTE_KAART_INSTANTIE.eachLayer(function(layer){ if(layer instanceof L.Marker || layer instanceof L.Polyline) ROUTE_KAART_INSTANTIE.removeLayer(layer); });
+
+      var postIcoon = L.divIcon({className:"", html:'<div style="background:#2E6DA4;width:16px;height:16px;border-radius:50%;border:3px solid #fff;"></div>', iconSize:[16,16]});
+      var incidentIcoon = L.divIcon({className:"", html:'<div style="background:var(--red);width:20px;height:20px;border-radius:50%;border:3px solid #fff;"></div>', iconSize:[20,20]});
+      L.marker([postCoord.lat, postCoord.lon], {icon:postIcoon}).addTo(ROUTE_KAART_INSTANTIE).bindTooltip("Post");
+      L.marker([incidentLat, incidentLon], {icon:incidentIcoon}).addTo(ROUTE_KAART_INSTANTIE).bindTooltip(melding.plaats||"Incident");
+      ROUTE_KAART_INSTANTIE.fitBounds([[postCoord.lat, postCoord.lon],[incidentLat, incidentLon]], {padding:[40,40]});
+
+      try{
+        var routeRes = await fetch("https://router.project-osrm.org/route/v1/driving/"+postCoord.lon+","+postCoord.lat+";"+incidentLon+","+incidentLat+"?overview=full&geometries=geojson");
+        var routeData = await routeRes.json();
+        if(routeData.routes && routeData.routes.length){
+          var coords = routeData.routes[0].geometry.coordinates.map(function(c){ return [c[1], c[0]]; });
+          L.polyline(coords, {color:"#D7E100", weight:5, opacity:0.85}).addTo(ROUTE_KAART_INSTANTIE);
+          var km = (routeData.routes[0].distance/1000).toFixed(1);
+          var min = Math.round(routeData.routes[0].duration/60);
+          document.getElementById("routeOverlayAfstand").textContent = km + " km \u00b7 " + min + " min rijden";
+        }
+      }catch(e){ /* route is een bonus; adres + kaart blijven ook zonder route bruikbaar */ }
+
+      setTimeout(function(){ if(ROUTE_KAART_INSTANTIE) ROUTE_KAART_INSTANTIE.invalidateSize(); }, 200);
+    }catch(e){
+      console.error("Route-overlay mislukt", e);
+      document.getElementById("routeOverlayAfstand").textContent = "Kon adres niet bepalen";
+    }
+  }
+
+  function verbergRouteOverlay(){
+    document.getElementById("routeOverlay").classList.add("hidden");
+    clearTimeout(ROUTE_OVERLAY_TIMER);
+  }
+
+  function renderAgenda(list){
+    var nu = new Date();
+    var vandaag = new Date(); vandaag.setHours(0,0,0,0);
+    var morgen = new Date(vandaag.getTime() + 86400000);
+    var items = (list||[]).filter(function(a){
+      var s = new Date(a.start_tijd);
+      var e = a.eind_tijd ? new Date(a.eind_tijd) : s;
+      return s < morgen && e >= nu; // start valt (nog) vandaag, en nog niet afgelopen
+    }).sort(function(a,b){ return new Date(a.start_tijd) - new Date(b.start_tijd); });
+    if(!items.length){
+      return '<div class="card"><h2>Agenda <span class="eyebrow" style="margin:0;">vandaag</span></h2><div class="empty">Niets gepland voor vandaag.</div></div>';
+    }
+    var rijen = items.map(function(a){
+      var start = new Date(a.start_tijd);
+      var eind = a.eind_tijd ? new Date(a.eind_tijd) : null;
+      var tijd = start.toLocaleTimeString("nl-NL",{hour:"2-digit",minute:"2-digit"}) + (eind ? "\u2013"+eind.toLocaleTimeString("nl-NL",{hour:"2-digit",minute:"2-digit"}) : "");
+      return '<div class="dienst-item"><div class="dienst-top">'
+        + '<span class="datum-tag">'+escapeHtml(tijd)+'</span>'
+        + '</div><div class="notitie" style="font-size:14px;font-style:normal;color:var(--text);font-weight:600;">'+escapeHtml(a.titel||"")+'</div>'
+        + '</div>';
+    }).join("");
+    return '<div class="card"><h2>Agenda <span class="eyebrow" style="margin:0;">vandaag</span></h2>'+rijen+'</div>';
+  }
+
+  function renderWegafsluitingen(list){
+    if(!list || !list.length){
+      return '<div class="card"><h2>Wegafsluitingen <span class="eyebrow" style="margin:0;">Ede &amp; Arnhem</span></h2><div class="empty">Geen actuele afsluitingen gevonden.</div></div>';
+    }
+    var items = list.map(function(w){
+      var start = w.start_datum ? new Date(w.start_datum).toLocaleDateString("nl-NL",{day:"numeric",month:"short"}) : "";
+      var eind = w.eind_datum ? new Date(w.eind_datum).toLocaleDateString("nl-NL",{day:"numeric",month:"short"}) : "";
+      var periode = start && eind ? start+" t/m "+eind : (start||eind||"");
+      return '<div class="dienst-item"><div class="dienst-top">'
+        + '<span class="post-tag">'+escapeHtml(w.plaats||"")+(w.straat ? " &middot; "+escapeHtml(w.straat) : "")+'</span>'
+        + (periode ? '<span class="datum-tag">'+periode+'</span>' : '')
+        + '</div>'
+        + (w.omschrijving ? '<div class="notitie">'+escapeHtml(w.omschrijving)+'</div>' : '')
+        + '</div>';
+    }).join("");
+    return '<div class="card"><h2>Wegafsluitingen <span class="eyebrow" style="margin:0;">Ede &amp; Arnhem</span></h2>'+items+'</div>';
+  }
+
+  function pasAutoScrollToe(){
+    document.querySelectorAll(".onderrij .card").forEach(function(card){
+      var kop = card.querySelector("h2");
+      var restNodes = Array.prototype.slice.call(card.childNodes).filter(function(n){ return n !== kop; });
+      if(!restNodes.length) return;
+
+      var wrap = document.createElement("div");
+      wrap.className = "scroll-wrap";
+      var inner = document.createElement("div");
+      inner.className = "scroll-inner";
+      restNodes.forEach(function(n){ inner.appendChild(n); }); // bestaande inhoud erin verplaatsen
+      wrap.appendChild(inner);
+      card.appendChild(wrap);
+
+      requestAnimationFrame(function(){
+        var beschikbaar = wrap.clientHeight;
+        var nodig = inner.scrollHeight;
+        if(nodig > beschikbaar + 4){
+          inner.appendChild(inner.cloneNode(true)); // verdubbelen voor een naadloze loop
+          // Bewust rustig tempo -- duidelijk langzamer dan de P2000-balk bovenin,
+          // en hoe meer inhoud, hoe langzamer (blijft zo op ongeveer dezelfde leessnelheid).
+          var duur = Math.max(22, Math.round(nodig / 16));
+          inner.style.animationDuration = duur + "s";
+          inner.classList.add("scrollend");
+        }
+      });
+    });
+  }
+
+  // Laatst opgehaalde gegevens, zodat het wisselen van pagina niet elke keer
+  // opnieuw hoeft op te halen -- alleen loadAndRender (elke minuut) haalt vers op.
+  var laatsteData = null;
+  var HUIDIGE_PAGINA = 1;
+  var PAGINA_WISSEL_MS = 20000;
+
+  async function loadAndRender(){
+    var grid = document.getElementById("grid");
+    try{
+      var coords = POST_COORDS[POST_ID];
+      var vandaag = todayStr();
+
+      var personenP = sbSelect(DAG_URL, DAG_KEY_HEADERS, "kv_store?key=eq.personen&select=value");
+      var configP = sbSelect(DAG_URL, DAG_KEY_HEADERS, "kv_store?key=eq.config&select=value");
+      var dagP = sbSelect(DAG_URL, DAG_KEY_HEADERS, "kv_store?key=eq.dag:"+POST_ID+":"+vandaag+"&select=value");
+      var dienstenP = sbSelect(PLOEG_URL, PLOEG_KEY_HEADERS, "dashboard_open_diensten?select=*&order=datum.asc");
+      var wegP = sbSelect(DAG_URL, DAG_KEY_HEADERS, "wegafsluitingen?select=*&order=created_at.desc&limit=10");
+      var knmiP = sbSelect(DAG_URL, DAG_KEY_HEADERS, "knmi_waarschuwingen?select=*&provincie=eq.Gelderland");
+      var agendaP = sbSelect(DAG_URL, DAG_KEY_HEADERS, "kazerne_agenda?select=*&post_id=eq."+POST_ID+"&order=start_tijd.asc");
+      var weerP = fetch("https://api.open-meteo.com/v1/forecast?latitude="+coords.lat+"&longitude="+coords.lon+"&current=temperature_2m,weather_code&hourly=temperature_2m,weather_code,precipitation_probability&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=Europe%2FAmsterdam&forecast_days=1").then(function(r){ return r.json(); }).catch(function(){ return null; });
+
+      var results = await Promise.all([personenP, configP, dagP, dienstenP, weerP, wegP, knmiP, agendaP]);
+      var personen = (results[0][0] && results[0][0].value) || [];
+      var config = (results[1][0] && results[1][0].value) || {};
+      var dag = (results[2][0] && results[2][0].value) || null;
+      var diensten = results[3] || [];
+      var weer = results[4];
+      var wegafsluitingen = results[5] || [];
+      var knmiWaarschuwingen = results[6] || [];
+      var agenda = results[7] || [];
+
+      var personenById = {}; personen.forEach(function(p){ personenById[p.id] = p; });
+      // Ad-hoc toegevoegde personen (bv. Corne Koekoek) staan niet in de vaste personeelslijst,
+      // maar wel in de dagstaat zelf onder extraPersonen -- die ook meenemen zodat namen kloppen.
+      if(dag && dag.extraPersonen){
+        dag.extraPersonen.forEach(function(ep){ personenById[ep.personId] = { id: ep.personId, naam: ep.naam }; });
+      }
+      var postConfig = (config.posten||[]).filter(function(p){ return p.id===POST_ID; })[0];
+
+      laatsteData = { dag:dag, personenById:personenById, postConfig:postConfig, config:config, diensten:diensten, weer:weer, wegafsluitingen:wegafsluitingen, knmiWaarschuwingen:knmiWaarschuwingen, agenda:agenda };
+      renderHuidigePagina();
+
+      document.getElementById("footerNote").textContent = "Bijgewerkt " + new Date().toLocaleTimeString("nl-NL",{hour:"2-digit",minute:"2-digit"}) + " \u00b7 ververst elke minuut";
+    }catch(e){
+      grid.innerHTML = '<div class="card" style="grid-column:1/-1;"><h2>Kan niet laden</h2><div class="empty">'+escapeHtml(e.message||"Onbekende fout")+'</div></div>';
+    }
+  }
+
+  function renderHuidigePagina(){
+    if(!laatsteData) return;
+    var grid = document.getElementById("grid");
+    var d = laatsteData;
+    if(HUIDIGE_PAGINA === 1){
+      grid.innerHTML = '<div style="grid-column:1/-1;">' + renderDagstaat(d.dag, d.personenById, d.postConfig, d.config.werkblokken, d.config.activiteitTypes) + '</div>';
+    } else {
+      grid.innerHTML = '<div style="grid-column:1/-1;" class="onderrij onderrij-alleen">'
+        + renderAgenda(d.agenda)
+        + renderDiensten(d.diensten)
+        + renderWegafsluitingen(d.wegafsluitingen)
+        + renderWeer(d.weer, d.knmiWaarschuwingen)
+        + '</div>';
+    }
+    pasAutoScrollToe();
+    var indicatorEl = document.getElementById("paginaIndicator");
+    if(indicatorEl){
+      indicatorEl.innerHTML = '<span class="punt '+(HUIDIGE_PAGINA===1?'actief':'')+'"></span><span class="punt '+(HUIDIGE_PAGINA===2?'actief':'')+'"></span>';
+    }
+  }
+
+  function wisselPagina(){
+    HUIDIGE_PAGINA = HUIDIGE_PAGINA === 1 ? 2 : 1;
+    renderHuidigePagina();
+  }
+
+  // ---------- Persoonlijke pincode-login (hergebruikt Dagstaats personeel_auth) ----------
+  var INGELOGD_KEY = "dashboard-ingelogd-persoon";
+  var loginState = { personen: [], gekozenId: null };
+
+  function startDashboard(){
+    document.getElementById("toegangsScherm").classList.add("hidden");
+    document.getElementById("app").classList.remove("hidden");
+    document.getElementById("postNaam").textContent = POST_NAMEN[POST_ID];
+    updateClock();
+    setInterval(updateClock, 1000);
+    loadAndRender();
+    setInterval(loadAndRender, 60000);
+    setInterval(wisselPagina, PAGINA_WISSEL_MS);
+    loadTicker();
+    setInterval(loadTicker, 15000); // elke 15 sec nieuwe P2000-meldingen checken, zodat de kaart snel omspringt
+
+    document.querySelectorAll(".postwissel-knop").forEach(function(knop){
+      if(knop.dataset.post === POST_ID) knop.classList.add("actief");
+      knop.addEventListener("click", function(){
+        if(knop.dataset.post === POST_ID) return;
+        location.href = location.pathname + "?post=" + knop.dataset.post;
+      });
+    });
+  }
+
+  function toonNaamLijst(filter){
+    var lijstEl = document.getElementById("naamLijst");
+    var gefilterd = loginState.personen.filter(function(p){
+      return !filter || p.naam.toLowerCase().indexOf(filter.toLowerCase()) !== -1;
+    }).slice(0, 30);
+    lijstEl.innerHTML = gefilterd.map(function(p){
+      return '<div class="naam-item" data-id="'+p.id+'">'+escapeHtml(p.naam)+'</div>';
+    }).join("");
+    lijstEl.querySelectorAll(".naam-item").forEach(function(el){
+      el.addEventListener("click", function(){ kiesNaam(el.dataset.id); });
+    });
+  }
+
+  function kiesNaam(id){
+    var persoon = loginState.personen.filter(function(p){ return p.id===id; })[0];
+    if(!persoon) return;
+    loginState.gekozenId = id;
+    document.getElementById("loginHoiTekst").textContent = "Hoi " + persoon.naam;
+    document.getElementById("loginNaamStap").classList.add("hidden");
+    document.getElementById("loginPinStap").classList.remove("hidden");
+    document.getElementById("pinInvoer").value = "";
+    document.getElementById("pinFout").textContent = "";
+    document.getElementById("pinInvoer").focus();
+  }
+
+  async function initLogin(){
+    try{
+      var alreadyId = null;
+      try{ alreadyId = localStorage.getItem(INGELOGD_KEY); }catch(e){}
+
+      var personenRes = await sbSelect(DAG_URL, DAG_KEY_HEADERS, "kv_store?key=eq.personen&select=value");
+      loginState.personen = ((personenRes[0] && personenRes[0].value) || []).slice().sort(function(a,b){ return a.naam.localeCompare(b.naam); });
+
+      if(alreadyId && loginState.personen.some(function(p){ return p.id===alreadyId; })){
+        startDashboard();
+        return;
+      }
+      toonNaamLijst("");
+    }catch(e){
+      document.getElementById("loginNaamStap").innerHTML = '<div style="color:var(--red);font-size:13px;">Kon personeelslijst niet laden: '+escapeHtml(e.message)+'</div>';
+    }
+  }
+
+  document.getElementById("naamZoek").addEventListener("input", function(){ toonNaamLijst(this.value); });
+  document.getElementById("btnAndereNaam").addEventListener("click", function(){
+    document.getElementById("loginPinStap").classList.add("hidden");
+    document.getElementById("loginNaamStap").classList.remove("hidden");
+    document.getElementById("naamZoek").value = "";
+    toonNaamLijst("");
+    document.getElementById("naamZoek").focus();
+  });
+
+  document.getElementById("pinForm").addEventListener("submit", async function(evt){
+    evt.preventDefault();
+    var pin = document.getElementById("pinInvoer").value.trim();
+    var foutEl = document.getElementById("pinFout");
+    try{
+      var res = await sbRpc(DAG_URL, DAG_KEY_HEADERS, "verify_pin", {p_persoon_id: loginState.gekozenId, p_pin: pin});
+      if(res && res.ok){
+        if(res.moetWijzigen){
+          document.getElementById("loginPinStap").classList.add("hidden");
+          document.getElementById("loginNieuwPinStap").classList.remove("hidden");
+          document.getElementById("nieuwPin1").focus();
+        } else {
+          try{ localStorage.setItem(INGELOGD_KEY, loginState.gekozenId); }catch(e){}
+          startDashboard();
+        }
+      } else {
+        var reden = res && res.reden;
+        if(reden === "vergrendeld") foutEl.textContent = "Te vaak fout — probeer over 15 minuten opnieuw.";
+        else if(reden === "onbekend") foutEl.textContent = "Onbekende gebruiker.";
+        else foutEl.textContent = "Onjuiste pincode. Probeer opnieuw.";
+        document.getElementById("pinInvoer").value = "";
+      }
+    }catch(e){ foutEl.textContent = "Inloggen mislukt — controleer de verbinding."; }
+    return false;
+  });
+
+  document.getElementById("nieuwPinForm").addEventListener("submit", async function(evt){
+    evt.preventDefault();
+    var p1 = document.getElementById("nieuwPin1").value.trim();
+    var p2 = document.getElementById("nieuwPin2").value.trim();
+    var foutEl = document.getElementById("nieuwPinFout");
+    if(p1.length < 4){ foutEl.textContent = "Minimaal 4 cijfers."; return false; }
+    if(p1 === "1234"){ foutEl.textContent = "Kies een andere code dan de standaardcode 1234."; return false; }
+    if(p1 !== p2){ foutEl.textContent = "De twee codes komen niet overeen."; return false; }
+    try{
+      await sbRpc(DAG_URL, DAG_KEY_HEADERS, "set_pin", {p_persoon_id: loginState.gekozenId, p_pin: p1, p_moet_wijzigen: false});
+      try{ localStorage.setItem(INGELOGD_KEY, loginState.gekozenId); }catch(e){}
+      startDashboard();
+    }catch(e){ foutEl.textContent = "Opslaan mislukt, probeer opnieuw."; }
+    return false;
+  });
+
+  initLogin();
+})();
+</script>
+</body>
+</html>
