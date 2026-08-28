@@ -570,9 +570,14 @@
       if(alles.length){
         var nieuwste = alles[0];
         if(LAATST_GETOONDE_P2000_ID === null){
-          // Eerste keer laden: alleen onthouden, niet meteen de kaart tonen (anders opent
-          // die telkens bij het opstarten van het scherm, voor een melding die al oud is).
           LAATST_GETOONDE_P2000_ID = nieuwste.id;
+          // Bij het verse laden van de pagina: is de nieuwste melding zelf ook nog
+          // vers (binnen 3 minuten)? Dan alsnog meteen de kaart tonen -- anders zou
+          // een net binnengekomen melding gemist worden als het scherm net ververst is.
+          var leeftijdMs = Date.now() - new Date(nieuwste.gemeld_op).getTime();
+          if(leeftijdMs >= 0 && leeftijdMs < 3*60*1000){
+            toonRouteOverlay(nieuwste);
+          }
         } else if(nieuwste.id !== LAATST_GETOONDE_P2000_ID){
           LAATST_GETOONDE_P2000_ID = nieuwste.id;
           toonRouteOverlay(nieuwste);
