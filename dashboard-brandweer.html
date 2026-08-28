@@ -592,9 +592,18 @@
   var ROUTE_OVERLAY_TIMER = null;
   var ROUTE_KAART_INSTANTIE = null;
 
-  var P2000_MELDING_WOORDEN = ["BRANDMELDING","OMS","AUTOBRAND","BUITENBRAND","BINNENBRAND","SCHOORSTEENBRAND",
-    "DIA","HULPVERLENING","ONGEVAL","OVERLAST","REANIMATIE","WATEROVERLAST","STORMSCHADE","LIFTOPSLUITING",
-    "PERSOON","TE","WATER","GASLEKKAGE","DIER","NOOD","MELDING","BRAND","LIFT","BR"];
+  // Officiële landelijke meldingsclassificaties (MAR 8.1, 10-06-2022) -- deze
+  // tekst komt vaak letterlijk terug in de P2000-tekst, vlak vóór het adres.
+  // Gesorteerd op lengte (langste eerst), zodat samengestelde termen als "Autom.
+  // brand OMS" in één keer verdwijnen i.p.v. dat er fragmenten achterblijven.
+  var P2000_MELDING_TERMEN = ["Schip/watersp. in problemen", "Veiligheid en openbare orde", "Overstroming/dijkdoorbraak", "Geclassificeerd incident", "Beveil. waardetransport", "Verstoring treindienst", "Hinderl. waterbeweging", "Uitval nutsvoorziening", "Digitale criminaliteit", "Defect straatmeubilair", "Beveil. burgerluchtv.", "Ontucht minderjarigen", "Berm/ruigte/bosschage", "Uitzetten vreemdeling", "Autom. systeemmelding", "Startverbod vliegtuig", "Aantref.  explosieven", "Aantref. verstekeling", "In put/bassin/kelder", "Water/weer problemen", "Aantast. openb. orde", "Persoon in drijfzand", "Huis/lok. vredebreuk", "Conflictbemiddeling", "Steekproef security", "Drukknopmelding OMS", "Stank/Hinder. lucht", "Speciale opdrachten", "Lek/zinken woonboot", "Verdachte situatie", "Bedrijf/instelling", "Onbevoegd betreden", "Luid/optisch alarm", "Onbevoegde landing", "Overname meldkamer", "Verkeersstremming", "Kinderpornografie", "Suicidaal persoon", "Voertuig te water", "Dier in problemen", "Afgevallen lading", "Overlast van/door", "Poging zelfdoding", "Security incident", "Verkeersgeleiding", "Zieke/Dode dieren", "Dienst aan derden", "Br beheerssysteem", "Openbare schennis", "Loslopende dieren", "Afwezigheiddelict", "Vluchtafhandeling", "Negeren rood sein", "Voertuig/Vaartuig", "Onbeheerde bagage", "Woning/woongebouw", "Explosief/munitie", "Persoon o/b spoor", "Onbevoegd vliegen", "Agressieve dieren", "Runway incursion", "Autom. brand OMS", "Oppervlaktewater", "Brandmelding PAC", "Uitval meldkamer", "Eigen initiatief", "Defect meubilair", "Opsporingsmiddel", "Aanmeerproblemen", "Bijz. Verk zaken", "Hoog water alarm", "Bezitsaantasting", "Persoon te water", "Gezondheidszorg", "Militaire zaken", "Vuurwerk opslag", "Pakket/Voorwerp", "Onbevoegd varen", "Autom. Gev stof", "Vervuild wegdek", "Verontreiniging", "Parkeerprobleem", "Controle Wet ID", "Gladheid/Sneeuw", "CBRN-e dreiging", "Herbez./Kazern.", "Dienstverlening", "Dierenkwelling", "Aantreffen van", "Toezichtsalarm", "Uitval systeem", "Aan instanties", "Buitensluiting", "Geplande actie", "Liftopsluiting", "Warmte/droogte", "Winkeldiefstal", "Handmelder OMS", "Zakkenrollerij", "ASO-vaargedrag", "Afstemverzoek", "Luchtvaartuig", "Samenscholing", "Wateroverlast", "Persoonsalarm", "CSE-inspectie", "Gev. stof PAC", "Gev. stof OMS", "Onder invloed", "ASO-rijgedrag", "Achtervolging", "Verduistering", "Ambulancezorg", "Brandgerucht", "Autom. brand", "Inbraakalarm", "Hulpverlener", "Wietplantage", "Mishandeling", "Noodsituatie", "Afval/rommel", "Schietpartij", "Verkrachting", "Laag vliegen", "In of op ijs", "Demonstratie", "Onwel/ziekte", "Overvalalarm", "Spoorvervoer", "Overbrengen", "Wachtdelict", "Bijeenkomst", "Tunnelalarm", "Prostitutie", "Vechtpartij", "Steekpartij", "Ontsnapping", "Scheepvaart", "Stormschade", "Lijkvinding", "Evenementen", "Akker/Weide", "Spookrijder", "Noodsignaal", "Leefmilieu", "Oplichting", "Rookmelder", "Overig LVO", "Burenruzie", "Bedreiging", "Begeleiden", "Noodoproep", "Vernieling", "Aanranding", "Ontvoering", "Opnamestop", "Cybercrime", "Vermissing", "Wegvervoer", "Gevangenis", "Gezondheid", "Bommelding", "Luchtvaart", "Terrorisme", "Nacontrole", "Wegverkeer", "Reanimatie", "Asielzaak", "RAC alarm", "Hoogwater", "agrarisch", "Materieel", "Stroperij", "Onderwijs", "Specifiek", "Brandweer", "Drugszaak", "Bijgebouw", "Aardschok", "Industrie", "Joyriding", "Nablussen", "Gijzeling", "Weeralarm", "Container", "Zedenzaak", "Stremming", "Op hoogte", "PAC alarm", "CO-melder", "Bijstand", "ANPR-hit", "Voorzorg", "Vuurwerk", "Drugslab", "Te water", "Voertuig", "Goederen", "Graffiti", "Explosie", "Digitaal", "Conflict", "Beroving", "Oefening", "Diefstal", "Grooming", "Vaartuig", "Gladheid", "Sensing", "Overige", "Ongeval", "Overval", "Kantoor", "Verkeer", "Politie", "Persoon", "Munitie", "Inbraak", "Dealen", "Woning", "Letsel", "Heling", "Gebouw", "Incest", "Overig", "Oproer", "Winkel", "Object", "Fraude", "Geluid", "Logies", "Geweld", "Dieren", "Buiten", "Natuur", "Kaping", "Jeugd", "Water", "Crash", "Sport", "Brand", "Multi", "Lucht", "Alarm", "Bodem", "Heide", "Dier", "Riet", "KMAR", "Veen", "Duin", "Cel", "Bos", "VWS"];
+
+  // Aanvulling: korte afkortingen die in de praktijk voorkomen maar niet als
+  // zodanig in de officiële lijst hierboven staan (die bevat vooral voluit-
+  // geschreven termen). Vooraan gezet zodat ze als eerste worden geprobeerd.
+  var P2000_MELDING_TERMEN_AANVULLING = ["BRANDMELDING","AUTOBRAND","BUITENBRAND","BINNENBRAND","SCHOORSTEENBRAND",
+    "DIA","OMS","BR","NOOD"];
+  P2000_MELDING_TERMEN = P2000_MELDING_TERMEN_AANVULLING.concat(P2000_MELDING_TERMEN);
 
   function escapeRegex(s){ return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
 
@@ -602,22 +611,36 @@
     var tekst = String(melding.tekst||"").trim();
     var plaats = String(melding.plaats||"").trim();
     tekst = tekst.replace(/(\s+\d{4,})+\s*$/,"").trim(); // ALLE voertuignummers aan het eind eraf (kunnen er meerdere zijn, bv. bij 2 uitgerukte voertuigen)
-    tekst = tekst.replace(/^P\s*\d+\s*BON-\d+\s*/i, "").trim(); // vaste P2000-kop (prioriteit + bonnummer) eraf
+
+    // Vaste P2000-kop eraf: prioriteit (P1 t/m P5) + regiocode. Die regiocode
+    // verschilt per regio (Gelderland Midden: BON-XX, andere regio's bv. BMD),
+    // dus we accepteren hier gewoon één "woord" ongeacht de precieze vorm.
+    tekst = tekst.replace(/^P\s*[1-5]\s*\S+\s*/i, "").trim();
+
+    // Tekst tussen haakjes (bv. "(binnen)") is altijd een toelichting, nooit
+    // onderdeel van het adres zelf -- die halen we er overal uit.
+    tekst = tekst.replace(/\([^)]*\)/g, " ").replace(/\s+/g, " ").trim();
 
     if(plaats){
       // De plaatsnaam staat standaard nog een keer herhaald aan het eind van de
       // tekst -- alles daarvóór is het eigenlijke adres, of dat nu een straat,
-      // een gebouwnaam of een snelweg (A12, N224, enz.) is.
+      // een gebouwnaam, een kruising van 2 straten, of een snelweg (A12, N224) is.
       var regexPlaats = new RegExp("(.*)\\b" + escapeRegex(plaats) + "\\b\\s*$", "i");
       var match = regexPlaats.exec(tekst);
       if(match && match[1].trim()) tekst = match[1].trim();
     }
 
-    // Bekende P2000-meldingswoorden (type melding) er nog uit filteren, waar ze ook staan
-    var gefilterd = tekst.split(/\s+/).filter(function(w){
-      return P2000_MELDING_WOORDEN.indexOf(w.toUpperCase().replace(/[.,]/g,"")) === -1;
-    }).join(" ");
-    if(gefilterd.trim()) tekst = gefilterd.trim();
+    // Bekende meldingsclassificaties (type melding) er nog uit filteren, waar
+    // ze ook staan -- als hele frase, niet los per woord, want termen als
+    // "Autom. brand OMS" horen bij elkaar.
+    P2000_MELDING_TERMEN.forEach(function(term){
+      var voorgrens = /^\w/.test(term) ? "\\b" : "";
+      var nagrens = /\w$/.test(term) ? "\\b" : "";
+      var regexTerm = new RegExp(voorgrens + escapeRegex(term) + nagrens, "gi");
+      tekst = tekst.replace(regexTerm, " ");
+    });
+    tekst = tekst.replace(/\s+/g, " ").trim();
+    if(!tekst) tekst = String(melding.tekst||"").trim(); // val terug als alles per ongeluk was weggefilterd
 
     return tekst + ", " + plaats;
   }
@@ -631,6 +654,20 @@
       clearTimeout(ROUTE_OVERLAY_TIMER);
       ROUTE_OVERLAY_TIMER = setTimeout(verbergRouteOverlay, 180000); // 3 minuten, dan vanzelf terug naar het normale scherm
 
+      if(!ROUTE_KAART_INSTANTIE){
+        ROUTE_KAART_INSTANTIE = L.map("routeKaart", {zoomControl:false, attributionControl:false});
+        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png").addTo(ROUTE_KAART_INSTANTIE);
+      }
+      // Meteen opschonen, nog vóórdat we weten of de zoekopdracht gaat lukken --
+      // anders blijft bij een mislukte zoekopdracht de vorige, oude route staan
+      // en lijkt het net of die nog steeds actueel is.
+      ROUTE_KAART_INSTANTIE.eachLayer(function(layer){ if(layer instanceof L.Marker || layer instanceof L.Polyline) ROUTE_KAART_INSTANTIE.removeLayer(layer); });
+      var postCoord = POST_COORDS[POST_ID];
+      var postIcoonAlvast = L.divIcon({className:"", html:'<div style="background:#2E6DA4;width:16px;height:16px;border-radius:50%;border:3px solid #fff;"></div>', iconSize:[16,16]});
+      L.marker([postCoord.lat, postCoord.lon], {icon:postIcoonAlvast}).addTo(ROUTE_KAART_INSTANTIE).bindTooltip("Post");
+      ROUTE_KAART_INSTANTIE.setView([postCoord.lat, postCoord.lon], 12);
+      setTimeout(function(){ if(ROUTE_KAART_INSTANTIE) ROUTE_KAART_INSTANTIE.invalidateSize(); }, 100);
+
       var zoekTekst = schoonAdresTekst(melding);
       var geoRes = await fetch("https://nominatim.openstreetmap.org/search?format=json&countrycodes=nl&limit=1&q=" + encodeURIComponent(zoekTekst));
       var geoData = await geoRes.json();
@@ -639,13 +676,6 @@
         return;
       }
       var incidentLat = parseFloat(geoData[0].lat), incidentLon = parseFloat(geoData[0].lon);
-      var postCoord = POST_COORDS[POST_ID];
-
-      if(!ROUTE_KAART_INSTANTIE){
-        ROUTE_KAART_INSTANTIE = L.map("routeKaart", {zoomControl:false, attributionControl:false});
-        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png").addTo(ROUTE_KAART_INSTANTIE);
-      }
-      ROUTE_KAART_INSTANTIE.eachLayer(function(layer){ if(layer instanceof L.Marker || layer instanceof L.Polyline) ROUTE_KAART_INSTANTIE.removeLayer(layer); });
 
       var postIcoon = L.divIcon({className:"", html:'<div style="background:#2E6DA4;width:16px;height:16px;border-radius:50%;border:3px solid #fff;"></div>', iconSize:[16,16]});
       var incidentIcoon = L.divIcon({className:"", html:'<div style="background:var(--red);width:20px;height:20px;border-radius:50%;border:3px solid #fff;"></div>', iconSize:[20,20]});
