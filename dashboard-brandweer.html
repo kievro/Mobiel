@@ -589,14 +589,14 @@
 
   var P2000_MELDING_WOORDEN = ["BRANDMELDING","OMS","AUTOBRAND","BUITENBRAND","BINNENBRAND","SCHOORSTEENBRAND",
     "DIA","HULPVERLENING","ONGEVAL","OVERLAST","REANIMATIE","WATEROVERLAST","STORMSCHADE","LIFTOPSLUITING",
-    "PERSOON","TE","WATER","GASLEKKAGE","DIER","NOOD","MELDING","BRAND","LIFT"];
+    "PERSOON","TE","WATER","GASLEKKAGE","DIER","NOOD","MELDING","BRAND","LIFT","BR"];
 
   function escapeRegex(s){ return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
 
   function schoonAdresTekst(melding){
     var tekst = String(melding.tekst||"").trim();
     var plaats = String(melding.plaats||"").trim();
-    tekst = tekst.replace(/\s+\d{4,}\s*$/,"").trim(); // voertuignummer aan het eind eraf
+    tekst = tekst.replace(/(\s+\d{4,})+\s*$/,"").trim(); // ALLE voertuignummers aan het eind eraf (kunnen er meerdere zijn, bv. bij 2 uitgerukte voertuigen)
     tekst = tekst.replace(/^P\s*\d+\s*BON-\d+\s*/i, "").trim(); // vaste P2000-kop (prioriteit + bonnummer) eraf
 
     if(plaats){
@@ -627,8 +627,6 @@
       ROUTE_OVERLAY_TIMER = setTimeout(verbergRouteOverlay, 180000); // 3 minuten, dan vanzelf terug naar het normale scherm
 
       var zoekTekst = schoonAdresTekst(melding);
-      console.log("P2000 ruwe tekst:", melding.tekst, "| plaats:", melding.plaats);
-      console.log("P2000 opgeschoonde zoektekst:", zoekTekst);
       var geoRes = await fetch("https://nominatim.openstreetmap.org/search?format=json&countrycodes=nl&limit=1&q=" + encodeURIComponent(zoekTekst));
       var geoData = await geoRes.json();
       if(!geoData.length){
