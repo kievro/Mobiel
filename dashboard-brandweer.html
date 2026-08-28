@@ -561,6 +561,27 @@
 
   var LAATST_GETOONDE_P2000_ID = null;
 
+  // Voertuignummer-voorvoegsel -> post. 0790** is een reservevoertuig en kan
+  // voor elke van de 3 posten worden ingezet, dus die telt niet als een
+  // definitieve match -- bij UITSLUITEND zulke nummers tonen we de melding
+  // voor de zekerheid op alle 3 de dashboards.
+  var VOERTUIG_PREFIX_NAAR_POST = { "0727": "post3", "0736": "post1", "0737": "post2" };
+
+  function bepaalRelevantePostenVoorMelding(ruweTekst){
+    var nummers = String(ruweTekst||"").match(/\d{4,}/g) || [];
+    var relevantePosten = {};
+    var heeftDefinitieveMatch = false;
+    nummers.forEach(function(nr){
+      var prefix = nr.substring(0, 4);
+      if(VOERTUIG_PREFIX_NAAR_POST[prefix]){
+        relevantePosten[VOERTUIG_PREFIX_NAAR_POST[prefix]] = true;
+        heeftDefinitieveMatch = true;
+      }
+    });
+    if(!heeftDefinitieveMatch) return null; // null = "kon niet bepalen, toon overal"
+    return relevantePosten;
+  }
+
   async function loadTicker(){
     try{
       var twaalfUurGeleden = new Date(Date.now() - 12*60*60*1000).toISOString();
@@ -569,18 +590,21 @@
 
       if(alles.length){
         var nieuwste = alles[0];
+        var relevantePosten = bepaalRelevantePostenVoorMelding(nieuwste.tekst);
+        var isRelevantVoorDezePost = relevantePosten === null || relevantePosten[POST_ID];
+
         if(LAATST_GETOONDE_P2000_ID === null){
           LAATST_GETOONDE_P2000_ID = nieuwste.id;
           // Bij het verse laden van de pagina: is de nieuwste melding zelf ook nog
           // vers (binnen 3 minuten)? Dan alsnog meteen de kaart tonen -- anders zou
           // een net binnengekomen melding gemist worden als het scherm net ververst is.
           var leeftijdMs = Date.now() - new Date(nieuwste.gemeld_op).getTime();
-          if(leeftijdMs >= 0 && leeftijdMs < 3*60*1000){
+          if(leeftijdMs >= 0 && leeftijdMs < 3*60*1000 && isRelevantVoorDezePost){
             toonRouteOverlay(nieuwste);
           }
         } else if(nieuwste.id !== LAATST_GETOONDE_P2000_ID){
           LAATST_GETOONDE_P2000_ID = nieuwste.id;
-          toonRouteOverlay(nieuwste);
+          if(isRelevantVoorDezePost) toonRouteOverlay(nieuwste);
         }
       }
     }catch(e){
@@ -592,18 +616,18 @@
   var ROUTE_OVERLAY_TIMER = null;
   var ROUTE_KAART_INSTANTIE = null;
 
-  // Officiële landelijke meldingsclassificaties (MAR 8.1, 10-06-2022) -- deze
-  // tekst komt vaak letterlijk terug in de P2000-tekst, vlak vóór het adres.
-  // Gesorteerd op lengte (langste eerst), zodat samengestelde termen als "Autom.
-  // brand OMS" in één keer verdwijnen i.p.v. dat er fragmenten achterblijven.
-  var P2000_MELDING_TERMEN = ["Schip/watersp. in problemen", "Veiligheid en openbare orde", "Overstroming/dijkdoorbraak", "Geclassificeerd incident", "Beveil. waardetransport", "Verstoring treindienst", "Hinderl. waterbeweging", "Uitval nutsvoorziening", "Digitale criminaliteit", "Defect straatmeubilair", "Beveil. burgerluchtv.", "Ontucht minderjarigen", "Berm/ruigte/bosschage", "Uitzetten vreemdeling", "Autom. systeemmelding", "Startverbod vliegtuig", "Aantref.  explosieven", "Aantref. verstekeling", "In put/bassin/kelder", "Water/weer problemen", "Aantast. openb. orde", "Persoon in drijfzand", "Huis/lok. vredebreuk", "Conflictbemiddeling", "Steekproef security", "Drukknopmelding OMS", "Stank/Hinder. lucht", "Speciale opdrachten", "Lek/zinken woonboot", "Verdachte situatie", "Bedrijf/instelling", "Onbevoegd betreden", "Luid/optisch alarm", "Onbevoegde landing", "Overname meldkamer", "Verkeersstremming", "Kinderpornografie", "Suicidaal persoon", "Voertuig te water", "Dier in problemen", "Afgevallen lading", "Overlast van/door", "Poging zelfdoding", "Security incident", "Verkeersgeleiding", "Zieke/Dode dieren", "Dienst aan derden", "Br beheerssysteem", "Openbare schennis", "Loslopende dieren", "Afwezigheiddelict", "Vluchtafhandeling", "Negeren rood sein", "Voertuig/Vaartuig", "Onbeheerde bagage", "Woning/woongebouw", "Explosief/munitie", "Persoon o/b spoor", "Onbevoegd vliegen", "Agressieve dieren", "Runway incursion", "Autom. brand OMS", "Oppervlaktewater", "Brandmelding PAC", "Uitval meldkamer", "Eigen initiatief", "Defect meubilair", "Opsporingsmiddel", "Aanmeerproblemen", "Bijz. Verk zaken", "Hoog water alarm", "Bezitsaantasting", "Persoon te water", "Gezondheidszorg", "Militaire zaken", "Vuurwerk opslag", "Pakket/Voorwerp", "Onbevoegd varen", "Autom. Gev stof", "Vervuild wegdek", "Verontreiniging", "Parkeerprobleem", "Controle Wet ID", "Gladheid/Sneeuw", "CBRN-e dreiging", "Herbez./Kazern.", "Dienstverlening", "Dierenkwelling", "Aantreffen van", "Toezichtsalarm", "Uitval systeem", "Aan instanties", "Buitensluiting", "Geplande actie", "Liftopsluiting", "Warmte/droogte", "Winkeldiefstal", "Handmelder OMS", "Zakkenrollerij", "ASO-vaargedrag", "Afstemverzoek", "Luchtvaartuig", "Samenscholing", "Wateroverlast", "Persoonsalarm", "CSE-inspectie", "Gev. stof PAC", "Gev. stof OMS", "Onder invloed", "ASO-rijgedrag", "Achtervolging", "Verduistering", "Ambulancezorg", "Brandgerucht", "Autom. brand", "Inbraakalarm", "Hulpverlener", "Wietplantage", "Mishandeling", "Noodsituatie", "Afval/rommel", "Schietpartij", "Verkrachting", "Laag vliegen", "In of op ijs", "Demonstratie", "Onwel/ziekte", "Overvalalarm", "Spoorvervoer", "Overbrengen", "Wachtdelict", "Bijeenkomst", "Tunnelalarm", "Prostitutie", "Vechtpartij", "Steekpartij", "Ontsnapping", "Scheepvaart", "Stormschade", "Lijkvinding", "Evenementen", "Akker/Weide", "Spookrijder", "Noodsignaal", "Leefmilieu", "Oplichting", "Rookmelder", "Overig LVO", "Burenruzie", "Bedreiging", "Begeleiden", "Noodoproep", "Vernieling", "Aanranding", "Ontvoering", "Opnamestop", "Cybercrime", "Vermissing", "Wegvervoer", "Gevangenis", "Gezondheid", "Bommelding", "Luchtvaart", "Terrorisme", "Nacontrole", "Wegverkeer", "Reanimatie", "Asielzaak", "RAC alarm", "Hoogwater", "agrarisch", "Materieel", "Stroperij", "Onderwijs", "Specifiek", "Brandweer", "Drugszaak", "Bijgebouw", "Aardschok", "Industrie", "Joyriding", "Nablussen", "Gijzeling", "Weeralarm", "Container", "Zedenzaak", "Stremming", "Op hoogte", "PAC alarm", "CO-melder", "Bijstand", "ANPR-hit", "Voorzorg", "Vuurwerk", "Drugslab", "Te water", "Voertuig", "Goederen", "Graffiti", "Explosie", "Digitaal", "Conflict", "Beroving", "Oefening", "Diefstal", "Grooming", "Vaartuig", "Gladheid", "Sensing", "Overige", "Ongeval", "Overval", "Kantoor", "Verkeer", "Politie", "Persoon", "Munitie", "Inbraak", "Dealen", "Woning", "Letsel", "Heling", "Gebouw", "Incest", "Overig", "Oproer", "Winkel", "Object", "Fraude", "Geluid", "Logies", "Geweld", "Dieren", "Buiten", "Natuur", "Kaping", "Jeugd", "Water", "Crash", "Sport", "Brand", "Multi", "Lucht", "Alarm", "Bodem", "Heide", "Dier", "Riet", "KMAR", "Veen", "Duin", "Cel", "Bos", "VWS"];
-
-  // Aanvulling: korte afkortingen die in de praktijk voorkomen maar niet als
-  // zodanig in de officiële lijst hierboven staan (die bevat vooral voluit-
-  // geschreven termen). Vooraan gezet zodat ze als eerste worden geprobeerd.
-  var P2000_MELDING_TERMEN_AANVULLING = ["BRANDMELDING","AUTOBRAND","BUITENBRAND","BINNENBRAND","SCHOORSTEENBRAND",
-    "DIA","OMS","BR","NOOD"];
-  P2000_MELDING_TERMEN = P2000_MELDING_TERMEN_AANVULLING.concat(P2000_MELDING_TERMEN);
+  // Meldingsclassificaties (zowel de officiële MAR-lijst als de aanvulling met
+  // korte afkortingen) staan in de database, niet meer hardcoded hier -- zo
+  // kan een nieuwe term worden toegevoegd zonder dit bestand te hoeven aanpassen.
+  var P2000_MELDING_TERMEN = [];
+  async function laadMeldingsTermen(){
+    try{
+      var termenRes = await sbSelect(DAG_URL, DAG_KEY_HEADERS, "p2000_meldingstermen?select=term");
+      P2000_MELDING_TERMEN = termenRes.map(function(r){ return r.term; });
+    }catch(e){
+      console.error("Kon meldingstermen niet laden, adres-opschoning werkt dan minder goed:", e);
+    }
+  }
 
   function escapeRegex(s){ return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
 
@@ -666,23 +690,57 @@
     return lengte;
   }
 
-  async function haalStraatGeometrie(straatNaam, plaats){
-    var url = "https://nominatim.openstreetmap.org/search?format=json&polygon_geojson=1&countrycodes=nl&limit=1&q=" + encodeURIComponent(straatNaam + ", " + plaats);
-    var res = await fetch(url);
-    var data = await res.json();
-    if(!data.length) return null;
-    var item = data[0];
-    var lijn = null;
+  function haalGeometrieUitItem(item){
     if(item.geojson && item.geojson.type === "LineString"){
-      lijn = item.geojson.coordinates.map(function(c){ return [c[1], c[0]]; });
+      return item.geojson.coordinates.map(function(c){ return [c[1], c[0]]; });
     } else if(item.geojson && item.geojson.type === "MultiLineString"){
-      lijn = [];
+      var lijn = [];
       item.geojson.coordinates.forEach(function(segment){
         segment.forEach(function(c){ lijn.push([c[1], c[0]]); });
       });
+      return lijn;
+    } else if(item.geojson && item.geojson.type === "Polygon"){
+      // Zeldzaam voor een straat, maar kan als de zoekopdracht per ongeluk een
+      // plein/gebied treft -- de buitenrand ervan gewoon als lijn gebruiken.
+      return item.geojson.coordinates[0].map(function(c){ return [c[1], c[0]]; });
+    } else if(item.geojson && item.geojson.type === "MultiPolygon"){
+      return item.geojson.coordinates[0][0].map(function(c){ return [c[1], c[0]]; });
     }
-    var midden = lijn && lijn.length ? lijn[Math.floor(lijn.length/2)] : [parseFloat(item.lat), parseFloat(item.lon)];
-    return { lijn: lijn, midden: {lat: midden[0], lon: midden[1]} };
+    return null;
+  }
+
+  async function haalStraatGeometrie(straatNaam, plaats){
+    // Een straat bestaat in OpenStreetMap vaak uit meerdere losse stukjes (elk
+    // kruispunt kan een nieuw stukje beginnen). We vragen daarom meerdere
+    // resultaten op en plakken alle stukjes met exact dezelfde naam aan elkaar,
+    // i.p.v. maar 1 willekeurig segment te tonen.
+    var url = "https://nominatim.openstreetmap.org/search?format=json&polygon_geojson=1&countrycodes=nl&limit=50&q=" + encodeURIComponent(straatNaam + ", " + plaats);
+    var res = await fetch(url);
+    var data = await res.json();
+    if(!data.length) return null;
+
+    var straatNaamKlein = straatNaam.trim().toLowerCase();
+    var passendeItems = data.filter(function(item){
+      var itemNaam = String(item.display_name||"").split(",")[0].trim().toLowerCase();
+      return itemNaam === straatNaamKlein || itemNaam.indexOf(straatNaamKlein) === 0;
+    });
+    if(!passendeItems.length) passendeItems = [data[0]]; // val terug op het beste resultaat
+
+    var alleSegmenten = [];
+    passendeItems.forEach(function(item){
+      var segment = haalGeometrieUitItem(item);
+      if(segment) alleSegmenten.push(segment);
+    });
+
+    var lijn = null;
+    if(alleSegmenten.length){
+      lijn = [];
+      alleSegmenten.forEach(function(seg){ lijn = lijn.concat(seg); });
+    }
+
+    var eersteItem = passendeItems[0];
+    var midden = lijn && lijn.length ? lijn[Math.floor(lijn.length/2)] : [parseFloat(eersteItem.lat), parseFloat(eersteItem.lon)];
+    return { lijn: lijn, midden: {lat: midden[0], lon: midden[1]}, segmenten: alleSegmenten };
   }
 
   async function toonRouteOverlay(melding){
@@ -719,8 +777,8 @@
           return;
         }
         // Beide straten in blauw tekenen, zodat je zelf ziet waar ze elkaar kruisen
-        if(geo1 && geo1.lijn) L.polyline(geo1.lijn, {color:"#2E6DA4", weight:5, opacity:0.85}).addTo(ROUTE_KAART_INSTANTIE);
-        if(geo2 && geo2.lijn) L.polyline(geo2.lijn, {color:"#2E6DA4", weight:5, opacity:0.85}).addTo(ROUTE_KAART_INSTANTIE);
+        if(geo1 && geo1.segmenten) geo1.segmenten.forEach(function(seg){ L.polyline(seg, {color:"#2E6DA4", weight:5, opacity:0.85}).addTo(ROUTE_KAART_INSTANTIE); });
+        if(geo2 && geo2.segmenten) geo2.segmenten.forEach(function(seg){ L.polyline(seg, {color:"#2E6DA4", weight:5, opacity:0.85}).addTo(ROUTE_KAART_INSTANTIE); });
         // Het midden van de eerst gevonden straat gebruiken als bestemming voor
         // de route -- beter dan het (vaak willekeurige) beginpunt van een lange weg.
         // De kortste van de twee straten geeft een betrouwbaarder middenpunt --
@@ -734,6 +792,24 @@
       } else {
         var geoRes = await fetch("https://nominatim.openstreetmap.org/search?format=json&countrycodes=nl&limit=1&q=" + encodeURIComponent(adresInfo.zoekTekst));
         var geoData = await geoRes.json();
+
+        if(!geoData.length){
+          // Terugval: mogelijk staat er een bedrijfsnaam/locatie vóór de straat
+          // (bv. "Invacare B.V. Galvanistraat"), waardoor Nominatim de hele brij
+          // niet als geheel herkent. Probeer dan alleen het laatste straatachtige
+          // woord (+ een eventueel huisnummer erachter).
+          var straatSuffixen = /(straat|laan|weg|plein|kade|singel|dijk|hof|dreef|pad|steeg|gracht|plantsoen|markt|erf|baan)$/i;
+          var woorden = adresInfo.zoekTekst.split(/[\s,]+/).filter(function(w){ return w && w.toLowerCase()!==adresInfo.plaats.toLowerCase(); });
+          for(var wi=woorden.length-1; wi>=0; wi--){
+            if(straatSuffixen.test(woorden[wi])){
+              var vanafStraat = woorden.slice(wi).join(" ") + ", " + adresInfo.plaats;
+              var terugvalRes = await fetch("https://nominatim.openstreetmap.org/search?format=json&countrycodes=nl&limit=1&q=" + encodeURIComponent(vanafStraat));
+              geoData = await terugvalRes.json();
+              break;
+            }
+          }
+        }
+
         if(!geoData.length){
           document.getElementById("routeOverlayAfstand").textContent = "Adres niet gevonden";
           return;
@@ -929,8 +1005,10 @@
     loadAndRender();
     setInterval(loadAndRender, 60000);
     setInterval(wisselPagina, PAGINA_WISSEL_MS);
-    loadTicker();
-    setInterval(loadTicker, 15000); // elke 15 sec nieuwe P2000-meldingen checken, zodat de kaart snel omspringt
+    laadMeldingsTermen().then(function(){
+      loadTicker();
+      setInterval(loadTicker, 15000); // elke 15 sec nieuwe P2000-meldingen checken, zodat de kaart snel omspringt
+    });
 
     document.querySelectorAll(".postwissel-knop").forEach(function(knop){
       if(knop.dataset.post === POST_ID) knop.classList.add("actief");
