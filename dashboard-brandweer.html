@@ -656,6 +656,16 @@
     return {isKruising:false, zoekTekst: tekst + ", " + plaats, plaats:plaats};
   }
 
+  function berekenLijnLengte(lijn){
+    if(!lijn || lijn.length<2) return Infinity; // geen lijngeometrie bekend -> nooit als "kortste" kiezen
+    var lengte = 0;
+    for(var i=1; i<lijn.length; i++){
+      var dLat = lijn[i][0]-lijn[i-1][0], dLon = lijn[i][1]-lijn[i-1][1];
+      lengte += Math.sqrt(dLat*dLat + dLon*dLon); // relatieve afstand, voldoende om 2 straten te vergelijken
+    }
+    return lengte;
+  }
+
   async function haalStraatGeometrie(straatNaam, plaats){
     var url = "https://nominatim.openstreetmap.org/search?format=json&polygon_geojson=1&countrycodes=nl&limit=1&q=" + encodeURIComponent(straatNaam + ", " + plaats);
     var res = await fetch(url);
@@ -713,7 +723,13 @@
         if(geo2 && geo2.lijn) L.polyline(geo2.lijn, {color:"#2E6DA4", weight:5, opacity:0.85}).addTo(ROUTE_KAART_INSTANTIE);
         // Het midden van de eerst gevonden straat gebruiken als bestemming voor
         // de route -- beter dan het (vaak willekeurige) beginpunt van een lange weg.
-        var middenPunt = (geo1 || geo2).midden;
+        // De kortste van de twee straten geeft een betrouwbaarder middenpunt --
+        // bij een lange straat kan het kruispunt overal langs die lengte liggen,
+        // ver van het berekende midden af.
+        var lengte1 = geo1 ? berekenLijnLengte(geo1.lijn) : Infinity;
+        var lengte2 = geo2 ? berekenLijnLengte(geo2.lijn) : Infinity;
+        var gekozenGeo = (lengte1 <= lengte2 ? geo1 : geo2) || geo1 || geo2;
+        var middenPunt = gekozenGeo.midden;
         incidentLat = middenPunt.lat; incidentLon = middenPunt.lon;
       } else {
         var geoRes = await fetch("https://nominatim.openstreetmap.org/search?format=json&countrycodes=nl&limit=1&q=" + encodeURIComponent(adresInfo.zoekTekst));
