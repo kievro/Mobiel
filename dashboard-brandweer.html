@@ -147,6 +147,8 @@
   .route-overlay-tekst{font-family:var(--font-display);font-weight:700;font-size:26px;color:var(--text);margin-top:4px;max-width:80vw;}
   .route-overlay-afstand{font-family:var(--font-display);font-weight:700;font-size:22px;color:var(--lime);text-align:right;white-space:nowrap;}
   .route-kaart{flex:1;border-radius:12px;overflow:hidden;border:1px solid var(--border);}
+  .voertuig-kaart-label{background:var(--red);color:#fff;border:2px solid #fff;font-family:var(--font-mono);font-weight:700;font-size:13px;padding:3px 8px;border-radius:5px;box-shadow:0 2px 6px rgba(0,0,0,0.4);}
+  .voertuig-kaart-label::before{border-right-color:var(--red);}
   .naam-item{padding:10px 14px;background:var(--surface);border:1px solid var(--border);border-radius:6px;margin-top:6px;cursor:pointer;font-size:14px;color:var(--text);}
   .naam-item:hover{border-color:var(--red);}
   .postwissel{position:fixed;right:14px;bottom:14px;display:flex;gap:8px;z-index:30;}
@@ -866,7 +868,9 @@
 
       if(!nietGevonden){
         var incidentIcoon = L.divIcon({className:"", html:'<div style="background:var(--red);width:20px;height:20px;border-radius:50%;border:3px solid #fff;"></div>', iconSize:[20,20]});
-        L.marker([incidentLat, incidentLon], {icon:incidentIcoon}).addTo(meldingLaag).bindTooltip(melding.plaats||"Incident");
+        var voertuigLabel = voertuigen.length ? voertuigen.join(" \u00b7 ") : (melding.plaats||"Incident");
+        L.marker([incidentLat, incidentLon], {icon:incidentIcoon}).addTo(meldingLaag)
+          .bindTooltip(voertuigLabel, {permanent:true, direction:"right", offset:[10,0], className:"voertuig-kaart-label"});
 
         try{
           var routeRes = await fetch("https://router.project-osrm.org/route/v1/driving/"+postCoord.lon+","+postCoord.lat+";"+incidentLon+","+incidentLat+"?overview=full&geometries=geojson");
