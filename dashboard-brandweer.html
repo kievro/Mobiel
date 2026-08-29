@@ -134,8 +134,16 @@
   @keyframes ticker-scroll{from{transform:translateX(0);}to{transform:translateX(-50%);}}
   .hidden{display:none !important;}
   .route-overlay{position:fixed;inset:0;z-index:200;background:var(--bg);display:flex;flex-direction:column;padding:24px 28px;}
-  .route-overlay-kop{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;}
-  .route-overlay-eyebrow{font-family:var(--font-body);font-weight:700;font-size:13px;text-transform:uppercase;letter-spacing:0.05em;color:var(--red);}
+  .route-overlay-kop{margin-bottom:14px;}
+  .route-overlay-eyebrow{font-family:var(--font-body);font-weight:700;font-size:13px;text-transform:uppercase;letter-spacing:0.05em;color:var(--red);margin-bottom:8px;}
+  .route-overlay-lijst{display:flex;gap:16px;flex-wrap:wrap;}
+  .melding-kaartje{background:var(--surface);border:1px solid var(--border);border-left:4px solid var(--red);border-radius:8px;padding:10px 14px;min-width:260px;max-width:420px;}
+  .melding-kaartje-plaats{font-family:var(--font-body);font-weight:700;font-size:11.5px;text-transform:uppercase;color:var(--red);}
+  .melding-kaartje-tekst{font-family:var(--font-display);font-weight:700;font-size:18px;color:var(--text);margin-top:2px;}
+  .melding-kaartje-afstand{font-size:13px;color:var(--lime);margin-top:4px;}
+  .voertuigen-lijst{margin-top:8px;padding-top:8px;border-top:1px solid var(--border);}
+  .voertuigen-lijst-label{font-family:var(--font-body);font-weight:700;font-size:10px;text-transform:uppercase;color:var(--text-muted);margin-bottom:3px;}
+  .voertuig-regel{font-family:var(--font-mono);font-size:13px;color:var(--text);line-height:1.5;}
   .route-overlay-tekst{font-family:var(--font-display);font-weight:700;font-size:26px;color:var(--text);margin-top:4px;max-width:80vw;}
   .route-overlay-afstand{font-family:var(--font-display);font-weight:700;font-size:22px;color:var(--lime);text-align:right;white-space:nowrap;}
   .route-kaart{flex:1;border-radius:12px;overflow:hidden;border:1px solid var(--border);}
@@ -193,11 +201,8 @@
 
   <div id="routeOverlay" class="route-overlay hidden">
     <div class="route-overlay-kop">
-      <div>
-        <div class="route-overlay-eyebrow" id="routeOverlayPlaats">P2000-melding</div>
-        <div class="route-overlay-tekst" id="routeOverlayTekst"></div>
-      </div>
-      <div class="route-overlay-afstand" id="routeOverlayAfstand"></div>
+      <div class="route-overlay-eyebrow">P2000-meldingen</div>
+      <div id="routeOverlayLijst" class="route-overlay-lijst"></div>
     </div>
     <div id="routeKaart" class="route-kaart"></div>
   </div>
@@ -637,8 +642,20 @@
     }
   }
 
-  var ROUTE_OVERLAY_TIMER = null;
   var ROUTE_KAART_INSTANTIE = null;
+  var POST_MARKER_GEZET = false;
+  var ACTIEVE_MELDINGEN = {}; // key: melding.id -> {melding, laag, voertuigen}
+  var MELDING_WEERGAVEDUUR_MS = 5*60*1000; // 5 minuten
+
+  function extraheerVoertuigen(ruweTekst){
+    // Alle cijferreeksen van 4+ die aan het eind van de tekst staan zijn
+    // voertuignummers (er kunnen er meerdere zijn, bv. bij 2 uitgerukte voertuigen).
+    var tekst = String(ruweTekst||"").trim();
+    var matches = tekst.match(/(?:\s+(\d{4,}))+\s*$/);
+    if(!matches) return [];
+    var staartje = tekst.slice(tekst.length - matches[0].length);
+    return (staartje.match(/\d{4,}/g) || []);
+  }
 
   // Meldingsclassificaties (zowel de officiële MAR-lijst als de aanvulling met
   // korte afkortingen) staan in de database, niet meer hardcoded hier -- zo
@@ -782,59 +799,49 @@
 
   async function toonRouteOverlay(melding){
     try{
-      document.getElementById("routeOverlayPlaats").textContent = "P2000-melding \u2014 " + (melding.plaats||"");
-      document.getElementById("routeOverlayTekst").textContent = melding.tekst || "";
-      document.getElementById("routeOverlayAfstand").textContent = "";
       document.getElementById("routeOverlay").classList.remove("hidden");
-      clearTimeout(ROUTE_OVERLAY_TIMER);
-      ROUTE_OVERLAY_TIMER = setTimeout(verbergRouteOverlay, 180000); // 3 minuten, dan vanzelf terug naar het normale scherm
 
       if(!ROUTE_KAART_INSTANTIE){
         ROUTE_KAART_INSTANTIE = L.map("routeKaart", {zoomControl:false, attributionControl:false});
         L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png").addTo(ROUTE_KAART_INSTANTIE);
       }
-      // Meteen opschonen, nog vóórdat we weten of de zoekopdracht gaat lukken --
-      // anders blijft bij een mislukte zoekopdracht de vorige, oude route staan
-      // en lijkt het net of die nog steeds actueel is.
-      ROUTE_KAART_INSTANTIE.eachLayer(function(layer){ if(layer instanceof L.Marker || layer instanceof L.Polyline) ROUTE_KAART_INSTANTIE.removeLayer(layer); });
-      var postCoord = POST_COORDS[POST_ID];
-      var postIcoonAlvast = L.divIcon({className:"", html:'<div style="background:#2E6DA4;width:16px;height:16px;border-radius:50%;border:3px solid #fff;"></div>', iconSize:[16,16]});
-      L.marker([postCoord.lat, postCoord.lon], {icon:postIcoonAlvast}).addTo(ROUTE_KAART_INSTANTIE).bindTooltip("Post");
-      ROUTE_KAART_INSTANTIE.setView([postCoord.lat, postCoord.lon], 12);
+      if(!POST_MARKER_GEZET){
+        var postCoord0 = POST_COORDS[POST_ID];
+        var postIcoonAlvast = L.divIcon({className:"", html:'<div style="background:#2E6DA4;width:16px;height:16px;border-radius:50%;border:3px solid #fff;"></div>', iconSize:[16,16]});
+        L.marker([postCoord0.lat, postCoord0.lon], {icon:postIcoonAlvast}).addTo(ROUTE_KAART_INSTANTIE).bindTooltip("Post");
+        ROUTE_KAART_INSTANTIE.setView([postCoord0.lat, postCoord0.lon], 12);
+        POST_MARKER_GEZET = true;
+      }
       setTimeout(function(){ if(ROUTE_KAART_INSTANTIE) ROUTE_KAART_INSTANTIE.invalidateSize(); }, 100);
 
+      // Eigen laag voor déze melding, zodat 'm straks apart weer verwijderd kan
+      // worden zonder de eventuele andere, gelijktijdig actieve meldingen te raken.
+      var meldingLaag = L.layerGroup().addTo(ROUTE_KAART_INSTANTIE);
+      var voertuigen = extraheerVoertuigen(melding.tekst);
+      var postCoord = POST_COORDS[POST_ID];
+      var afstandTekst = "";
+
       var adresInfo = schoonAdresTekst(melding);
-      var incidentLat, incidentLon;
+      var incidentLat, incidentLon, nietGevonden = false;
 
       if(adresInfo.isKruising){
         var geo1 = await haalStraatGeometrie(adresInfo.straat1, adresInfo.plaats);
         var geo2 = await haalStraatGeometrie(adresInfo.straat2, adresInfo.plaats);
         if(!geo1 && !geo2){
-          document.getElementById("routeOverlayAfstand").textContent = "Adres niet gevonden";
-          return;
+          nietGevonden = true;
+        } else {
+          if(geo1 && geo1.segmenten) geo1.segmenten.forEach(function(seg){ L.polyline(seg, {color:"#2E6DA4", weight:5, opacity:0.85}).addTo(meldingLaag); });
+          if(geo2 && geo2.segmenten) geo2.segmenten.forEach(function(seg){ L.polyline(seg, {color:"#2E6DA4", weight:5, opacity:0.85}).addTo(meldingLaag); });
+          var lengte1 = geo1 ? berekenLijnLengte(geo1.lijn) : Infinity;
+          var lengte2 = geo2 ? berekenLijnLengte(geo2.lijn) : Infinity;
+          var gekozenGeo = (lengte1 <= lengte2 ? geo1 : geo2) || geo1 || geo2;
+          incidentLat = gekozenGeo.midden.lat; incidentLon = gekozenGeo.midden.lon;
         }
-        // Beide straten in blauw tekenen, zodat je zelf ziet waar ze elkaar kruisen
-        if(geo1 && geo1.segmenten) geo1.segmenten.forEach(function(seg){ L.polyline(seg, {color:"#2E6DA4", weight:5, opacity:0.85}).addTo(ROUTE_KAART_INSTANTIE); });
-        if(geo2 && geo2.segmenten) geo2.segmenten.forEach(function(seg){ L.polyline(seg, {color:"#2E6DA4", weight:5, opacity:0.85}).addTo(ROUTE_KAART_INSTANTIE); });
-        // Het midden van de eerst gevonden straat gebruiken als bestemming voor
-        // de route -- beter dan het (vaak willekeurige) beginpunt van een lange weg.
-        // De kortste van de twee straten geeft een betrouwbaarder middenpunt --
-        // bij een lange straat kan het kruispunt overal langs die lengte liggen,
-        // ver van het berekende midden af.
-        var lengte1 = geo1 ? berekenLijnLengte(geo1.lijn) : Infinity;
-        var lengte2 = geo2 ? berekenLijnLengte(geo2.lijn) : Infinity;
-        var gekozenGeo = (lengte1 <= lengte2 ? geo1 : geo2) || geo1 || geo2;
-        var middenPunt = gekozenGeo.midden;
-        incidentLat = middenPunt.lat; incidentLon = middenPunt.lon;
       } else {
         var geoRes = await fetch("https://nominatim.openstreetmap.org/search?format=json&countrycodes=nl&limit=1&q=" + encodeURIComponent(adresInfo.zoekTekst));
         var geoData = await geoRes.json();
 
         if(!geoData.length){
-          // Terugval: mogelijk staat er een bedrijfsnaam/locatie vóór de straat
-          // (bv. "Invacare B.V. Galvanistraat"), waardoor Nominatim de hele brij
-          // niet als geheel herkent. Probeer dan alleen het laatste straatachtige
-          // woord (+ een eventueel huisnummer erachter).
           var straatSuffixen = /(straat|laan|weg|plein|kade|singel|dijk|hof|dreef|pad|steeg|gracht|plantsoen|markt|erf|baan|wal|hout|hoven)$/i;
           var straatVoorvoegsels = ["lange","korte","grote","kleine","oude","nieuwe","hoge","lage"];
           var woorden = adresInfo.zoekTekst.split(/[\s,]+/).filter(function(w){ return w && w.toLowerCase()!==adresInfo.plaats.toLowerCase(); });
@@ -851,40 +858,93 @@
         }
 
         if(!geoData.length){
-          document.getElementById("routeOverlayAfstand").textContent = "Adres niet gevonden";
-          return;
+          nietGevonden = true;
+        } else {
+          incidentLat = parseFloat(geoData[0].lat); incidentLon = parseFloat(geoData[0].lon);
         }
-        incidentLat = parseFloat(geoData[0].lat); incidentLon = parseFloat(geoData[0].lon);
       }
 
-      var postIcoon = L.divIcon({className:"", html:'<div style="background:#2E6DA4;width:16px;height:16px;border-radius:50%;border:3px solid #fff;"></div>', iconSize:[16,16]});
-      var incidentIcoon = L.divIcon({className:"", html:'<div style="background:var(--red);width:20px;height:20px;border-radius:50%;border:3px solid #fff;"></div>', iconSize:[20,20]});
-      L.marker([postCoord.lat, postCoord.lon], {icon:postIcoon}).addTo(ROUTE_KAART_INSTANTIE).bindTooltip("Post");
-      L.marker([incidentLat, incidentLon], {icon:incidentIcoon}).addTo(ROUTE_KAART_INSTANTIE).bindTooltip(melding.plaats||"Incident");
-      ROUTE_KAART_INSTANTIE.fitBounds([[postCoord.lat, postCoord.lon],[incidentLat, incidentLon]], {padding:[40,40]});
+      if(!nietGevonden){
+        var incidentIcoon = L.divIcon({className:"", html:'<div style="background:var(--red);width:20px;height:20px;border-radius:50%;border:3px solid #fff;"></div>', iconSize:[20,20]});
+        L.marker([incidentLat, incidentLon], {icon:incidentIcoon}).addTo(meldingLaag).bindTooltip(melding.plaats||"Incident");
 
-      try{
-        var routeRes = await fetch("https://router.project-osrm.org/route/v1/driving/"+postCoord.lon+","+postCoord.lat+";"+incidentLon+","+incidentLat+"?overview=full&geometries=geojson");
-        var routeData = await routeRes.json();
-        if(routeData.routes && routeData.routes.length){
-          var coords = routeData.routes[0].geometry.coordinates.map(function(c){ return [c[1], c[0]]; });
-          L.polyline(coords, {color:"#000000", weight:5, opacity:0.9}).addTo(ROUTE_KAART_INSTANTIE);
-          var km = (routeData.routes[0].distance/1000).toFixed(1);
-          var min = Math.round(routeData.routes[0].duration/60);
-          document.getElementById("routeOverlayAfstand").textContent = km + " km \u00b7 " + min + " min rijden";
-        }
-      }catch(e){ /* route is een bonus; adres + kaart blijven ook zonder route bruikbaar */ }
+        try{
+          var routeRes = await fetch("https://router.project-osrm.org/route/v1/driving/"+postCoord.lon+","+postCoord.lat+";"+incidentLon+","+incidentLat+"?overview=full&geometries=geojson");
+          var routeData = await routeRes.json();
+          if(routeData.routes && routeData.routes.length){
+            var coords = routeData.routes[0].geometry.coordinates.map(function(c){ return [c[1], c[0]]; });
+            L.polyline(coords, {color:"#000000", weight:5, opacity:0.9}).addTo(meldingLaag);
+            var km = (routeData.routes[0].distance/1000).toFixed(1);
+            var min = Math.round(routeData.routes[0].duration/60);
+            afstandTekst = km + " km \u00b7 " + min + " min rijden";
+          }
+        }catch(e){ /* route is een bonus; adres + kaart blijven ook zonder route bruikbaar */ }
+      } else {
+        afstandTekst = "Adres niet gevonden";
+      }
 
+      ACTIEVE_MELDINGEN[melding.id] = { melding: melding, laag: meldingLaag, voertuigen: voertuigen, afstandTekst: afstandTekst };
+      clearTimeout(ACTIEVE_MELDINGEN[melding.id].timer);
+      ACTIEVE_MELDINGEN[melding.id].timer = setTimeout(function(){ verwijderMelding(melding.id); }, MELDING_WEERGAVEDUUR_MS);
+
+      ververMeldingenLijst();
+      herbereikKaartweergave();
       setTimeout(function(){ if(ROUTE_KAART_INSTANTIE) ROUTE_KAART_INSTANTIE.invalidateSize(); }, 200);
     }catch(e){
       console.error("Route-overlay mislukt", e);
-      document.getElementById("routeOverlayAfstand").textContent = "Kon adres niet bepalen";
     }
+  }
+
+  function verwijderMelding(id){
+    var item = ACTIEVE_MELDINGEN[id];
+    if(!item) return;
+    clearTimeout(item.timer);
+    if(ROUTE_KAART_INSTANTIE) ROUTE_KAART_INSTANTIE.removeLayer(item.laag);
+    delete ACTIEVE_MELDINGEN[id];
+    ververMeldingenLijst();
+    if(Object.keys(ACTIEVE_MELDINGEN).length === 0){
+      verbergRouteOverlay();
+    } else {
+      herbereikKaartweergave();
+    }
+  }
+
+  function herbereikKaartweergave(){
+    if(!ROUTE_KAART_INSTANTIE) return;
+    var alleBounds = [];
+    var postCoord = POST_COORDS[POST_ID];
+    alleBounds.push([postCoord.lat, postCoord.lon]);
+    Object.keys(ACTIEVE_MELDINGEN).forEach(function(id){
+      ACTIEVE_MELDINGEN[id].laag.eachLayer(function(layer){
+        if(layer.getLatLng) alleBounds.push(layer.getLatLng());
+        else if(layer.getLatLngs) alleBounds = alleBounds.concat(layer.getLatLngs());
+      });
+    });
+    if(alleBounds.length > 1) ROUTE_KAART_INSTANTIE.fitBounds(alleBounds, {padding:[40,40]});
+  }
+
+  function ververMeldingenLijst(){
+    var html = Object.keys(ACTIEVE_MELDINGEN).map(function(id){
+      var item = ACTIEVE_MELDINGEN[id];
+      var voertuigenHtml = item.voertuigen.length
+        ? '<div class="voertuigen-lijst"><div class="voertuigen-lijst-label">Voertuigen</div>'
+          + item.voertuigen.map(function(v){ return '<div class="voertuig-regel">'+escapeHtml(v)+'</div>'; }).join("")
+          + '</div>'
+        : "";
+      return '<div class="melding-kaartje">'
+        + '<div class="melding-kaartje-plaats">'+escapeHtml(item.melding.plaats||"")+'</div>'
+        + '<div class="melding-kaartje-tekst">'+escapeHtml(item.melding.tekst||"")+'</div>'
+        + (item.afstandTekst ? '<div class="melding-kaartje-afstand">'+escapeHtml(item.afstandTekst)+'</div>' : "")
+        + voertuigenHtml
+        + '</div>';
+    }).join("");
+    document.getElementById("routeOverlayLijst").innerHTML = html;
   }
 
   function verbergRouteOverlay(){
     document.getElementById("routeOverlay").classList.add("hidden");
-    clearTimeout(ROUTE_OVERLAY_TIMER);
+    Object.keys(ACTIEVE_MELDINGEN).forEach(function(id){ clearTimeout(ACTIEVE_MELDINGEN[id].timer); });
+    ACTIEVE_MELDINGEN = {};
   }
 
   function renderAgenda(list){
