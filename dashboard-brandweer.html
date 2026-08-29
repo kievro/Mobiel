@@ -674,6 +674,55 @@
 
   function escapeRegex(s){ return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
 
+  // Herkent een hectometerpaal-verwijzing in de ruwe tekst, bv. "N50 Li 249,5"
+  // of "A12 Re 45,2". Geeft null terug als er geen zo'n patroon in staat.
+  function herkenHectometerpaal(ruweTekst){
+    var match = String(ruweTekst||"").match(/\b([NA])\s?(\d{1,3})\s*(Li|Re|L|R)?\s*(\d{1,3})[,.](\d{1,2})\b/i);
+    if(!match) return null;
+    var zijdeRuw = match[3] || "";
+    return {
+      wegLetter: match[1].toUpperCase(),
+      wegNummer: match[2],
+      zijde: /^li|^l/i.test(zijdeRuw) ? "L" : (/^re|^r/i.test(zijdeRuw) ? "R" : null),
+      hectometerWaarde: parseFloat(match[4] + "." + match[5])
+    };
+  }
+
+  // Zoekt de coördinaten van een hectometerpaal op via het Nationaal Wegen
+  // Bestand (NWB) van Rijkswaterstaat -- gratis en openbaar. Dit gaat in 2
+  // stappen: eerst de wegvakken van de betreffende N/A-weg vinden, dan
+  // daarbinnen het hectopunt met de dichtstbijzijnde hectometerwaarde.
+  async function haalHectometerpuntOp(info){
+    var nwbUrl = "https://geo.rijkswaterstaat.nl/services/ogc/gdr/nwb_wegen/ows?service=WFS&version=2.0.0&outputFormat=json&srsName=EPSG:4326";
+
+    var wegvakFilter = "routeltr='" + info.wegLetter + "' AND routenr=" + info.wegNummer;
+    var wegvakUrl = nwbUrl + "&request=GetFeature&typeName=wegvakken&CQL_FILTER=" + encodeURIComponent(wegvakFilter);
+    var wegvakRes = await fetch(wegvakUrl);
+    var wegvakData = await wegvakRes.json();
+    if(!wegvakData.features || !wegvakData.features.length) return null;
+
+    var wvkIds = wegvakData.features.map(function(f){ return f.properties.wvk_id; }).slice(0, 300);
+    var hectomtrng = Math.floor(info.hectometerWaarde);
+    var gewensteAfstand = Math.round((info.hectometerWaarde - hectomtrng) * 100);
+
+    var hectoFilter = "wvk_id IN (" + wvkIds.join(",") + ") AND hectomtrng=" + hectomtrng;
+    var hectoUrl = nwbUrl + "&request=GetFeature&typeName=hectopunten&CQL_FILTER=" + encodeURIComponent(hectoFilter);
+    var hectoRes = await fetch(hectoUrl);
+    var hectoData = await hectoRes.json();
+    if(!hectoData.features || !hectoData.features.length) return null;
+
+    var kandidaten = hectoData.features;
+    if(info.zijde){
+      var metZijde = kandidaten.filter(function(f){ return f.properties.zijde && f.properties.zijde.toUpperCase().indexOf(info.zijde) === 0; });
+      if(metZijde.length) kandidaten = metZijde;
+    }
+    kandidaten.sort(function(a,b){
+      return Math.abs(a.properties.afstand - gewensteAfstand) - Math.abs(b.properties.afstand - gewensteAfstand);
+    });
+    var beste = kandidaten[0];
+    return { lat: beste.geometry.coordinates[1], lon: beste.geometry.coordinates[0] };
+  }
+
   function schoonAdresTekst(melding){
     var tekst = String(melding.tekst||"").trim();
     var plaats = String(melding.plaats||"").trim();
@@ -823,8 +872,24 @@
       var postCoord = POST_COORDS[POST_ID];
       var afstandTekst = "";
 
-      var adresInfo = schoonAdresTekst(melding);
       var incidentLat, incidentLon, nietGevonden = false;
+
+      // Eerst checken op een hectometerpaal-verwijzing (bv. "N50 Li 249,5") --
+      // dat is een fundamenteel ander soort locatie dan een straatadres, en
+      // moet dus vóór de normale straat-opschoning geprobeerd worden.
+      var hectoInfo = herkenHectometerpaal(melding.tekst);
+      if(hectoInfo){
+        try{
+          var hectoPunt = await haalHectometerpuntOp(hectoInfo);
+          if(hectoPunt){
+            incidentLat = hectoPunt.lat; incidentLon = hectoPunt.lon;
+          }
+        }catch(e){ console.error("Hectometerpaal-opzoeking mislukt", e); }
+      }
+
+      var adresInfo = null;
+      if(incidentLat === undefined){
+        adresInfo = schoonAdresTekst(melding);
 
       if(adresInfo.isKruising){
         var geo1 = await haalStraatGeometrie(adresInfo.straat1, adresInfo.plaats);
@@ -842,6 +907,14 @@
       } else {
         var geoRes = await fetch("https://nominatim.openstreetmap.org/search?format=json&countrycodes=nl&limit=1&q=" + encodeURIComponent(adresInfo.zoekTekst));
         var geoData = await geoRes.json();
+
+        if(!geoData.length && adresInfo.zoekTekst.indexOf(" - ") !== -1){
+          // Terugval A: bij een koppelteken (bv. "N224 - Verlengde Arnhemseweg")
+          // is het deel ná het streepje meestal de eigenlijke, bruikbare straatnaam.
+          var naKoppelteken = adresInfo.zoekTekst.split(" - ").pop().trim();
+          var terugvalResA = await fetch("https://nominatim.openstreetmap.org/search?format=json&countrycodes=nl&limit=1&q=" + encodeURIComponent(naKoppelteken));
+          geoData = await terugvalResA.json();
+        }
 
         if(!geoData.length){
           var straatSuffixen = /(straat|laan|weg|plein|kade|singel|dijk|hof|dreef|pad|steeg|gracht|plantsoen|markt|erf|baan|wal|hout|hoven)$/i;
@@ -864,6 +937,7 @@
         } else {
           incidentLat = parseFloat(geoData[0].lat); incidentLon = parseFloat(geoData[0].lon);
         }
+      }
       }
 
       if(!nietGevonden){
