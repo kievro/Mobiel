@@ -1113,6 +1113,7 @@
       loadTicker();
       setInterval(loadTicker, 15000); // elke 15 sec nieuwe P2000-meldingen checken, zodat de kaart snel omspringt
     });
+    initHerlaadOpAfstand();
 
     document.querySelectorAll(".postwissel-knop").forEach(function(knop){
       if(knop.dataset.post === POST_ID) knop.classList.add("actief");
@@ -1121,6 +1122,33 @@
         location.href = location.pathname + "?post=" + knop.dataset.post;
       });
     });
+  }
+
+  // Op-afstand-herlaad: onthoudt bij het opstarten welk signaal er stond, en
+  // controleert daarna elke minuut of dat is veranderd. Verander jij het
+  // signaal (met een simpele SQL-regel na het vervangen van dit bestand), dan
+  // herladen alle open Dashboard-schermen zichzelf vanzelf, zonder dat iemand
+  // er fysiek naartoe hoeft.
+  var HUIDIG_HERLAAD_SIGNAAL = null;
+  async function initHerlaadOpAfstand(){
+    try{
+      var res = await sbSelect(DAG_URL, DAG_KEY_HEADERS, "kv_store?key=eq.dashboard_herlaad_signaal&select=value");
+      HUIDIG_HERLAAD_SIGNAAL = res[0] && res[0].value;
+    }catch(e){ /* geen signaal gevonden -- werkt dan gewoon nog niet, geen probleem */ }
+
+    setInterval(async function(){
+      try{
+        var res = await sbSelect(DAG_URL, DAG_KEY_HEADERS, "kv_store?key=eq.dashboard_herlaad_signaal&select=value");
+        var nieuwSignaal = res[0] && res[0].value;
+        if(nieuwSignaal && HUIDIG_HERLAAD_SIGNAAL && nieuwSignaal !== HUIDIG_HERLAAD_SIGNAAL){
+          location.reload();
+        }
+      }catch(e){ /* volgende poging over een minuut */ }
+    }, 60000);
+
+    // Automatisch vangnet: elke 6 uur sowieso een keer verversen, voor het
+    // geval het signaal een keer wordt vergeten na een update.
+    setInterval(function(){ location.reload(); }, 6*60*60*1000);
   }
 
   function toonNaamLijst(filter){
