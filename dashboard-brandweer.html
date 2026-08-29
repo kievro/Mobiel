@@ -537,7 +537,7 @@
       }
       return '<div class="dienst-item'+(verstreken?' dienst-verstreken':'')+(isSpoed?' dienst-spoed':'')+'">'
         + '<div class="dienst-top">'
-        + '<span class="datum-tag'+(isSpoed?' datum-tag-spoed':'')+'">'+new Date(d.datum+"T00:00:00").toLocaleDateString("nl-NL",{weekday:"short",day:"numeric",month:"short"})+'</span>'
+        + '<span class="datum-tag'+(isSpoed?' datum-tag-spoed':'')+'">'+new Date(d.datum+"T00:00:00").toLocaleDateString("nl-NL",{weekday:"long",day:"numeric",month:"short"})+'</span>'
         + '<span class="post-tag">'+escapeHtml(d.post_naam)+'</span>'
         + (isSpoed ? '<span class="spoed-tag">\u26A1 SPOED \u2013 NU NODIG</span>' : '')
         + (d.duik_dienst ? '<span class="duik-tag">Duiker</span>' : '')
@@ -966,7 +966,17 @@
     var rijen = items.map(function(a){
       var start = new Date(a.start_tijd);
       var eind = a.eind_tijd ? new Date(a.eind_tijd) : null;
-      var tijd = start.toLocaleTimeString("nl-NL",{hour:"2-digit",minute:"2-digit"}) + (eind ? "\u2013"+eind.toLocaleTimeString("nl-NL",{hour:"2-digit",minute:"2-digit"}) : "");
+      var zelfdeDag = eind ? (start.getFullYear()===eind.getFullYear() && start.getMonth()===eind.getMonth() && start.getDate()===eind.getDate()) : true;
+      var tijd;
+      if(eind && !zelfdeDag){
+        // Meerdaags: laat bij zowel begin als eind de datum zien, anders lijkt
+        // het net of het start- en eindtijdstip aan elkaar gelijk zijn.
+        var startTekst = start.toLocaleDateString("nl-NL",{day:"numeric",month:"short"}) + " " + start.toLocaleTimeString("nl-NL",{hour:"2-digit",minute:"2-digit"});
+        var eindTekst = eind.toLocaleDateString("nl-NL",{day:"numeric",month:"short"}) + " " + eind.toLocaleTimeString("nl-NL",{hour:"2-digit",minute:"2-digit"});
+        tijd = startTekst + " \u2013 " + eindTekst;
+      } else {
+        tijd = start.toLocaleTimeString("nl-NL",{hour:"2-digit",minute:"2-digit"}) + (eind ? "\u2013"+eind.toLocaleTimeString("nl-NL",{hour:"2-digit",minute:"2-digit"}) : "");
+      }
       return '<div class="dienst-item"><div class="dienst-top">'
         + '<span class="datum-tag">'+escapeHtml(tijd)+'</span>'
         + '</div><div class="notitie" style="font-size:14px;font-style:normal;color:var(--text);font-weight:600;">'+escapeHtml(a.titel||"")+'</div>'
