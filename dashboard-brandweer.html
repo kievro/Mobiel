@@ -695,32 +695,37 @@
   async function haalHectometerpuntOp(info){
     var nwbUrl = "https://geo.rijkswaterstaat.nl/services/ogc/gdr/nwb_wegen/ows?service=WFS&version=2.0.0&outputFormat=json&srsName=EPSG:4326";
 
+    // "249,5" is gewoon kilometer 249,5 langs de route -- dat komt rechtstreeks
+    // overeen met de beginkm/eindkm van de wegvakken. We hoeven dus geen aparte
+    // hectopunten-laag te gebruiken: gewoon het juiste wegvak vinden en daarlangs
+    // interpoleren naar het juiste punt.
     var wegvakFilter = "routeltr='" + info.wegLetter + "' AND routenr=" + info.wegNummer;
     var wegvakUrl = nwbUrl + "&request=GetFeature&typeName=wegvakken&CQL_FILTER=" + encodeURIComponent(wegvakFilter);
+    console.log("NWB -- URL:", wegvakUrl);
     var wegvakRes = await fetch(wegvakUrl);
     var wegvakData = await wegvakRes.json();
+    console.log("NWB -- aantal wegvakken gevonden:", wegvakData.features ? wegvakData.features.length : "(fout)");
     if(!wegvakData.features || !wegvakData.features.length) return null;
 
-    var wvkIds = wegvakData.features.map(function(f){ return f.properties.wvk_id; }).slice(0, 300);
-    var hectomtrng = Math.floor(info.hectometerWaarde);
-    var gewensteAfstand = Math.round((info.hectometerWaarde - hectomtrng) * 100);
-
-    var hectoFilter = "wvk_id IN (" + wvkIds.join(",") + ") AND hectomtrng=" + hectomtrng;
-    var hectoUrl = nwbUrl + "&request=GetFeature&typeName=hectopunten&CQL_FILTER=" + encodeURIComponent(hectoFilter);
-    var hectoRes = await fetch(hectoUrl);
-    var hectoData = await hectoRes.json();
-    if(!hectoData.features || !hectoData.features.length) return null;
-
-    var kandidaten = hectoData.features;
-    if(info.zijde){
-      var metZijde = kandidaten.filter(function(f){ return f.properties.zijde && f.properties.zijde.toUpperCase().indexOf(info.zijde) === 0; });
-      if(metZijde.length) kandidaten = metZijde;
-    }
-    kandidaten.sort(function(a,b){
-      return Math.abs(a.properties.afstand - gewensteAfstand) - Math.abs(b.properties.afstand - gewensteAfstand);
+    var doel = info.hectometerWaarde;
+    var passend = wegvakData.features.filter(function(f){
+      var b = f.properties.beginkm, e = f.properties.eindkm;
+      if(b==null || e==null || !f.geometry) return false;
+      var laag = Math.min(b,e), hoog = Math.max(b,e);
+      return doel >= laag && doel <= hoog;
     });
-    var beste = kandidaten[0];
-    return { lat: beste.geometry.coordinates[1], lon: beste.geometry.coordinates[0] };
+    console.log("NWB -- aantal wegvakken met dit km-bereik:", passend.length);
+    if(!passend.length) return null;
+
+    var wegvak = passend[0];
+    var coords = wegvak.geometry.coordinates; // [[lon,lat], ...]
+    var b = wegvak.properties.beginkm, e = wegvak.properties.eindkm;
+    var fractie = (doel - b) / (e - b); // 0..1 vanaf beginkm naar eindkm (kan ook aflopend zijn)
+    fractie = Math.max(0, Math.min(1, fractie));
+    var index = Math.round(fractie * (coords.length - 1));
+    var punt = coords[index];
+    console.log("NWB resultaat -- wegvak", wegvak.properties.wvk_id, "fractie", fractie, "punt", punt);
+    return { lat: punt[1], lon: punt[0] };
   }
 
   function schoonAdresTekst(melding){
@@ -878,6 +883,7 @@
       // dat is een fundamenteel ander soort locatie dan een straatadres, en
       // moet dus vóór de normale straat-opschoning geprobeerd worden.
       var hectoInfo = herkenHectometerpaal(melding.tekst);
+      console.log("Hectometerpaal-herkenning:", JSON.stringify(hectoInfo));
       if(hectoInfo){
         try{
           var hectoPunt = await haalHectometerpuntOp(hectoInfo);
