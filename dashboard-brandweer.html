@@ -728,6 +728,70 @@
     return { lat: punt[1], lon: punt[0] };
   }
 
+  // Herkent een vaarweg-kilometer-verwijzing in de ruwe tekst, bv.
+  // "Neder-Rijn Links 882,2". Geeft null terug als er geen zo'n patroon in staat.
+  function herkenVaarwegLocatie(ruweTekst){
+    var match = String(ruweTekst||"").match(/([A-Z][a-zA-Z\u00e9\u00e8\u00ea-]+(?:\s[A-Z][a-zA-Z\u00e9\u00e8\u00ea-]+)*)\s+(Links|Rechts|L|R)\s+(\d{1,4})[,.](\d{1,2})\b/);
+    if(!match) return null;
+    return {
+      vaarwegNaam: match[1],
+      zijde: /^li|^l/i.test(match[2]) ? "L" : "R",
+      kmWaarde: parseFloat(match[3] + "." + match[4])
+    };
+  }
+
+  // Zoekt de coördinaten op langs een vaarweg via het Nationaal Wegen Bestand
+  // (NWB) - Vaarwegen van Rijkswaterstaat -- zelfde aanpak als bij de
+  // hectometerpalen op de weg: het juiste vaarwegvak vinden via zijn km-bereik
+  // en daarlangs interpoleren naar het juiste punt.
+  // Sommige Rijntakken in deze dataset gebruiken hun EIGEN lokale kilometrering
+  // (beginnend bij 0 op het Pannerdensche Kop-splitsingspunt), in plaats van de
+  // internationale Rijnkilometer die in P2000-meldingen wordt gebruikt. De
+  // Pannerdensche Kop ligt op internationale Rijnkilometer 867 -- dat is dus de
+  // omrekenfactor voor de Nederrijn/Lek/Pannerdensch Kanaal-tak.
+  var VAARWEG_KM_OFFSET = [
+    { patroon: /neder-?rijn|pannerdensch|^lek$/i, offset: 867 }
+  ];
+  function bepaalVaarwegOffset(vaarwegNaam){
+    for(var i=0; i<VAARWEG_KM_OFFSET.length; i++){
+      if(VAARWEG_KM_OFFSET[i].patroon.test(vaarwegNaam)) return VAARWEG_KM_OFFSET[i].offset;
+    }
+    return 0; // onbekende/overige vaarwegen: aannemen dat ze de internationale telling direct gebruiken
+  }
+
+  async function haalVaarwegPuntOp(info){
+    var nwbUrl = "https://geo.rijkswaterstaat.nl/services/ogc/gdr/nwb_vaarwegen/ows?service=WFS&version=2.0.0&outputFormat=json&srsName=EPSG:4326";
+    var naamFilter = "strToLowerCase(vrt_naam) LIKE '%" + info.vaarwegNaam.toLowerCase() + "%'";
+    var vakUrl = nwbUrl + "&request=GetFeature&typeName=vaarwegvakken&CQL_FILTER=" + encodeURIComponent(naamFilter);
+    console.log("NWB vaarweg -- URL:", vakUrl);
+    var vakRes = await fetch(vakUrl);
+    var vakData = await vakRes.json();
+    console.log("NWB vaarweg -- aantal vaarwegvakken gevonden:", vakData.features ? vakData.features.length : "(fout)");
+    if(!vakData.features || !vakData.features.length) return null;
+
+    var offset = bepaalVaarwegOffset(info.vaarwegNaam);
+    var doel = info.kmWaarde - offset;
+    console.log("NWB vaarweg -- omrekenfactor:", offset, "-> lokale km:", doel);
+    var passend = vakData.features.filter(function(f){
+      var b = f.properties.begkm, e = f.properties.endkm;
+      if(b==null || e==null || !f.geometry) return false;
+      var laag = Math.min(b,e), hoog = Math.max(b,e);
+      return doel >= laag && doel <= hoog;
+    });
+    console.log("NWB vaarweg -- aantal vakken met dit km-bereik:", passend.length);
+    if(!passend.length) return null;
+
+    var vak = passend[0];
+    var coords = vak.geometry.coordinates;
+    var b = vak.properties.begkm, e = vak.properties.endkm;
+    var fractie = (doel - b) / (e - b);
+    fractie = Math.max(0, Math.min(1, fractie));
+    var index = Math.round(fractie * (coords.length - 1));
+    var punt = coords[index];
+    console.log("NWB vaarweg resultaat -- vak", vak.properties.vwk_id, vak.properties.vrt_naam, "punt", punt);
+    return { lat: punt[1], lon: punt[0] };
+  }
+
   function schoonAdresTekst(melding){
     var tekst = String(melding.tekst||"").trim();
     var plaats = String(melding.plaats||"").trim();
@@ -891,6 +955,20 @@
             incidentLat = hectoPunt.lat; incidentLon = hectoPunt.lon;
           }
         }catch(e){ console.error("Hectometerpaal-opzoeking mislukt", e); }
+      }
+
+      // Daarna checken op een vaarweg-kilometer-verwijzing (bv. "Neder-Rijn Links 882,2")
+      if(incidentLat === undefined){
+        var vaarwegInfo = herkenVaarwegLocatie(melding.tekst);
+        console.log("Vaarweg-herkenning:", JSON.stringify(vaarwegInfo));
+        if(vaarwegInfo){
+          try{
+            var vaarwegPunt = await haalVaarwegPuntOp(vaarwegInfo);
+            if(vaarwegPunt){
+              incidentLat = vaarwegPunt.lat; incidentLon = vaarwegPunt.lon;
+            }
+          }catch(e){ console.error("Vaarweg-opzoeking mislukt", e); }
+        }
       }
 
       var adresInfo = null;
