@@ -561,14 +561,38 @@
 
   var LAATST_GETOONDE_P2000_ID = null;
 
-  // Voertuignummer-voorvoegsel -> post. 0790** is een reservevoertuig en kan
-  // voor elke van de 3 posten worden ingezet, dus die telt niet als een
-  // definitieve match -- bij UITSLUITEND zulke nummers tonen we de melding
-  // voor de zekerheid op alle 3 de dashboards.
+  // Capcode -> post. Dit is de meest betrouwbare methode (rechtstreeks uit de
+  // P2000-alarmering zelf), maar werkt alleen als de aanleverende koppeling
+  // deze codes ook daadwerkelijk meestuurt in het veld "capcodes".
+  var CAPCODE_NAAR_POST = {
+    "0901066": "post3", "0901062": "post3",   // Ede
+    "0900300": "post1", "0900307": "post1",   // Arnhem Noord
+    "0900350": "post2", "0900357": "post2"    // Arnhem Zuid
+  };
+
+  // Voertuignummer-voorvoegsel -> post. Terugval voor het geval een melding
+  // (nog) geen capcodes heeft. 0790** is een reservevoertuig en kan voor elke
+  // van de 3 posten worden ingezet, dus die telt niet als een definitieve match.
   var VOERTUIG_PREFIX_NAAR_POST = { "0727": "post3", "0736": "post1", "0737": "post2" };
 
-  function bepaalRelevantePostenVoorMelding(ruweTekst){
-    var nummers = String(ruweTekst||"").match(/\d{4,}/g) || [];
+  function bepaalRelevantePostenVoorMelding(melding){
+    // Stap 1 (meest betrouwbaar): capcodes, indien aanwezig
+    var capcodes = melding.capcodes;
+    if(Array.isArray(capcodes) && capcodes.length){
+      var relevantePostenViaCapcode = {};
+      var heeftCapcodeMatch = false;
+      capcodes.forEach(function(code){
+        var codeTekst = String(code).trim();
+        if(CAPCODE_NAAR_POST[codeTekst]){
+          relevantePostenViaCapcode[CAPCODE_NAAR_POST[codeTekst]] = true;
+          heeftCapcodeMatch = true;
+        }
+      });
+      if(heeftCapcodeMatch) return relevantePostenViaCapcode;
+    }
+
+    // Stap 2 (terugval): voertuignummer uit de vrije tekst halen
+    var nummers = String(melding.tekst||"").match(/\d{4,}/g) || [];
     var relevantePosten = {};
     var heeftDefinitieveMatch = false;
     nummers.forEach(function(nr){
@@ -590,7 +614,7 @@
 
       if(alles.length){
         var nieuwste = alles[0];
-        var relevantePosten = bepaalRelevantePostenVoorMelding(nieuwste.tekst);
+        var relevantePosten = bepaalRelevantePostenVoorMelding(nieuwste);
         var isRelevantVoorDezePost = relevantePosten === null || relevantePosten[POST_ID];
 
         if(LAATST_GETOONDE_P2000_ID === null){
@@ -666,14 +690,27 @@
     tekst = tekst.replace(/\s+/g, " ").trim();
     if(!tekst) tekst = String(melding.tekst||"").trim(); // val terug als alles per ongeluk was weggefilterd
 
-    // Kruising van 2 straten (bv. "Galvanistraat Marconistraat") herkennen: geef
-    // beide straatnamen apart terug, zodat de kaart straks allebei kan tekenen
-    // i.p.v. te moeten gokken naar één (mogelijk ver weg gelegen) kruispunt.
-    var straatSuffixen = /(straat|laan|weg|plein|kade|singel|dijk|hof|dreef|pad|steeg|gracht|plantsoen|markt|erf|baan)$/i;
+    // Kruising van 2 straten (bv. "Galvanistraat Marconistraat", of "Kramersgildeplein
+    // Lange Wal" met een tweewoordige straatnaam) herkennen: geef beide straatnamen
+    // apart terug, zodat de kaart straks allebei kan tekenen i.p.v. te moeten
+    // gokken naar één (mogelijk ver weg gelegen) kruispunt.
+    var straatSuffixen = /(straat|laan|weg|plein|kade|singel|dijk|hof|dreef|pad|steeg|gracht|plantsoen|markt|erf|baan|wal|hout|hoven)$/i;
+    var straatVoorvoegsels = ["lange","korte","grote","kleine","oude","nieuwe","hoge","lage"];
     var woorden = tekst.split(/\s+/);
-    for(var i=0; i<woorden.length-1; i++){
-      if(straatSuffixen.test(woorden[i]) && straatSuffixen.test(woorden[i+1])){
-        return {isKruising:true, straat1:woorden[i], straat2:woorden[i+1], plaats:plaats};
+    var suffixIndices = [];
+    woorden.forEach(function(w, i){ if(straatSuffixen.test(w)) suffixIndices.push(i); });
+
+    if(suffixIndices.length >= 2){
+      var idx2 = suffixIndices[suffixIndices.length-1];
+      var idx1 = suffixIndices[suffixIndices.length-2];
+      var straat2Start = idx1+1;
+      if(straatVoorvoegsels.indexOf((woorden[idx2-1]||"").toLowerCase()) !== -1) straat2Start = idx2-1;
+      if(straat2Start <= idx1+1){ // de 2 straten volgen direct op elkaar (evt. met 1 voorvoegsel)
+        var straat1Start = idx1;
+        if(idx1>0 && straatVoorvoegsels.indexOf(woorden[idx1-1].toLowerCase()) !== -1) straat1Start = idx1-1;
+        var straat1 = woorden.slice(straat1Start, idx1+1).join(" ");
+        var straat2 = woorden.slice(straat2Start, idx2+1).join(" ");
+        return {isKruising:true, straat1:straat1, straat2:straat2, plaats:plaats};
       }
     }
 
@@ -798,11 +835,14 @@
           // (bv. "Invacare B.V. Galvanistraat"), waardoor Nominatim de hele brij
           // niet als geheel herkent. Probeer dan alleen het laatste straatachtige
           // woord (+ een eventueel huisnummer erachter).
-          var straatSuffixen = /(straat|laan|weg|plein|kade|singel|dijk|hof|dreef|pad|steeg|gracht|plantsoen|markt|erf|baan)$/i;
+          var straatSuffixen = /(straat|laan|weg|plein|kade|singel|dijk|hof|dreef|pad|steeg|gracht|plantsoen|markt|erf|baan|wal|hout|hoven)$/i;
+          var straatVoorvoegsels = ["lange","korte","grote","kleine","oude","nieuwe","hoge","lage"];
           var woorden = adresInfo.zoekTekst.split(/[\s,]+/).filter(function(w){ return w && w.toLowerCase()!==adresInfo.plaats.toLowerCase(); });
           for(var wi=woorden.length-1; wi>=0; wi--){
             if(straatSuffixen.test(woorden[wi])){
-              var vanafStraat = woorden.slice(wi).join(" ") + ", " + adresInfo.plaats;
+              var startVanaf = wi;
+              if(wi>0 && straatVoorvoegsels.indexOf(woorden[wi-1].toLowerCase()) !== -1) startVanaf = wi-1;
+              var vanafStraat = woorden.slice(startVanaf).join(" ") + ", " + adresInfo.plaats;
               var terugvalRes = await fetch("https://nominatim.openstreetmap.org/search?format=json&countrycodes=nl&limit=1&q=" + encodeURIComponent(vanafStraat));
               geoData = await terugvalRes.json();
               break;
