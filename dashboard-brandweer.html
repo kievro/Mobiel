@@ -1038,9 +1038,12 @@
       var configP = sbSelect(DAG_URL, DAG_KEY_HEADERS, "kv_store?key=eq.config&select=value");
       var dagP = sbSelect(DAG_URL, DAG_KEY_HEADERS, "kv_store?key=eq.dag:"+POST_ID+":"+vandaag+"&select=value");
       var dienstenP = sbSelect(PLOEG_URL, PLOEG_KEY_HEADERS, "dashboard_open_diensten?select=*&order=datum.asc");
+      var eenMaandGeleden = new Date(Date.now() - 30*24*60*60*1000);
+      var eenMaandGeledenStr = eenMaandGeleden.getFullYear()+"-"+pad(eenMaandGeleden.getMonth()+1)+"-"+pad(eenMaandGeleden.getDate());
+      var datumFilter = "or(eind_datum.gte."+vandaag+",and(eind_datum.is.null,start_datum.gte."+eenMaandGeledenStr+"))";
       var PLAATSEN_PER_POST = { post1:["Arnhem","Westervoort"], post2:["Arnhem","Westervoort"], post3:["Ede"] };
       var plaatsenFilter = (PLAATSEN_PER_POST[POST_ID]||[]).map(function(p){ return "plaats.ilike."+p; }).join(",");
-      var wegP = sbSelect(DAG_URL, DAG_KEY_HEADERS, "wegafsluitingen?select=*&and=(or(eind_datum.gte."+vandaag+",eind_datum.is.null),or("+plaatsenFilter+"))&order=created_at.desc&limit=10");
+      var wegP = sbSelect(DAG_URL, DAG_KEY_HEADERS, "wegafsluitingen?select=*&and=("+datumFilter+",or("+plaatsenFilter+"))&order=created_at.desc&limit=10");
       var knmiP = sbSelect(DAG_URL, DAG_KEY_HEADERS, "knmi_waarschuwingen?select=*&provincie=eq.Gelderland");
       var agendaP = sbSelect(DAG_URL, DAG_KEY_HEADERS, "kazerne_agenda?select=*&post_id=eq."+POST_ID+"&order=start_tijd.asc");
       var weerP = fetch("https://api.open-meteo.com/v1/forecast?latitude="+coords.lat+"&longitude="+coords.lon+"&current=temperature_2m,weather_code&hourly=temperature_2m,weather_code,precipitation_probability&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=Europe%2FAmsterdam&forecast_days=1").then(function(r){ return r.json(); }).catch(function(){ return null; });
