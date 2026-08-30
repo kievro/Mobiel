@@ -123,6 +123,7 @@
 <script>
 (function(){
   "use strict";
+  var APP_VERSIE_DATUM = "29 augustus 2026"; // pas deze regel aan bij elke nieuwe versie die je installeert
 
   // Zelfde Supabase-projecten als PloegCompleet -- deze mobiele app is een
   // volledig apart bestand, maar praat met precies dezelfde gegevens.
@@ -293,6 +294,38 @@
     try{ var last = localStorage.getItem(LAST_USER_KEY); if(last && state.data && getMember(last, state.data)) state.pendingUserId = last; }catch(e){}
     state.loading = false;
     render();
+    initHerlaadOpAfstand();
+  }
+
+  // Op-afstand-herlaad: onthoudt bij het opstarten welk signaal er in de
+  // database staat, en checkt daarna elke 2 minuten of dat is veranderd. Wordt
+  // dit bestand vervangen door een nieuwe versie, verander dan het signaal met
+  // één simpele SQL-regel (in het Dagstaat-project) -- dan herladen alle open
+  // exemplaren van de app zichzelf vanzelf, zonder dat iemand fysiek de cache
+  // hoeft te wissen. Dit werkt los van welke vorm van browser-caching dan ook,
+  // want het is een actieve databasecontrole, geen bestandscache.
+  var HUIDIG_MOBIEL_HERLAAD_SIGNAAL = null;
+  async function initHerlaadOpAfstand(){
+    try{
+      var res = await fetch(DAG_URL + "/rest/v1/kv_store?key=eq.ploegcompleet_mobiel_herlaad_signaal&select=value", {
+        headers: {"apikey":DAG_KEY, "Authorization":"Bearer "+DAG_KEY}
+      });
+      var data = await res.json();
+      HUIDIG_MOBIEL_HERLAAD_SIGNAAL = data[0] && data[0].value;
+    }catch(e){ /* geen signaal gevonden -- werkt dan gewoon nog niet, geen probleem */ }
+
+    setInterval(async function(){
+      try{
+        var res = await fetch(DAG_URL + "/rest/v1/kv_store?key=eq.ploegcompleet_mobiel_herlaad_signaal&select=value", {
+          headers: {"apikey":DAG_KEY, "Authorization":"Bearer "+DAG_KEY}
+        });
+        var data = await res.json();
+        var nieuwSignaal = data[0] && data[0].value;
+        if(nieuwSignaal && HUIDIG_MOBIEL_HERLAAD_SIGNAAL && nieuwSignaal !== HUIDIG_MOBIEL_HERLAAD_SIGNAAL){
+          location.reload();
+        }
+      }catch(e){ /* volgende poging over 2 minuten */ }
+    }, 120000);
   }
   function showToast(msg){ state.toast = msg; clearTimeout(toastTimer); toastTimer = setTimeout(function(){ state.toast=null; render(); }, 2600); render(); }
 
@@ -651,6 +684,7 @@
           + '</div>';
       }).join("");
     }
+    html += '<div style="text-align:center;font-size:11px;color:var(--text-muted);margin-top:20px;">PloegCompleet Mobiel \u2014 versie van '+escapeHtml(APP_VERSIE_DATUM)+'</div>';
     return html;
   }
   function shiftForm(){
