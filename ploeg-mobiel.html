@@ -174,7 +174,7 @@
     if(dg.aanstelling && dg.aanstelling!=="iedereen") parts.push("Alleen " + (dg.aanstelling==="beroeps"?"beroeps":"vrijwilligers"));
     return parts;
   }
-  function formatDateShort(dateStr){ return parseDateOnly(dateStr).toLocaleDateString("nl-NL", {weekday:"short", day:"numeric", month:"short"}); }
+  function formatDateShort(dateStr){ return parseDateOnly(dateStr).toLocaleDateString("nl-NL", {weekday:"long", day:"numeric", month:"short"}); }
   function formatDateTime(dtStr){ return new Date(dtStr).toLocaleString("nl-NL", {weekday:"short", day:"numeric", month:"short", hour:"2-digit", minute:"2-digit"}); }
   function urgencyOf(dateStr){
     var today = new Date(); today.setHours(0,0,0,0);
@@ -380,6 +380,10 @@
     return false;
   };
   App.switchUser = function(){ state.currentUserId = null; state.pendingUserId = null; state.pushGevraagd = false; render(); };
+  App.ververGegevens = function(){
+    showToast("Bezig met verversen\u2026");
+    refreshAllData().then(function(){ showToast("Bijgewerkt"); }).catch(function(){ showToast("Verversen mislukt \u2013 controleer de verbinding."); });
+  };
   App.toggleBell = function(){
     if(!state.bellOpen){
       var unreadIds = state.data.meldingen.filter(function(m){ return !m.gelezen; }).map(function(m){ return m.id; });
@@ -442,7 +446,14 @@
     var notitie = f.notitie.value.trim();
     if(isSpoed) notitie = notitie ? ("Spoed \u2013 " + notitie) : "Spoedmelding";
     var type = f.type.value, newId = uid("s");
-    var slots = buildSlots(type, state.data.instellingen.tijden).map(function(sl){ return {id:sl.slotId, dienst_id:newId, label:sl.label}; });
+    var aantalMensen = Math.max(1, Math.min(10, parseInt(f.aantalMensen.value, 10) || 1));
+    var basisSlots = buildSlots(type, state.data.instellingen.tijden);
+    var slots = [];
+    for(var n=0; n<aantalMensen; n++){
+      basisSlots.forEach(function(sl){
+        slots.push({id:uid("sl"), dienst_id:newId, label: aantalMensen>1 ? sl.label+" ("+(n+1)+"/"+aantalMensen+")" : sl.label});
+      });
+    }
     var meldingsontvangers = Array.prototype.slice.call(f.querySelectorAll('input[name="meldingsontvanger"]:checked')).map(function(el){ return el.value; });
     if(!meldingsontvangers.length) meldingsontvangers = [state.currentUserId];
     runAction(async function(){
@@ -528,11 +539,14 @@
     return '<div class="slot"><div class="slot-label">'+escapeHtml(slot.label)+'</div>'+buttonsOrMsg
       + '<div class="counts-line">'+counts.ja+' ja &middot; '+counts.kan_wel+' kan wel &middot; '+counts.nee+' nee</div></div>';
   }
+  var TYPE_LABEL = { heel:"24 uurs", dag:"Dag", avond:"Nacht", split:"24 uurs in delen" };
   function shiftCard(shift, me, data){
     var urgency = urgencyOf(shift.datum);
     var opengeklapt = state.expandedShiftId === shift.id;
     var aantalOpen = shift.slots.filter(function(sl){ return !getSlotAssignment(sl.slotId,data); }).length;
-    var statusTekst = aantalOpen===0 ? "Volledig ingevuld" : (aantalOpen===shift.slots.length ? aantalOpen+" plek"+(aantalOpen===1?"":"ken")+" open" : aantalOpen+" van "+shift.slots.length+" plekken open");
+    var typeLabel = TYPE_LABEL[shift.type] || "";
+    var vulStatus = aantalOpen===0 ? "Volledig ingevuld" : (aantalOpen===shift.slots.length ? aantalOpen+" plek"+(aantalOpen===1?"":"ken")+" open" : aantalOpen+" van "+shift.slots.length+" plekken open");
+    var statusTekst = typeLabel ? (typeLabel + " \u00b7 " + vulStatus) : vulStatus;
 
     var compacteKop = '<div class="card-compact-kop" onclick="App.toggleExpand(\''+shift.id+'\')">'
       + '<div class="tag-row">'
@@ -659,6 +673,7 @@
       + '</div>'
       + '<div class="field"><label>Type</label><select name="type"><option value="heel">Hele 24-uursdienst</option><option value="split">Dag + avond/nacht apart</option><option value="dag">Alleen dag</option><option value="avond">Alleen avond/nacht</option></select>'
       + '<div style="font-size:12px;color:var(--text-muted);margin-top:4px;">Standaardtijden: '+esc(tijden.ochtend)+'\u2013'+esc(tijden.avond)+'</div></div>'
+      + '<div class="field"><label>Aantal mensen nodig (per tijdvak)</label><input type="number" name="aantalMensen" min="1" max="10" value="1" /></div>'
       + meldingsontvangersHtml
       + '<div class="field"><label>Notitie (optioneel)</label><textarea name="notitie"></textarea></div>'
       + '<button type="submit" class="btn btn-primary">Dienst aanmaken</button>'
@@ -674,10 +689,10 @@
     var kanBeheren = kanDienstenBeheren(me.rol);
     var unread = data.meldingen.filter(function(m){ return !m.gelezen; }).length;
 
-    var top = '<div class="topbar"><div class="brand">PloegCompleet<small>'+escapeHtml(me.naam)+'</small></div><div style="display:flex;gap:8px;">'
+    var top = '<div class="topbar"><div class="brand">PloegCompleet<small style="cursor:pointer;" onclick="App.switchUser()" title="Andere gebruiker inloggen">'+escapeHtml(me.naam)+' \u270E</small></div><div style="display:flex;gap:8px;">'
       + (kanBeheren ? '<button class="icon-btn" title="Meldingen" onclick="App.toggleBell()">\uD83D\uDD14'+(unread?'<span class="bel-badge">'+unread+'</span>':'')+'</button>' : '')
       + '<button class="icon-btn" onclick="App.testPush()" title="Pushmeldingen (opnieuw) inschakelen">\u2699\uFE0F</button>'
-      + '<button class="icon-btn" onclick="App.switchUser()" title="Wisselen">\u21BB</button></div></div>'
+      + '<button class="icon-btn" onclick="App.ververGegevens()" title="Gegevens verversen">\u21BB</button></div></div>'
       + (state.bellOpen ? '<div class="melding-backdrop" onclick="App.toggleBell()"></div>' + renderMeldingenDropdown(data) : '');
     var body;
     if(state.showForm && kanBeheren) body = shiftForm();
@@ -721,9 +736,20 @@
     root.innerHTML = renderMain();
   }
 
-  setInterval(function(){ if(!state.loading && !state.loadError && state.currentUserId && !state.showForm){ render(); } }, 60000);
+  setInterval(function(){
+    if(!state.loading && !state.loadError && state.currentUserId && !state.showForm){
+      refreshAllData().then(render).catch(function(){ render(); });
+    }
+  }, 20000);
   if("serviceWorker" in navigator){
     navigator.serviceWorker.register("sw.js").catch(function(){ /* PWA-installatie is een bonus, geen vereiste */ });
+    // Komt er een pushmelding binnen terwijl de app al open staat? Dan meteen
+    // verse gegevens ophalen, in plaats van te wachten op de volgende timer-beurt.
+    navigator.serviceWorker.addEventListener("message", function(event){
+      if(state.currentUserId && !state.loading){
+        refreshAllData().then(render).catch(function(){});
+      }
+    });
   }
   loadInitial();
 })();
