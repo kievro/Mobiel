@@ -489,11 +489,12 @@
     }
     var meldingsontvangers = Array.prototype.slice.call(f.querySelectorAll('input[name="meldingsontvanger"]:checked')).map(function(el){ return el.value; });
     if(!meldingsontvangers.length) meldingsontvangers = [state.currentUserId];
+    var autoToewijzen = !!(f.autoToewijzen && f.autoToewijzen.checked);
     runAction(async function(){
       var r1 = await sbPloeg.from("diensten").insert({
         id:newId, post_id:post, datum:datumVal, type:type, deadline:deadlineIso, notitie:notitie,
         melding_moment:meldingMoment, doelgroep_specialisme:"alle", doelgroep_aanstelling:"iedereen", is_spoed:isSpoed,
-        meldingsontvangers:meldingsontvangers,
+        meldingsontvangers:meldingsontvangers, auto_toewijzen:autoToewijzen,
         aangemaakt_door:getMemberName(state.currentUserId, state.data), aangemaakt_op:new Date().toISOString()
       });
       if(r1.error) throw r1.error;
@@ -708,6 +709,7 @@
       + '<div class="field"><label>Type</label><select name="type"><option value="heel">Hele 24-uursdienst</option><option value="split">Dag + avond/nacht apart</option><option value="dag">Alleen dag</option><option value="avond">Alleen avond/nacht</option></select>'
       + '<div style="font-size:12px;color:var(--text-muted);margin-top:4px;">Standaardtijden: '+esc(tijden.ochtend)+'\u2013'+esc(tijden.avond)+'</div></div>'
       + '<div class="field"><label>Aantal mensen nodig (per tijdvak)</label><input type="number" name="aantalMensen" min="1" max="10" value="1" /></div>'
+      + '<div class="field-checkbox"><input type="checkbox" name="autoToewijzen" id="autoToewijzenCheck" /><label for="autoToewijzenCheck">Automatisch toewijzen zodra de reactietermijn sluit</label></div>'
       + meldingsontvangersHtml
       + '<div class="field"><label>Notitie (optioneel)</label><textarea name="notitie"></textarea></div>'
       + '<button type="submit" class="btn btn-primary">Dienst aanmaken</button>'
