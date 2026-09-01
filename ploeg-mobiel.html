@@ -361,7 +361,12 @@
       var toestemming = await Notification.requestPermission();
       if(toestemming !== "granted"){ showToast("Meldingen: toestemming niet gegeven ("+toestemming+")."); return; }
       var sub = await reg.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY) });
-      var res = await sbPloeg.from("push_subscriptions").upsert({ lid_id: state.currentUserId, subscriptie: sub.toJSON(), bijgewerkt_op: new Date().toISOString() }, {onConflict:"lid_id,endpoint"});
+      var subJson = sub.toJSON();
+      // Dit fysieke toestel-eindpunt mag maar bij één persoon tegelijk geregistreerd
+      // staan -- anders blijft een oude naam (van vóór het wisselen van gebruiker
+      // op ditzelfde toestel) ook meldingen ontvangen die niet voor hem/haar zijn.
+      await sbPloeg.from("push_subscriptions").delete().eq("subscriptie->>endpoint", subJson.endpoint).neq("lid_id", state.currentUserId);
+      var res = await sbPloeg.from("push_subscriptions").upsert({ lid_id: state.currentUserId, subscriptie: subJson, bijgewerkt_op: new Date().toISOString() }, {onConflict:"lid_id,endpoint"});
       if(res.error){ showToast("Meldingen: opslaan mislukt \u2013 "+res.error.message); return; }
       showToast("Meldingen ingeschakeld \u2713");
     }catch(e){ showToast("Meldingen: instellen mislukt \u2013 "+(e&&e.message?e.message:e)); }
