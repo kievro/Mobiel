@@ -576,6 +576,18 @@
       + '<div class="counts-line">'+counts.ja+' ja &middot; '+counts.kan_wel+' kan wel &middot; '+counts.nee+' nee</div></div>';
   }
   var TYPE_LABEL = { heel:"24 uurs", dag:"Dag", avond:"Nacht", split:"24 uurs in delen" };
+  var ANTWOORD_KLEUR = {ja:"#7EC8E3", kan_wel:"var(--amber)", nee:"var(--text-muted)"};
+  function eigenReactieBadge(shift, me, data){
+    var mijnReacties = shift.slots.map(function(sl){
+      return data.reacties.filter(function(r){ return r.slotId===sl.slotId && r.lidId===me.id; })[0];
+    }).filter(Boolean);
+    if(!mijnReacties.length) return "";
+    var eersteAntwoord = mijnReacties[0].antwoord;
+    var allemaalGelijk = mijnReacties.every(function(r){ return r.antwoord===eersteAntwoord; });
+    var tekst = allemaalGelijk ? "Jij: " + ANTWOORD_LABEL[eersteAntwoord] : "Jij hebt gereageerd";
+    var kleur = allemaalGelijk ? (ANTWOORD_KLEUR[eersteAntwoord]||"var(--text-muted)") : "var(--text-muted)";
+    return '<span class="urgent-badge" style="background:rgba(255,255,255,0.06);color:'+kleur+';border:1px solid '+kleur+';">\u2713 '+tekst+'</span>';
+  }
   function shiftCard(shift, me, data){
     var urgency = urgencyOf(shift.datum);
     var opengeklapt = state.expandedShiftId === shift.id;
@@ -592,6 +604,7 @@
         + (urgency==="vandaag" ? '<span class="urgent-badge">Spoed</span>' : '')
         + (deadlineMaarOpenNog ? '<span class="urgent-badge" style="background:rgba(240,169,58,0.15);color:var(--amber);border:1px solid var(--amber);">\u23F0 Verlopen</span>' : '')
         + (shift.isSpoed ? '<span class="urgent-badge">\u26A1</span>' : '')
+        + eigenReactieBadge(shift, me, data)
       + '</div>'
       + '<div class="card-compact-rechts">'
         + '<span class="date-big" style="font-size:16px;">'+formatDateShort(shift.datum)+'</span>'
