@@ -250,8 +250,8 @@
         aangemaaktDoor:d.aangemaakt_door||"", meldingsontvangers:d.meldingsontvangers||[], meldingMoment:d.melding_moment,
         slots: (slotsByDienst[d.id] || []).slice() };
     });
-    var reacties = (reactiesRes.data||[]).map(function(r){ return {slotId:r.slot_id, lidId:r.lid_id, antwoord:r.antwoord, tijdstip:r.tijdstip}; });
-    var toewijzingen = (toewijzingenRes.data||[]).map(function(t){ return {slotId:t.slot_id, lidId:t.lid_id, methode:t.methode}; });
+    var reacties = (reactiesRes.data||[]).map(function(r){ return {slotId:r.slot_id, lidId:r.lid_id, antwoord:r.antwoord, tijdstip:r.tijdstip, uitkomst:r.uitkomst}; });
+    var toewijzingen = (toewijzingenRes.data||[]).map(function(t){ return {slotId:t.slot_id, lidId:t.lid_id, methode:t.methode, toegewezenOp:t.toegewezen_op}; });
     var meldingen = (meldingenRes.data||[]).map(function(m){ return {id:m.id, tekst:m.tekst, tijdstip:m.tijdstip, gelezen:m.gelezen, bron:m.bron, relevantVoor:m.relevant_voor||[]}; });
     var inst = instellingenRes.data || {};
     var instellingen = { tijden:{ochtend: inst.tijden_ochtend||"08:00", avond: inst.tijden_avond||"18:00"} };
@@ -557,7 +557,9 @@
     if(assignment){
       var lid = getMember(assignment.lidId, data), mine = assignment.lidId === me.id;
       return '<div class="slot"><div class="slot-label">'+escapeHtml(slot.label)+'</div>'
-        + '<div class="assigned-banner '+(mine?'mine':'')+'">'+(mine ? '\uD83C\uDF89 Toegewezen aan jou!' : 'Toegewezen aan '+escapeHtml(lid?lid.naam:'onbekend'))+'</div></div>';
+        + '<div class="assigned-banner '+(mine?'mine':'')+'">'+(mine ? '\uD83C\uDF89 Toegewezen aan jou!' : 'Ingevuld door '+escapeHtml(lid?lid.naam:'onbekend'))
+        + (assignment.toegewezenOp ? ' <span style="opacity:0.75;font-weight:400;">('+formatDateTime(assignment.toegewezenOp)+')</span>' : '')
+        + '</div></div>';
     }
     var deadlinePassed = remainingMs(shift.deadline) <= 0;
     var mineReactie = data.reacties.filter(function(r){ return r.slotId===slot.slotId && r.lidId===me.id; })[0];
@@ -581,11 +583,14 @@
     var typeLabel = TYPE_LABEL[shift.type] || "";
     var vulStatus = aantalOpen===0 ? "Volledig ingevuld" : (aantalOpen===shift.slots.length ? aantalOpen+" plek"+(aantalOpen===1?"":"ken")+" open" : aantalOpen+" van "+shift.slots.length+" plekken open");
     var statusTekst = typeLabel ? (typeLabel + " \u00b7 " + vulStatus) : vulStatus;
+    var deadlineMaarOpenNog = remainingMs(shift.deadline) <= 0 && aantalOpen > 0;
+    var kaartStijl = deadlineMaarOpenNog ? ' style="border-color:var(--amber);border-width:2px;"' : '';
 
     var compacteKop = '<div class="card-compact-kop" onclick="App.toggleExpand(\''+shift.id+'\')">'
       + '<div class="tag-row">'
         + '<span class="post-tag">'+escapeHtml(postNaam(shift.post))+'</span>'
         + (urgency==="vandaag" ? '<span class="urgent-badge">Spoed</span>' : '')
+        + (deadlineMaarOpenNog ? '<span class="urgent-badge" style="background:rgba(240,169,58,0.15);color:var(--amber);border:1px solid var(--amber);">\u23F0 Verlopen</span>' : '')
         + (shift.isSpoed ? '<span class="urgent-badge">\u26A1</span>' : '')
       + '</div>'
       + '<div class="card-compact-rechts">'
@@ -595,11 +600,11 @@
       + '<span class="chevron">'+(opengeklapt?'\u25B2':'\u25BC')+'</span>'
       + '</div>';
 
-    if(!opengeklapt) return '<div class="card card-klein">'+compacteKop+'</div>';
+    if(!opengeklapt) return '<div class="card card-klein"'+kaartStijl+'>'+compacteKop+'</div>';
 
     var slotsHtml = shift.slots.map(function(slot){ return slotBlock(slot, shift, me, data); }).join("");
     var dgTags = doelgroepLabel(shift).map(function(t){ return '<span class="doelgroep-tag">'+escapeHtml(t)+'</span>'; }).join("");
-    return '<div class="card">'+compacteKop
+    return '<div class="card"'+kaartStijl+'>'+compacteKop
       + (dgTags ? '<div class="tag-row" style="margin-top:6px;">'+dgTags+'</div>' : '')
       + (shift.aangemaaktDoor ? '<div class="meta-line">Gemeld door '+escapeHtml(shift.aangemaaktDoor)+'</div>' : '')
       + (shift.notitie ? '<div class="notitie">'+escapeHtml(shift.notitie)+'</div>' : '')
@@ -670,18 +675,38 @@
   };
 
   function renderMijnView(me, data){
-    var mine = data.toewijzingen.filter(function(t){ return t.lidId===me.id; }).map(function(t){ return {toewijzing:t, shift:shiftOfSlot(t.slotId,data)}; })
-      .filter(function(x){ return x.shift; }).sort(function(a,b){ return parseDateOnly(b.shift.datum)-parseDateOnly(a.shift.datum); });
+    var toegewezenItems = data.toewijzingen.filter(function(t){ return t.lidId===me.id; }).map(function(t){
+      var shift = shiftOfSlot(t.slotId, data);
+      return shift ? {soort:"toegewezen", datum:shift.datum, shift:shift, slotId:t.slotId, tijdstip:t.toegewezenOp} : null;
+    }).filter(Boolean);
+
+    var nietToegewezenItems = data.reacties.filter(function(r){ return r.lidId===me.id && r.antwoord==="ja" && r.uitkomst==="niet_toegewezen"; }).map(function(r){
+      var shift = shiftOfSlot(r.slotId, data);
+      return shift ? {soort:"niet_toegewezen", datum:shift.datum, shift:shift, slotId:r.slotId, tijdstip:r.tijdstip} : null;
+    }).filter(Boolean);
+
+    var alleItems = toegewezenItems.concat(nietToegewezenItems).sort(function(a,b){ return parseDateOnly(b.datum)-parseDateOnly(a.datum); });
+
     var count = computeShiftCounts(me.id, data);
-    var html = '<div class="stat-card"><div class="stat-big">'+count+'</div><div class="stat-label">diensten gedraaid dit jaar</div></div>';
-    if(!mine.length){ html += '<div class="empty">Nog geen diensten toegewezen gekregen.</div>'; }
+    var html = '<div style="display:flex;gap:10px;margin-bottom:16px;">'
+      + '<div class="stat-card" style="flex:1;"><div class="stat-big">'+count+'</div><div class="stat-label">toegewezen dit jaar</div></div>'
+      + '<div class="stat-card" style="flex:1;"><div class="stat-big" style="color:var(--amber);">'+nietToegewezenItems.length+'</div><div class="stat-label">niet toegewezen</div></div>'
+      + '</div>';
+
+    if(!alleItems.length){ html += '<div class="empty">Nog geen diensten toegewezen gekregen of gemist.</div>'; }
     else{
-      html += mine.map(function(x){
-        var slot = x.shift.slots.filter(function(sl){return sl.slotId===x.toewijzing.slotId;})[0];
-        var toekomstig = !isVerstreken(x.shift);
-        return '<div class="list-item"><div class="list-item-top"><span class="post-tag">'+escapeHtml(postNaam(x.shift.post))+'</span><span class="date-big">'+formatDateShort(x.shift.datum)+'</span></div>'
+      html += alleItems.map(function(x){
+        var slot = x.shift.slots.filter(function(sl){return sl.slotId===x.slotId;})[0];
+        var isToegewezen = x.soort==="toegewezen";
+        var kleurStijl = isToegewezen ? 'border-left:4px solid var(--lime);' : 'border-left:4px solid var(--amber);opacity:0.85;';
+        var statusLabel = isToegewezen
+          ? '<span style="color:var(--lime);font-size:12px;font-weight:600;">\u2713 Toegewezen'+(x.tijdstip?' \u00b7 '+formatDateTime(x.tijdstip):'')+'</span>'
+          : '<span style="color:var(--amber);font-size:12px;font-weight:600;">\u2717 Niet toegewezen \u2014 naar een ander gegaan</span>';
+        var toekomstig = isToegewezen && !isVerstreken(x.shift);
+        return '<div class="list-item" style="'+kleurStijl+'"><div class="list-item-top"><span class="post-tag">'+escapeHtml(postNaam(x.shift.post))+'</span><span class="date-big">'+formatDateShort(x.shift.datum)+'</span></div>'
           + '<div style="margin-top:6px;font-size:13.5px;color:var(--text-muted);">'+(slot?escapeHtml(slot.label):'')+'</div>'
-          + (toekomstig ? '<button class="small-btn" style="margin-top:8px;" onclick="App.exportNaarAgenda(\''+x.shift.id+'\',\''+x.toewijzing.slotId+'\')">\uD83D\uDCC5 Voeg toe aan agenda</button>' : '')
+          + '<div style="margin-top:4px;">'+statusLabel+'</div>'
+          + (toekomstig ? '<button class="small-btn" style="margin-top:8px;" onclick="App.exportNaarAgenda(\''+x.shift.id+'\',\''+x.slotId+'\')">\uD83D\uDCC5 Voeg toe aan agenda</button>' : '')
           + '</div>';
       }).join("");
     }
