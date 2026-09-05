@@ -124,6 +124,12 @@
   var DAG_KEY = "sb_publishable_Pb0fFfxZQggKnFCtJYMH9A_avw0GaPn";
   var DAG_KEY_HEADERS = {"apikey":DAG_KEY,"Authorization":"Bearer "+DAG_KEY};
   var supa = window.supabase.createClient(DAG_URL, DAG_KEY);
+  // Houdt de losse headers (gebruikt door sbSelect) altijd synchroon met de
+  // sessie die de bibliotheek zelf bijhoudt -- ook bij een automatische
+  // verversing op de achtergrond, ongeacht hoe lang de app open blijft staan.
+  supa.auth.onAuthStateChange(function(_event, session){
+    if(session && session.access_token) DAG_KEY_HEADERS.Authorization = "Bearer " + session.access_token;
+  });
   var POST_NAMEN = {post1:"Arnhem Noord", post2:"Arnhem Zuid", post3:"Ede Stad"};
 
   async function sbSelect(path){
@@ -379,9 +385,17 @@
 
       var gekozenPersoon = alreadyId && loginState.personen.filter(function(p){ return p.id===alreadyId; })[0];
       if(gekozenPersoon){
-        document.getElementById("ingelogdAls").textContent = gekozenPersoon.naam;
-        startApp();
-        return;
+        // De Supabase-bibliotheek zelf bewaart en ververst de sessie automatisch
+        // (in localStorage) -- we controleren hier alleen of die nog geldig is,
+        // in plaats van authenticatie zomaar over te slaan.
+        var { data: sessieData } = await supa.auth.getSession();
+        if(sessieData && sessieData.session){
+          DAG_KEY_HEADERS.Authorization = "Bearer " + sessieData.session.access_token;
+          document.getElementById("ingelogdAls").textContent = gekozenPersoon.naam;
+          startApp();
+          return;
+        }
+        try{ localStorage.removeItem(INGELOGD_KEY); }catch(e){}
       }
       toonNaamLijst("");
     }catch(e){
@@ -403,9 +417,21 @@
     var pin = document.getElementById("pinInvoer").value.trim();
     var foutEl = document.getElementById("pinFout");
     try{
-      var { data: res, error } = await supa.rpc("verify_pin", {p_persoon_id: loginState.gekozenId, p_pin: pin});
-      if(error) throw error;
+      var loginRes = await fetch(DAG_URL + "/functions/v1/login-pin", {
+        method: "POST",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({persoonId: loginState.gekozenId, pin: pin})
+      });
+      var res = await loginRes.json();
       if(res && res.ok){
+        // Nieuw: de echte, door Supabase afgegeven sessie instellen -- vanaf
+        // nu herkent de database wie er daadwerkelijk is ingelogd. Zowel op de
+        // supa-client zelf, als op de losse headers die sbSelect gebruikt.
+        if(res.access_token && res.refresh_token){
+          try{ await supa.auth.setSession({access_token: res.access_token, refresh_token: res.refresh_token}); }
+          catch(e){ console.error("Sessie instellen mislukt (app werkt nog wel door):", e); }
+          DAG_KEY_HEADERS.Authorization = "Bearer " + res.access_token;
+        }
         if(res.moetWijzigen){
           document.getElementById("loginPinStap").classList.add("hidden");
           document.getElementById("loginNieuwPinStap").classList.remove("hidden");
