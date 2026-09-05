@@ -379,10 +379,17 @@
     evt.preventDefault();
     var pin = evt.target.pin.value.trim();
     try{
-      var res = await sbPloeg.rpc("verify_pin", {p_id: state.pendingUserId, p_pin: pin});
-      if(res.error) throw res.error;
-      var uitkomst = res.data;
+      var loginRes = await fetch(PLOEG_URL + "/functions/v1/login-pin", {
+        method: "POST",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({id: state.pendingUserId, pin: pin})
+      });
+      var uitkomst = await loginRes.json();
       if(uitkomst && uitkomst.ok){
+        if(uitkomst.access_token && uitkomst.refresh_token){
+          try{ await sbPloeg.auth.setSession({access_token: uitkomst.access_token, refresh_token: uitkomst.refresh_token}); }
+          catch(e){ console.error("Sessie instellen mislukt (app werkt nog wel door):", e); }
+        }
         if(uitkomst.moetWijzigen){
           state.loginError = null;
           state.moetPincodeWijzigen = true;
@@ -471,6 +478,12 @@
   App.saveShift = function(evt){
     evt.preventDefault();
     var f = evt.target;
+    var submitBtn = f.querySelector('button[type="submit"]');
+    if(submitBtn){
+      if(submitBtn.disabled) return;
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Bezig met opslaan…';
+    }
     var post = f.post.value, isSpoed = !!(f.spoed && f.spoed.checked);
     var datumVal, deadlineIso, meldingMoment;
     if(isSpoed){
