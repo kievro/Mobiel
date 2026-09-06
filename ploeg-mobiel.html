@@ -784,7 +784,7 @@
     var top = '<div class="topbar"><div class="brand">PloegCompleet<small style="cursor:pointer;" onclick="App.switchUser()" title="Andere gebruiker inloggen">'+escapeHtml(me.naam)+' \u270E</small></div><div style="display:flex;gap:8px;">'
       + (kanBeheren ? '<button class="icon-btn" title="Meldingen" onclick="App.toggleBell()">\uD83D\uDD14'+(unread?'<span class="bel-badge">'+unread+'</span>':'')+'</button>' : '')
       + '<button class="icon-btn" onclick="App.testPush()" title="Pushmeldingen (opnieuw) inschakelen">\u2699\uFE0F</button>'
-      + '<a class="icon-btn" href="./start-mobiel.html" title="Terug naar overzicht" style="text-decoration:none;display:inline-flex;align-items:center;justify-content:center;">\u2302</a>'
+      + '<a class="icon-btn" href="./index.html" title="Terug naar overzicht" style="text-decoration:none;display:inline-flex;align-items:center;justify-content:center;">\u2302</a>'
       + '<button class="icon-btn" onclick="App.ververGegevens()" title="Gegevens verversen">\u21BB</button></div></div>'
       + (state.bellOpen ? '<div class="melding-backdrop" onclick="App.toggleBell()"></div>' + renderMeldingenDropdown(data) : '');
     var body;
