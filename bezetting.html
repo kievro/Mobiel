@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Bezetting — Brandweer Gelderland Midden</title>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --bg:#12161B; --surface:#1B2129; --surface-2:#232B34; --border:#2E3843;
+    --text:#EDEFF1; --text-muted:#8A96A3;
+    --red:#E33629; --red-dim:#3A1613; --lime:#D7E100; --amber:#F0A93A; --blue-grey:#5B7083; --green:#4CAF7D;
+    --font-display:'Barlow Condensed',Arial,sans-serif; --font-body:'Open Sans',Arial,sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:var(--font-body);}
+  h1,h2,h3{font-family:var(--font-display);margin:0;}
+  button{font-family:inherit;cursor:pointer;}
+  .hidden{display:none !important;}
+  .naam-item{padding:10px 14px;background:var(--surface-2);border:1px solid var(--border);border-radius:6px;margin-top:6px;cursor:pointer;font-size:14px;color:var(--text);}
+  .naam-item:hover{border-color:var(--red);}
+
+  #toegangsScherm{min-height:100vh;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:14px;}
+  .brand{text-align:center;}
+  .brand b{font-family:var(--font-display);font-weight:700;font-size:26px;letter-spacing:0.04em;text-transform:uppercase;}
+  .brand small{display:block;font-family:var(--font-body);font-weight:600;font-size:11px;letter-spacing:0.08em;color:var(--text-muted);text-transform:uppercase;margin-top:6px;}
+  .chevron-divider{height:5px;width:160px;margin:14px auto;background:repeating-linear-gradient(45deg,var(--red) 0 9px,var(--lime) 9px 18px);border-radius:3px;}
+  input{background:var(--surface-2);border:1px solid var(--border);color:var(--text);padding:10px 12px;border-radius:8px;font-size:15px;}
+  .btn{font-family:var(--font-display);font-weight:700;text-transform:uppercase;letter-spacing:0.03em;padding:10px 20px;border-radius:8px;border:1px solid var(--border);background:var(--surface-2);color:var(--text);font-size:14px;}
+  .btn-primary{background:var(--red);border-color:var(--red);color:#fff;}
+  .btn-ghost{background:transparent;}
+
+  #app{max-width:1400px;margin:0 auto;padding:24px 28px 60px;}
+  .topbar{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:14px;margin-bottom:22px;}
+  .topbar h1{font-size:26px;text-transform:uppercase;letter-spacing:0.03em;}
+  .topbar .sub{font-size:13px;color:var(--text-muted);margin-top:2px;}
+  .upload-box{background:var(--surface);border:1px dashed var(--border);border-radius:12px;padding:16px 20px;margin-bottom:26px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;}
+  .upload-box p{margin:0;font-size:13px;color:var(--text-muted);flex:1;min-width:220px;}
+  #uploadStatus{font-size:13px;color:var(--text-muted);}
+
+  .legenda{display:flex;gap:18px;flex-wrap:wrap;margin-bottom:22px;font-size:12.5px;color:var(--text-muted);}
+  .legenda span{display:inline-flex;align-items:center;gap:6px;}
+  .legenda i{width:12px;height:12px;border-radius:3px;display:inline-block;}
+  .periode-kiezer{display:flex;align-items:center;gap:10px;margin-bottom:18px;font-size:13px;color:var(--text-muted);}
+  .periode-kiezer select, .periode-kiezer input[type="date"]{background:var(--surface-2);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:8px;font-size:13px;font-family:inherit;}
+  .historie-blok{margin-top:36px;padding-top:28px;border-top:1px solid var(--border);}
+  .historie-blok h2{font-size:22px;text-transform:uppercase;letter-spacing:0.03em;margin-bottom:4px;}
+  .historie-kaarten{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;margin-top:16px;}
+  .historie-kaart{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px 20px;}
+  .historie-kaart h3{font-size:17px;text-transform:uppercase;letter-spacing:0.02em;margin:0 0 12px;}
+  .historie-regel{display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border);font-size:13px;}
+  .historie-regel:last-child{border-bottom:none;}
+  .historie-regel .waarde{font-weight:700;font-variant-numeric:tabular-nums;}
+  .historie-balk-wrap{background:var(--surface-2);border-radius:5px;height:8px;overflow:hidden;margin-top:10px;}
+  .historie-balk{height:100%;border-radius:5px;}
+
+  .post-blok{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:18px 20px;margin-bottom:22px;overflow-x:auto;}
+  .post-blok h2{font-size:19px;text-transform:uppercase;letter-spacing:0.03em;margin-bottom:12px;}
+  tr.post-scheiding td{border-bottom:none;padding-top:16px;}
+  tr.post-scheiding:first-child td{padding-top:0;}
+  td.post-naam-cel{font-family:var(--font-display);font-size:16px;font-weight:700;text-transform:uppercase;letter-spacing:0.03em;text-align:left;color:var(--lime);padding-bottom:4px;}
+  table.rooster{border-collapse:collapse;font-size:12.5px;white-space:nowrap;}
+  table.rooster th, table.rooster td{padding:6px 10px;text-align:center;border-bottom:1px solid var(--border);}
+  table.rooster th{font-family:var(--font-body);font-weight:700;color:var(--text-muted);text-transform:uppercase;font-size:10.5px;letter-spacing:0.03em;}
+  table.rooster td.dagdeel-label{text-align:left;font-weight:600;color:var(--text-muted);position:sticky;left:0;background:var(--surface);}
+  th.dag-kolom{position:relative;}
+  th.dag-kolom.voorlopig{color:var(--amber);}
+  th .weekdag{display:block;font-size:9.5px;font-weight:400;color:var(--text-muted);}
+  td.cel{border-radius:6px;font-weight:700;font-variant-numeric:tabular-nums;cursor:help;border:3px solid transparent;}
+  /* Kleurenblind-vriendelijk: blauw/oranje/paars i.p.v. groen/oranje/rood (dat laatste paar is
+     voor rood-groen-kleurenblindheid vaak nauwelijks te onderscheiden). Elke status heeft
+     bovendien een eigen symbool en randstijl, zodat kleur nooit het enige signaal is. */
+  td.cel.ok{background:#1E3A5F;color:#7EC8E3;border-color:#2E6DA4;}
+  td.cel.geen-bevelvoerder{background:#4A3510;color:#F0A93A;border-color:#F0A93A;border-style:dashed;}
+  td.cel.tekort{background:#4A1042;color:#F0A6E0;border-color:#C23B9E;border-width:3px;}
+  td.cel.geen-data{background:none;color:var(--text-muted);font-weight:400;border-color:transparent;}
+  td.cel .status-symbool{font-size:15px;display:block;line-height:1;}
+  td.cel .bv-icoon{display:block;font-size:10px;margin-top:2px;}
+  .rol-badges{display:flex;gap:3px;justify-content:center;margin-top:3px;flex-wrap:wrap;}
+  .rol-badge{font-size:9px;font-weight:700;padding:1px 5px;border-radius:8px;white-space:nowrap;}
+  .rol-badge.bv-aan{background:#7EC8E3;color:#0A1F2E;}
+  .rol-badge.bv-uit{background:transparent;color:#5B7083;border:1px dashed #5B7083;}
+  .rol-badge.dpl-aan{background:#4CE0C3;color:#003D33;}
+  .rol-badge.dpl-uit{background:transparent;color:#5B7083;border:1px dashed #5B7083;}
+  .rol-badge.assdpl-aan{background:#C9A6F0;color:#2E0A4A;}
+  .rol-badge.assdpl-uit{background:transparent;color:#5B7083;border:1px dashed #5B7083;}
+  .empty-hint{color:var(--text-muted);font-size:13px;padding:20px 0;text-align:center;}
+</style>
+</head>
+<body>
+<div id="toegangsScherm">
+  <div class="brand"><b>BEZETTING</b><small>Brandweer Gelderland Midden</small></div>
+  <div class="chevron-divider"></div>
+  <div id="loginNaamStap">
+    <p style="color:var(--text-muted);font-size:14px;margin:0 0 10px;text-align:center;">Wie ben jij?</p>
+    <input type="text" id="naamZoek" placeholder="Typ je naam…" autofocus style="width:260px;text-align:center;">
+    <div id="naamLijst" style="max-height:240px;overflow-y:auto;margin-top:10px;width:260px;text-align:left;"></div>
+  </div>
+  <div id="loginPinStap" class="hidden">
+    <p id="loginHoiTekst" style="color:var(--text);font-size:15px;margin:0 0 4px;text-align:center;"></p>
+    <p style="color:var(--text-muted);font-size:13px;margin:0 0 10px;text-align:center;">Vul je pincode in</p>
+    <form id="pinForm" style="display:flex;flex-direction:column;gap:10px;align-items:center;">
+      <input type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" id="pinInvoer" placeholder="••••" style="text-align:center;letter-spacing:0.3em;font-size:22px;width:160px;">
+      <div id="pinFout" style="color:var(--red);font-size:13px;min-height:18px;text-align:center;"></div>
+      <button type="submit" class="btn btn-primary">Inloggen</button>
+      <button type="button" id="btnAndereNaam" style="background:none;border:none;color:var(--text-muted);font-size:12px;cursor:pointer;text-decoration:underline;">← Andere naam kiezen</button>
+    </form>
+  </div>
+  <div id="loginNieuwPinStap" class="hidden">
+    <p style="color:var(--text);font-size:15px;margin:0 0 4px;text-align:center;">Nieuwe pincode instellen</p>
+    <p style="color:var(--text-muted);font-size:12.5px;margin:0 0 10px;text-align:center;max-width:280px;">Eerste keer, of na een reset — kies een eigen pincode van minimaal 4 cijfers, niet 1234.</p>
+    <form id="nieuwPinForm" style="display:flex;flex-direction:column;gap:10px;align-items:center;">
+      <input type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" id="nieuwPin1" placeholder="Nieuwe pincode" style="text-align:center;letter-spacing:0.3em;font-size:18px;width:160px;">
+      <input type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" id="nieuwPin2" placeholder="Herhaal pincode" style="text-align:center;letter-spacing:0.3em;font-size:18px;width:160px;">
+      <div id="nieuwPinFout" style="color:var(--red);font-size:13px;min-height:18px;text-align:center;"></div>
+      <button type="submit" class="btn btn-primary">Opslaan &amp; doorgaan</button>
+    </form>
+  </div>
+</div>
+
+<div id="app" class="hidden">
+  <div class="topbar">
+    <div>
+      <h1>Bezetting per post</h1>
+      <div class="sub">Minimaal 8 personen per dagdeel, waarvan minimaal 1 bevelvoerder</div>
+    </div>
+  </div>
+
+  <div class="upload-box">
+    <p>Upload het maandrooster (Excel, één tabblad per post) om de bezetting bij te werken. Een nieuwe upload overschrijft bestaande dagen met dezelfde datum.</p>
+    <input type="file" id="bestandInput" accept=".xlsx,.xls" class="hidden">
+    <button class="btn btn-primary" id="uploadKnop">📤 Rooster uploaden</button>
+    <span id="uploadStatus"></span>
+  </div>
+
+  <div class="periode-kiezer">
+    <label for="vanafDatumInput">Vanaf:</label>
+    <input type="date" id="vanafDatumInput">
+    <label for="periodeSelect">Aantal dagen:</label>
+    <select id="periodeSelect"></select>
+    <span id="periodeInfo"></span>
+  </div>
+
+  <div class="legenda">
+    <span><i style="background:#1E3A5F;border:2px solid #2E6DA4;"></i> ✓ Genoeg personen + bevelvoerder aanwezig</span>
+    <span><i style="background:#4A3510;border:2px dashed #F0A93A;"></i> ⚠ Genoeg personen, maar geen bevelvoerder</span>
+    <span><i style="background:#4A1042;border:3px solid #C23B9E;"></i> ✕ Te weinig personen, of (bij Arnhem Zuid) geen DPL/Ass DPL</span>
+    <span style="color:var(--amber);">Datum-kop oranje = postverdeling nog niet definitief (&gt;4 dagen vooruit)</span>
+  </div>
+  <p style="font-size:12px;color:var(--text-muted);margin:-14px 0 20px;">Bij Arnhem Zuid geldt daarbovenop: minimaal 1 DPL en 1 Ass DPL aanwezig, per dagdeel.</p>
+  <div class="legenda" style="margin-top:-10px;">
+    <span><span class="rol-badge bv-aan">BV</span> Bevelvoerder aanwezig</span>
+    <span><span class="rol-badge dpl-aan">DPL</span> aanwezig</span>
+    <span><span class="rol-badge assdpl-aan">Ass DPL</span> aanwezig</span>
+    <span><span class="rol-badge bv-uit">BV</span> = niet aanwezig (gestippeld, geen vulling)</span>
+  </div>
+
+  <div id="postenOverzicht"><div class="empty-hint">Bezig met laden…</div></div>
+
+  <div class="historie-blok">
+    <h2>Historie &amp; trends</h2>
+    <div class="sub" style="margin-bottom:14px;">Hoe vaak zat een post in het verleden onder de norm? Gebaseerd op wat er destijds is geüpload.</div>
+    <div class="periode-kiezer">
+      <label for="historiePeriodeSelect">Periode:</label>
+      <select id="historiePeriodeSelect">
+        <option value="30">Laatste 30 dagen</option>
+        <option value="90">Laatste 90 dagen</option>
+        <option value="7">Laatste 7 dagen</option>
+      </select>
+    </div>
+    <div id="historieOverzicht"><div class="empty-hint">Bezig met laden…</div></div>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  var DAG_URL = "https://iyquepqubfqrhybriqif.supabase.co";
+  var DAG_KEY = "sb_publishable_Pb0fFfxZQggKnFCtJYMH9A_avw0GaPn";
+  var supa = window.supabase.createClient(DAG_URL, DAG_KEY);
+
+  var POST_NAMEN = {post1:"Arnhem Noord", post2:"Arnhem Zuid", post3:"Ede Stad"};
+  var SHEET_NAAR_POST = {"Post Arnhem Noord":"post1", "Post Arnhem Zuid":"post2", "Post Ede stad":"post3"};
+  var MIN_PERSONEN = 8;
+  var VOORUIT_DAGEN_ZICHTBAAR = 21; // toon 3 weken vooruit in het overzicht
+  var VOORUIT_DAGEN_DEFINITIEF = 4; // vanaf hier is de postverdeling nog niet vast
+
+  // Welk dagdeel een code raakt, en of die persoon meetelt voor de 8-norm.
+  // Codes die niet meetellen (RDM, oefening, scholing, verlof, ziek, "-") krijgen telt:false.
+  var CODE_INFO = {
+    'N24':{dagdelen:['dag','nacht'],telt:true}, 'Z24':{dagdelen:['dag','nacht'],telt:true}, 'E24':{dagdelen:['dag','nacht'],telt:true},
+    'ND':{dagdelen:['dag'],telt:true}, 'ZD':{dagdelen:['dag'],telt:true}, 'ED':{dagdelen:['dag'],telt:true},
+    'NN':{dagdelen:['nacht'],telt:true}, 'ZN':{dagdelen:['nacht'],telt:true}, 'EN':{dagdelen:['nacht'],telt:true},
+    'V24':{dagdelen:['dag','nacht'],telt:true},
+    'VD':{dagdelen:['dag'],telt:true}, 'VN':{dagdelen:['nacht'],telt:true},
+    'RDMw':{dagdelen:['dag'],telt:true},
+    'RDM':{dagdelen:[],telt:false},
+    'OefA':{dagdelen:[],telt:false}, 'OefZ':{dagdelen:[],telt:false},
+    'S':{dagdelen:[],telt:false}, 'V':{dagdelen:[],telt:false}, 'Z':{dagdelen:[],telt:false},
+    'BV':{dagdelen:[],telt:false}, 'BDV':{dagdelen:[],telt:false}, '-':{dagdelen:[],telt:false}
+  };
+
+  function kernCode(ruw){ return String(ruw||'').split(' (')[0].trim(); }
+  function werkelijkePost(ruw, sheetPostId){
+    var m = /\(Post\s+([^)]+)\)/i.exec(String(ruw||''));
+    if(!m) return sheetPostId; // geen vermelding = gewoon eigen post
+    var postNaam = m[1].trim().toLowerCase();
+    for(var pid in POST_NAMEN){
+      if(POST_NAMEN[pid].toLowerCase() === postNaam) return pid;
+    }
+    return sheetPostId; // onherkende naam, val terug op eigen post
+  }
+  function pad(n){ return String(n).padStart(2,'0'); }
+  function toDatumKey(d){ return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate()); }
+
+  // ---------- Persoonlijke pincode-login (hergebruikt Dagstaats personeel_auth) ----------
+  var INGELOGD_KEY = "brw-mobiel-ingelogd-persoon";
+  var loginState = { personen: [], gekozenId: null };
+
+  function toonNaamLijst(filter){
+    var lijstEl = document.getElementById("naamLijst");
+    var gefilterd = loginState.personen.filter(function(p){
+      return !filter || p.naam.toLowerCase().indexOf(filter.toLowerCase()) !== -1;
+    }).slice(0, 30);
+    lijstEl.innerHTML = gefilterd.map(function(p){
+      return '<div class="naam-item" data-id="'+p.id+'">'+p.naam.replace(/</g,'&lt;')+'</div>';
+    }).join("");
+    lijstEl.querySelectorAll(".naam-item").forEach(function(el){
+      el.addEventListener("click", function(){ kiesNaam(el.dataset.id); });
+    });
+  }
+
+  function kiesNaam(id){
+    var persoon = loginState.personen.filter(function(p){ return p.id===id; })[0];
+    if(!persoon) return;
+    loginState.gekozenId = id;
+    document.getElementById("loginHoiTekst").textContent = "Hoi " + persoon.naam;
+    document.getElementById("loginNaamStap").classList.add("hidden");
+    document.getElementById("loginPinStap").classList.remove("hidden");
+    document.getElementById("pinInvoer").value = "";
+    document.getElementById("pinFout").textContent = "";
+    document.getElementById("pinInvoer").focus();
+  }
+
+  async function initLogin(){
+    try{
+      var alreadyId = null;
+      try{ alreadyId = localStorage.getItem(INGELOGD_KEY); }catch(e){}
+
+      var { data } = await supa.from('kv_store').select('value').eq('key','personen').single();
+      loginState.personen = ((data && data.value) || []).slice().sort(function(a,b){ return a.naam.localeCompare(b.naam); });
+
+      if(alreadyId && loginState.personen.some(function(p){ return p.id===alreadyId; })){
+        var { data: sessieData } = await supa.auth.getSession();
+        if(sessieData && sessieData.session){
+          startApp();
+          return;
+        }
+        try{ localStorage.removeItem(INGELOGD_KEY); }catch(e){}
+      }
+      toonNaamLijst("");
+    }catch(e){
+      document.getElementById("loginNaamStap").innerHTML = '<div style="color:var(--red);font-size:13px;">Kon personeelslijst niet laden: '+e.message+'</div>';
+    }
+  }
+
+  document.getElementById("naamZoek").addEventListener("input", function(){ toonNaamLijst(this.value); });
+  document.getElementById("btnAndereNaam").addEventListener("click", function(){
+    document.getElementById("loginPinStap").classList.add("hidden");
+    document.getElementById("loginNaamStap").classList.remove("hidden");
+    document.getElementById("naamZoek").value = "";
+    toonNaamLijst("");
+    document.getElementById("naamZoek").focus();
+  });
+
+  document.getElementById("pinForm").addEventListener("submit", async function(evt){
+    evt.preventDefault();
+    var pin = document.getElementById("pinInvoer").value.trim();
+    var foutEl = document.getElementById("pinFout");
+    try{
+      var loginRes = await fetch(DAG_URL + "/functions/v1/login-pin", {
+        method: "POST",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({persoonId: loginState.gekozenId, pin: pin})
+      });
+      var res = await loginRes.json();
+      if(res && res.ok){
+        // Nieuw: de echte, door Supabase afgegeven sessie instellen -- vanaf
+        // nu herkent de database wie er daadwerkelijk is ingelogd.
+        if(res.access_token && res.refresh_token){
+          try{ await supa.auth.setSession({access_token: res.access_token, refresh_token: res.refresh_token}); }
+          catch(e){ console.error("Sessie instellen mislukt (app werkt nog wel door):", e); }
+        }
+        if(res.moetWijzigen){
+          document.getElementById("loginPinStap").classList.add("hidden");
+          document.getElementById("loginNieuwPinStap").classList.remove("hidden");
+          document.getElementById("nieuwPin1").focus();
+        } else {
+          try{ localStorage.setItem(INGELOGD_KEY, loginState.gekozenId); }catch(e){}
+          startApp();
+        }
+      } else {
+        var reden = res && res.reden;
+        if(reden === "vergrendeld") foutEl.textContent = "Te vaak fout — probeer over 15 minuten opnieuw.";
+        else if(reden === "onbekend") foutEl.textContent = "Onbekende gebruiker.";
+        else foutEl.textContent = "Onjuiste pincode. Probeer opnieuw.";
+        document.getElementById("pinInvoer").value = "";
+      }
+    }catch(e){ foutEl.textContent = "Inloggen mislukt — controleer de verbinding."; }
+    return false;
+  });
+
+  document.getElementById("nieuwPinForm").addEventListener("submit", async function(evt){
+    evt.preventDefault();
+    var p1 = document.getElementById("nieuwPin1").value.trim();
+    var p2 = document.getElementById("nieuwPin2").value.trim();
+    var foutEl = document.getElementById("nieuwPinFout");
+    if(p1.length < 4){ foutEl.textContent = "Minimaal 4 cijfers."; return false; }
+    if(p1 === "1234"){ foutEl.textContent = "Kies een andere code dan de standaardcode 1234."; return false; }
+    if(p1 !== p2){ foutEl.textContent = "De twee codes komen niet overeen."; return false; }
+    try{
+      var { error } = await supa.rpc("set_pin", {p_persoon_id: loginState.gekozenId, p_pin: p1, p_moet_wijzigen: false});
+      if(error) throw error;
+      try{ localStorage.setItem(INGELOGD_KEY, loginState.gekozenId); }catch(e){}
+      startApp();
+    }catch(e){ foutEl.textContent = "Opslaan mislukt, probeer opnieuw."; }
+    return false;
+  });
+
+  initLogin();
+
+  var GEKOZEN_DAGEN_VOORUIT = VOORUIT_DAGEN_ZICHTBAAR; // wordt bijgewerkt door de periode-kiezer
+
+  function startApp(){
+    document.getElementById("toegangsScherm").classList.add("hidden");
+    document.getElementById("app").classList.remove("hidden");
+    document.getElementById("uploadKnop").addEventListener("click", function(){ document.getElementById("bestandInput").click(); });
+    document.getElementById("bestandInput").addEventListener("change", handleUpload);
+
+    var vandaagKey = toDatumKey(new Date());
+    document.getElementById("vanafDatumInput").value = vandaagKey;
+    document.getElementById("vanafDatumInput").addEventListener("change", function(){
+      ververPeriodeKiezer().then(laadEnRenderOverzicht);
+    });
+
+    document.getElementById("periodeSelect").addEventListener("change", function(){
+      GEKOZEN_DAGEN_VOORUIT = parseInt(this.value, 10);
+      laadEnRenderOverzicht();
+    });
+    document.getElementById("historiePeriodeSelect").addEventListener("change", function(){
+      laadEnRenderHistorie(parseInt(this.value, 10));
+    });
+    ververPeriodeKiezer();
+    ververHistoriePeriodeKiezer();
+    laadEnRenderOverzicht();
+  }
+
+  // Vult de keuzelijst met opties die niet verder gaan dan wat er daadwerkelijk
+  // aan data beschikbaar is, plus een "Alles beschikbaar"-optie.
+  async function ververPeriodeKiezer(){
+    var selectEl = document.getElementById("periodeSelect");
+    var infoEl = document.getElementById("periodeInfo");
+    try{
+      var vanafInput = document.getElementById("vanafDatumInput").value;
+      var vanaf = vanafInput ? new Date(vanafInput+'T00:00:00') : (function(){ var v=new Date(); v.setHours(0,0,0,0); return v; })();
+      var res = await supa.from('dienstrooster').select('datum').order('datum', {ascending:false}).limit(1);
+      var maxBeschikbaarDagen = VOORUIT_DAGEN_ZICHTBAAR;
+      if(res.data && res.data.length){
+        var laatsteDatum = new Date(res.data[0].datum+'T00:00:00');
+        maxBeschikbaarDagen = Math.max(1, Math.round((laatsteDatum - vanaf)/86400000) + 1);
+      }
+
+      var opties = [
+        {label:'1 week', dagen:7}, {label:'2 weken', dagen:14}, {label:'3 weken', dagen:21},
+        {label:'1 maand', dagen:31}, {label:'2 maanden', dagen:62}, {label:'3 maanden', dagen:93},
+        {label:'6 maanden', dagen:183}, {label:'1 jaar', dagen:365}
+      ].filter(function(o){ return o.dagen <= maxBeschikbaarDagen; });
+      opties.push({label:'Alles beschikbaar ('+maxBeschikbaarDagen+' dagen)', dagen:maxBeschikbaarDagen});
+
+      var huidigeWaarde = selectEl.value; // onthoud een eventueel al gekozen aantal dagen bij herladen
+      selectEl.innerHTML = opties.map(function(o){ return '<option value="'+o.dagen+'">'+o.label+'</option>'; }).join('');
+      var standaard = opties.filter(function(o){ return o.dagen===Number(huidigeWaarde); })[0]
+        || opties.filter(function(o){ return o.dagen===21; })[0] || opties[opties.length-1];
+      selectEl.value = standaard.dagen;
+      GEKOZEN_DAGEN_VOORUIT = standaard.dagen;
+      infoEl.textContent = 'Data beschikbaar t/m ' + maxBeschikbaarDagen + ' dagen na de gekozen startdatum.';
+    }catch(e){
+      infoEl.textContent = '';
+    }
+  }
+
+  // Zelfde soort opzet, maar dan terugkijkend: zoekt de oudste beschikbare
+  // datum op, zodat "Alles beschikbaar" ook echt tot bijv. 1 januari terug kan.
+  async function ververHistoriePeriodeKiezer(){
+    var selectEl = document.getElementById("historiePeriodeSelect");
+    try{
+      var vandaag = new Date(); vandaag.setHours(0,0,0,0);
+      var res = await supa.from('dienstrooster').select('datum').order('datum', {ascending:true}).limit(1);
+      var maxTerugDagen = 30;
+      if(res.data && res.data.length){
+        var oudsteDatum = new Date(res.data[0].datum+'T00:00:00');
+        maxTerugDagen = Math.max(1, Math.round((vandaag - oudsteDatum)/86400000));
+      }
+
+      var opties = [
+        {label:'Laatste 7 dagen', dagen:7}, {label:'Laatste 30 dagen', dagen:30},
+        {label:'Laatste 90 dagen', dagen:90}, {label:'Laatste 6 maanden', dagen:183}, {label:'Laatste jaar', dagen:365}
+      ].filter(function(o){ return o.dagen <= maxTerugDagen; });
+      opties.push({label:'Alles beschikbaar (sinds '+new Date(vandaag.getTime()-maxTerugDagen*86400000).toLocaleDateString('nl-NL',{day:'numeric',month:'short',year:'numeric'})+')', dagen:maxTerugDagen});
+
+      selectEl.innerHTML = opties.map(function(o){ return '<option value="'+o.dagen+'">'+o.label+'</option>'; }).join('');
+      var standaard = opties.filter(function(o){ return o.dagen===30; })[0] || opties[opties.length-1];
+      selectEl.value = standaard.dagen;
+      laadEnRenderHistorie(standaard.dagen);
+    }catch(e){
+      laadEnRenderHistorie(30);
+    }
+  }
+
+  // ---------- Excel inlezen en wegschrijven ----------
+  async function handleUpload(evt){
+    var file = evt.target.files[0];
+    if(!file) return;
+    var statusEl = document.getElementById("uploadStatus");
+    statusEl.textContent = "Bezig met inlezen…";
+    try{
+      var buf = await file.arrayBuffer();
+      var wb = XLSX.read(buf, {type:"array"});
+      var rijenOmSchrijven = [];
+      var startJaar = new Date().getFullYear();
+
+      // Bepaalt per kolom het juiste jaar: begint bij het huidige jaar, en telt
+      // er 1 bij op zodra de maand in de datumreeks terugspringt (dec -> jan),
+      // zodat een Excel die een jaargrens overschrijdt goed blijft lopen.
+      function jarenPerKolom(datumRij){
+        var jaren = {};
+        var jaar = startJaar, vorigeMaand = null;
+        for(var c = 2; c < datumRij.length; c++){
+          var d = datumRij[c];
+          if(!d) continue;
+          var delen = String(d).split('-');
+          if(delen.length < 2) continue;
+          var maand = parseInt(delen[1],10);
+          if(vorigeMaand !== null && maand < vorigeMaand) jaar++;
+          jaren[c] = jaar;
+          vorigeMaand = maand;
+        }
+        return jaren;
+      }
+
+      wb.SheetNames.forEach(function(sheetNaam){
+        var postId = SHEET_NAAR_POST[sheetNaam.trim()];
+        if(!postId) return; // onbekend tabblad, overslaan
+        var rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetNaam], {header:1, raw:false});
+        if(rows.length < 3) return;
+        var datumRij = rows[1]; // DD-MM per kolom, vanaf kolom 2
+        var jarenPerKol = jarenPerKolom(datumRij);
+
+        // Per persoonsnummer alle rijen verzamelen (incl. "(2)"-correctierijen) en samenvoegen:
+        // latere rij wint per dag-cel als daar een waarde staat.
+        var perPersoonsnummer = {};
+        for(var r = 3; r < rows.length; r++){
+          var rij = rows[r];
+          if(!rij || !rij[1]) continue; // geen persoonsnummer = ploeg-kopregel, overslaan
+          var naamRuw = String(rij[0]||'').trim();
+          var naam = naamRuw.replace(/\s*\(\d+\)\s*$/,'').trim();
+          var persoonsnummer = String(rij[1]).split(';')[0].trim();
+          if(!perPersoonsnummer[persoonsnummer]) perPersoonsnummer[persoonsnummer] = {naam:naam, dagen:{}};
+          for(var c = 2; c < rij.length && c < datumRij.length; c++){
+            var waarde = rij[c];
+            if(waarde === undefined || waarde === null || String(waarde).trim()==='') continue;
+            var nieuweWaarde = String(waarde).trim();
+            var bestaande = perPersoonsnummer[persoonsnummer].dagen[c];
+            if(bestaande === undefined){
+              perPersoonsnummer[persoonsnummer].dagen[c] = nieuweWaarde;
+            } else {
+              // Een meetellende code (bv. RDMw, ED) wint altijd van een niet-meetellende
+              // code (bv. S) -- dit dekt het geval waarbij scholing op de post plaatsvindt
+              // en er daarom bewust ook een dienstcode bij is gezet. Tellen beide hetzelfde
+              // (allebei wel/niet meetellend), dan wint gewoon de laatst gelezen rij.
+              var infoBestaand = CODE_INFO[kernCode(bestaande)];
+              var infoNieuw = CODE_INFO[kernCode(nieuweWaarde)];
+              var teltBestaand = infoBestaand ? infoBestaand.telt : false;
+              var teltNieuw = infoNieuw ? infoNieuw.telt : false;
+              if(teltNieuw || teltNieuw === teltBestaand){
+                perPersoonsnummer[persoonsnummer].dagen[c] = nieuweWaarde;
+              }
+              // anders: bestaande (meetellende) waarde blijft staan, nieuwe (niet-meetellende) wordt genegeerd
+            }
+          }
+        }
+
+        Object.keys(perPersoonsnummer).forEach(function(persoonsnummer){
+          var info = perPersoonsnummer[persoonsnummer];
+          Object.keys(info.dagen).forEach(function(c){
+            var datumStr = datumRij[c]; // "DD-MM"
+            if(!datumStr) return;
+            var delen = String(datumStr).split('-');
+            if(delen.length < 2) return;
+            var jaarVoorKolom = jarenPerKol[c] || startJaar;
+            var datumIso = jaarVoorKolom+'-'+pad(parseInt(delen[1],10))+'-'+pad(parseInt(delen[0],10));
+            var ruweWaarde = info.dagen[c];
+            rijenOmSchrijven.push({
+              post_id: werkelijkePost(ruweWaarde, postId), datum: datumIso, persoonsnummer: persoonsnummer,
+              naam: info.naam, code: kernCode(ruweWaarde)
+            });
+          });
+        });
+      });
+
+      if(!rijenOmSchrijven.length){ statusEl.textContent = "Geen bruikbare gegevens gevonden in dit bestand."; return; }
+
+      var alleDatums = rijenOmSchrijven.map(function(r){ return r.datum; });
+      var minDatum = alleDatums.reduce(function(a,b){ return a<b?a:b; });
+      var maxDatum = alleDatums.reduce(function(a,b){ return a>b?a:b; });
+
+      statusEl.textContent = "Bezig met opschonen van "+minDatum+" t/m "+maxDatum+"…";
+      var delRes = await supa.from('dienstrooster').delete().gte('datum', minDatum).lte('datum', maxDatum);
+      if(delRes.error){ statusEl.textContent = "Fout bij opschonen: "+delRes.error.message; return; }
+
+      statusEl.textContent = "Bezig met opslaan van "+rijenOmSchrijven.length+" regels…";
+      // In batches wegschrijven, anders wordt het verzoek te groot
+      var batchGrootte = 500;
+      for(var i=0; i<rijenOmSchrijven.length; i+=batchGrootte){
+        var batch = rijenOmSchrijven.slice(i, i+batchGrootte);
+        var res = await supa.from('dienstrooster').upsert(batch, {onConflict:'post_id,datum,persoonsnummer'});
+        if(res.error){ statusEl.textContent = "Fout bij opslaan: "+res.error.message; return; }
+      }
+      statusEl.textContent = "✓ "+rijenOmSchrijven.length+" regels opgeslagen (oude data in dit bereik eerst opgeschoond).";
+      await ververPeriodeKiezer();
+      laadEnRenderOverzicht();
+    }catch(e){
+      statusEl.textContent = "Fout bij inlezen: "+(e&&e.message?e.message:e);
+    }
+    evt.target.value = "";
+  }
+
+  // ---------- Overzicht opbouwen ----------
+  async function haalAlleRoosterRegels(vanDatum, totDatum){
+    var alles = [];
+    var paginaGrootte = 1000;
+    var vanaf = 0;
+    while(true){
+      var res = await supa.from('dienstrooster').select('*')
+        .gte('datum', vanDatum).lte('datum', totDatum)
+        .range(vanaf, vanaf + paginaGrootte - 1);
+      if(res.error) throw res.error;
+      var pagina = res.data || [];
+      alles = alles.concat(pagina);
+      if(pagina.length < paginaGrootte) break; // laatste pagina bereikt
+      vanaf += paginaGrootte;
+    }
+    return alles;
+  }
+
+  async function laadEnRenderHistorie(dagenTerug){
+    var container = document.getElementById("historieOverzicht");
+    container.innerHTML = '<div class="empty-hint">Bezig met laden…</div>';
+    try{
+      var vandaag = new Date(); vandaag.setHours(0,0,0,0);
+      var vanaf = new Date(vandaag.getTime() - dagenTerug*86400000);
+      var tot = new Date(vandaag.getTime() - 86400000); // t/m gisteren: vandaag/toekomst hoort bij het vooruitkijk-overzicht
+
+      var [rooster, personenRes] = await Promise.all([
+        haalAlleRoosterRegels(toDatumKey(vanaf), toDatumKey(tot)),
+        supa.from('kv_store').select('value').eq('key','personen').single()
+      ]);
+      var personen = (personenRes.data && personenRes.data.value) || [];
+
+      var bevelvoerderNummers = {}, bevelvoerderNamen = {}, dplNummers = {}, dplNamen = {}, assDplNummers = {}, assDplNamen = {};
+      personen.forEach(function(p){
+        var specialismen = p.specialismen || [];
+        var pn = p.persoonsnummer ? String(p.persoonsnummer).split(';')[0].trim() : null;
+        var naamKey = p.naam ? String(p.naam).trim().toLowerCase() : null;
+        if(specialismen.indexOf('Bevelvoerder') !== -1){ if(pn) bevelvoerderNummers[pn]=true; if(naamKey) bevelvoerderNamen[naamKey]=true; }
+        if(specialismen.indexOf('DPL') !== -1){ if(pn) dplNummers[pn]=true; if(naamKey) dplNamen[naamKey]=true; }
+        if(specialismen.indexOf('Ass DPL') !== -1){ if(pn) assDplNummers[pn]=true; if(naamKey) assDplNamen[naamKey]=true; }
+      });
+
+      var POSTEN_MET_DPL_NORM = ['post2'];
+      var dagen = [];
+      for(var i=0; i<dagenTerug; i++){ dagen.push(new Date(vanaf.getTime() + i*86400000)); }
+
+      var samenvattingen = Object.keys(POST_NAMEN).map(function(postId){
+        var vereistDpl = POSTEN_MET_DPL_NORM.indexOf(postId) !== -1;
+        var perDatum = berekenPerDatum(
+          rooster.filter(function(r){ return r.post_id===postId; }),
+          bevelvoerderNummers, bevelvoerderNamen,
+          vereistDpl ? dplNummers : null, vereistDpl ? dplNamen : null,
+          vereistDpl ? assDplNummers : null, vereistDpl ? assDplNamen : null
+        );
+        var totaalDagdelen = 0, tekortTellling = 0, geenBvTelling = 0, geenDplTelling = 0;
+        dagen.forEach(function(d){
+          var data = perDatum[toDatumKey(d)];
+          ['dag','nacht'].forEach(function(dd){
+            if(!data){ return; } // geen data = niet meegeteld (nog niet geupload voor die periode)
+            var info = data[dd];
+            totaalDagdelen++;
+            var dplOk = !vereistDpl || (info.dpl && info.assDpl);
+            if(info.aantal < MIN_PERSONEN || !dplOk) tekortTellling++;
+            else if(!info.bv) geenBvTelling++;
+            if(vereistDpl && !dplOk) geenDplTelling++;
+          });
+        });
+        return { postId:postId, totaal:totaalDagdelen, tekort:tekortTellling, geenBv:geenBvTelling, geenDpl:geenDplTelling, vereistDpl:vereistDpl };
+      });
+
+      if(samenvattingen.every(function(s){ return s.totaal===0; })){
+        container.innerHTML = '<div class="empty-hint">Geen roosterdata gevonden voor deze periode (nog niet geüpload).</div>';
+        return;
+      }
+
+      container.innerHTML = '<div class="historie-kaarten">' + samenvattingen.map(function(s){
+        var pctTekort = s.totaal ? Math.round(s.tekort/s.totaal*100) : 0;
+        var pctGeenBv = s.totaal ? Math.round(s.geenBv/s.totaal*100) : 0;
+        var balkKleur = pctTekort > 15 ? '#C23B9E' : (pctTekort > 0 ? '#F0A93A' : '#2E6DA4');
+        return '<div class="historie-kaart">'
+          + '<h3>'+POST_NAMEN[s.postId]+'</h3>'
+          + '<div class="historie-regel"><span>Dagdelen bekeken</span><span class="waarde">'+s.totaal+'</span></div>'
+          + '<div class="historie-regel"><span>✕ Te weinig personen'+(s.vereistDpl?' / geen DPL+AssDPL':'')+'</span><span class="waarde">'+s.tekort+' ('+pctTekort+'%)</span></div>'
+          + '<div class="historie-regel"><span>⚠ Geen bevelvoerder (verder voldoende)</span><span class="waarde">'+s.geenBv+' ('+pctGeenBv+'%)</span></div>'
+          + (s.vereistDpl ? '<div class="historie-regel"><span>⚠ Waarvan door DPL/Ass DPL</span><span class="waarde">'+s.geenDpl+'</span></div>' : '')
+          + '<div class="historie-balk-wrap"><div class="historie-balk" style="width:'+pctTekort+'%;background:'+balkKleur+';"></div></div>'
+          + '</div>';
+      }).join('') + '</div>';
+    }catch(e){
+      container.innerHTML = '<div class="empty-hint">Kon niet laden: '+(e&&e.message?e.message:e)+'</div>';
+    }
+  }
+
+  async function laadEnRenderOverzicht(){
+    var container = document.getElementById("postenOverzicht");
+    container.innerHTML = '<div class="empty-hint">Bezig met laden…</div>';
+    try{
+      var vanafInput = document.getElementById("vanafDatumInput").value;
+      var vanaf = vanafInput ? new Date(vanafInput+'T00:00:00') : (function(){ var v=new Date(); v.setHours(0,0,0,0); return v; })();
+      var totDatum = new Date(vanaf.getTime() + GEKOZEN_DAGEN_VOORUIT*86400000);
+
+      var [rooster, personenRes] = await Promise.all([
+        haalAlleRoosterRegels(toDatumKey(vanaf), toDatumKey(totDatum)),
+        supa.from('kv_store').select('value').eq('key','personen').single()
+      ]);
+      var personen = (personenRes.data && personenRes.data.value) || [];
+
+      var bevelvoerderNummers = {};
+      var bevelvoerderNamen = {};
+      var dplNummers = {}, dplNamen = {}, assDplNummers = {}, assDplNamen = {};
+      personen.forEach(function(p){
+        var specialismen = p.specialismen || [];
+        var pn = p.persoonsnummer ? String(p.persoonsnummer).split(';')[0].trim() : null;
+        var naamKey = p.naam ? String(p.naam).trim().toLowerCase() : null;
+        if(specialismen.indexOf('Bevelvoerder') !== -1){
+          if(pn) bevelvoerderNummers[pn] = true;
+          if(naamKey) bevelvoerderNamen[naamKey] = true;
+        }
+        if(specialismen.indexOf('DPL') !== -1){
+          if(pn) dplNummers[pn] = true;
+          if(naamKey) dplNamen[naamKey] = true;
+        }
+        if(specialismen.indexOf('Ass DPL') !== -1){
+          if(pn) assDplNummers[pn] = true;
+          if(naamKey) assDplNamen[naamKey] = true;
+        }
+      });
+
+      if(!rooster.length){
+        container.innerHTML = '<div class="empty-hint">Nog geen rooster geüpload voor deze periode.</div>';
+        return;
+      }
+
+      var dagen = [];
+      for(var i=0; i<GEKOZEN_DAGEN_VOORUIT; i++){
+        var d = new Date(vanaf.getTime() + i*86400000);
+        dagen.push(d);
+      }
+
+      var POSTEN_MET_DPL_NORM = ['post2']; // Arnhem Zuid: minimaal 1 DPL + 1 Ass DPL per dagdeel
+
+      var perDatumPerPost = {};
+      Object.keys(POST_NAMEN).forEach(function(postId){
+        var vereistDpl = POSTEN_MET_DPL_NORM.indexOf(postId) !== -1;
+        perDatumPerPost[postId] = berekenPerDatum(
+          rooster.filter(function(r){ return r.post_id===postId; }),
+          bevelvoerderNummers, bevelvoerderNamen,
+          vereistDpl ? dplNummers : null, vereistDpl ? dplNamen : null,
+          vereistDpl ? assDplNummers : null, vereistDpl ? assDplNamen : null
+        );
+      });
+
+      container.innerHTML = renderGecombineerdeTabel(dagen, perDatumPerPost, POSTEN_MET_DPL_NORM);
+    }catch(e){
+      container.innerHTML = '<div class="empty-hint">Kon niet laden: '+(e&&e.message?e.message:e)+'</div>';
+    }
+  }
+
+  function berekenPerDatum(rijenPost, bevelvoerderNummers, bevelvoerderNamen, dplNummers, dplNamen, assDplNummers, assDplNamen){
+    var perDatum = {};
+    rijenPost.forEach(function(r){
+      var info = CODE_INFO[r.code];
+      if(!info || !info.telt) return;
+      if(!perDatum[r.datum]) perDatum[r.datum] = {dag:{aantal:0,bv:false,dpl:false,assDpl:false,namen:[]}, nacht:{aantal:0,bv:false,dpl:false,assDpl:false,namen:[]}};
+      var naamKey = String(r.naam||'').trim().toLowerCase();
+      var isBv = !!bevelvoerderNummers[r.persoonsnummer] || !!bevelvoerderNamen[naamKey];
+      var isDpl = !!(dplNummers && (dplNummers[r.persoonsnummer] || dplNamen[naamKey]));
+      var isAssDpl = !!(assDplNummers && (assDplNummers[r.persoonsnummer] || assDplNamen[naamKey]));
+      var labels = (isBv?' 👮':'') + (isDpl?' DPL':'') + (isAssDpl?' AssDPL':'');
+      info.dagdelen.forEach(function(dd){
+        perDatum[r.datum][dd].aantal++;
+        perDatum[r.datum][dd].namen.push(r.naam + ' (' + r.code + ')' + labels);
+        if(isBv) perDatum[r.datum][dd].bv = true;
+        if(isDpl) perDatum[r.datum][dd].dpl = true;
+        if(isAssDpl) perDatum[r.datum][dd].assDpl = true;
+      });
+    });
+    return perDatum;
+  }
+
+  function renderGecombineerdeTabel(dagen, perDatumPerPost, postenMetDplNorm){
+    var vandaag = new Date(); vandaag.setHours(0,0,0,0);
+    var headerCellen = dagen.map(function(d){
+      var voorlopig = (d - vandaag)/86400000 >= VOORUIT_DAGEN_DEFINITIEF;
+      return '<th class="dag-kolom'+(voorlopig?' voorlopig':'')+'">'+d.toLocaleDateString('nl-NL',{day:'numeric',month:'short'})+'<span class="weekdag">'+d.toLocaleDateString('nl-NL',{weekday:'short'})+'</span></th>';
+    }).join('');
+
+    function cel(postId, dagdeel, d, minimum){
+      var key = toDatumKey(d);
+      var data = perDatumPerPost[postId][key];
+      if(!data){ return '<td class="cel geen-data">–</td>'; }
+      var info = data[dagdeel];
+      var vereistDpl = postenMetDplNorm.indexOf(postId) !== -1;
+      var dplOk = !vereistDpl || (info.dpl && info.assDpl);
+      var klasse = (info.aantal < minimum || !dplOk) ? 'tekort' : (info.bv ? 'ok' : 'geen-bevelvoerder');
+      var symbool = klasse==='tekort' ? '\u2715' : (klasse==='ok' ? '\u2713' : '\u26A0');
+      var tooltip = info.namen.slice().sort().join('\n') || 'Niemand';
+      var badges = '<span class="rol-badges">'
+        + '<span class="rol-badge '+(info.bv?'bv-aan':'bv-uit')+'">BV</span>'
+        + (vereistDpl ? '<span class="rol-badge '+(info.dpl?'dpl-aan':'dpl-uit')+'">DPL</span>' : '')
+        + (vereistDpl ? '<span class="rol-badge '+(info.assDpl?'assdpl-aan':'assdpl-uit')+'">Ass DPL</span>' : '')
+        + '</span>';
+      return '<td class="cel '+klasse+'" title="'+tooltip.replace(/"/g,'&quot;')+'"><span class="status-symbool">'+symbool+'</span>'+info.aantal+'/'+minimum+badges+'</td>';
+    }
+
+    function totaalCel(dagdeel, d){
+      var key = toDatumKey(d);
+      var som = 0, iemandBv = false, tooltipDelen = [];
+      Object.keys(POST_NAMEN).forEach(function(postId){
+        var data = perDatumPerPost[postId][key];
+        if(!data) return;
+        som += data[dagdeel].aantal;
+        if(data[dagdeel].bv) iemandBv = true;
+        if(data[dagdeel].namen.length) tooltipDelen.push(POST_NAMEN[postId]+':\n'+data[dagdeel].namen.slice().sort().join('\n'));
+      });
+      var minimum = MIN_PERSONEN * Object.keys(POST_NAMEN).length;
+      var klasse = som < minimum ? 'tekort' : (iemandBv ? 'ok' : 'geen-bevelvoerder');
+      var symbool = klasse==='tekort' ? '\u2715' : (klasse==='ok' ? '\u2713' : '\u26A0');
+      var tooltip = tooltipDelen.join('\n\n') || 'Niemand';
+      return '<td class="cel '+klasse+'" title="'+tooltip.replace(/"/g,'&quot;')+'"><span class="status-symbool">'+symbool+'</span>'+som+'/'+minimum+'</td>';
+    }
+
+    var rijenHtml = '';
+    Object.keys(POST_NAMEN).forEach(function(postId){
+      rijenHtml += '<tr class="post-scheiding"><td class="post-naam-cel" colspan="'+(dagen.length+1)+'">'+POST_NAMEN[postId]+'</td></tr>';
+      ['dag','nacht'].forEach(function(dagdeel){
+        var cellen = dagen.map(function(d){ return cel(postId, dagdeel, d, MIN_PERSONEN); }).join('');
+        rijenHtml += '<tr><td class="dagdeel-label">'+(dagdeel==='dag'?'Dag':'Nacht')+'</td>'+cellen+'</tr>';
+      });
+    });
+    rijenHtml += '<tr class="post-scheiding"><td class="post-naam-cel" colspan="'+(dagen.length+1)+'">Totaal (alle 3 posten)</td></tr>';
+    ['dag','nacht'].forEach(function(dagdeel){
+      var cellen = dagen.map(function(d){ return totaalCel(dagdeel, d); }).join('');
+      rijenHtml += '<tr><td class="dagdeel-label">'+(dagdeel==='dag'?'Dag':'Nacht')+'</td>'+cellen+'</tr>';
+    });
+
+    return '<div class="post-blok"><table class="rooster"><thead><tr><th></th>'+headerCellen+'</tr></thead><tbody>'+rijenHtml+'</tbody></table></div>';
+  }
+})();
+</script>
+</body>
+</html>
