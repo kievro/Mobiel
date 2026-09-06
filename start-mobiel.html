@@ -28,6 +28,8 @@
   .btn-wissel{background:var(--surface-2);border:1px solid var(--border);color:var(--text-muted);font-size:11px;padding:6px 10px;border-radius:6px;cursor:pointer;}
 
   .tegel-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  .tegel{position:relative;}
+  .tegel-bolletje{position:absolute;top:-6px;right:-6px;background:var(--red);color:#fff;font-family:var(--font-body);font-weight:700;font-size:12px;min-width:22px;height:22px;border-radius:11px;display:flex;align-items:center;justify-content:center;padding:0 5px;box-shadow:0 0 0 2px var(--bg);}
   .tegel{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:22px 14px;text-align:center;text-decoration:none;color:var(--text);display:flex;flex-direction:column;align-items:center;gap:8px;transition:border-color 0.15s;}
   .tegel:active{border-color:var(--red);}
   .tegel-icoon{font-size:34px;}
@@ -84,6 +86,12 @@
       <div class="tegel-naam">Oefenplanning</div>
       <div class="tegel-sub">Jaarrooster oefeningen</div>
     </a>
+    <a class="tegel" href="./ploegcompleet.html" id="tegelPloegCompleet">
+      <div class="tegel-icoon">🚒</div>
+      <div class="tegel-naam">PloegCompleet</div>
+      <div class="tegel-sub">Diensten &amp; reacties</div>
+      <span id="ploegBolletje" class="tegel-bolletje hidden"></span>
+    </a>
   </div>
 
   <div class="footer-note">Eén keer inloggen, alle onderdelen bereikbaar.</div>
@@ -110,6 +118,22 @@
 
   function escapeHtml(s){ return String(s==null?"":s).replace(/[&<>"']/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
 
+  var PLOEG_URL = "https://gqqflxctuikbygqnbrli.supabase.co";
+  async function laadPloegBolletje(persoonId){
+    if(!persoonId) return;
+    try{
+      var res = await fetch(PLOEG_URL + "/functions/v1/tel-open-diensten?persoonId=" + encodeURIComponent(persoonId));
+      var data = await res.json();
+      var bolletje = document.getElementById("ploegBolletje");
+      if(data && data.aantal > 0){
+        bolletje.textContent = data.aantal > 99 ? "99+" : data.aantal;
+        bolletje.classList.remove("hidden");
+      } else {
+        bolletje.classList.add("hidden");
+      }
+    }catch(e){ /* geen bolletje tonen bij een fout -- geen probleem, gewoon stil laten */ }
+  }
+
   function startApp(){
     document.getElementById("toegangsScherm").classList.add("hidden");
     document.getElementById("app").classList.remove("hidden");
@@ -117,6 +141,7 @@
       try{ localStorage.removeItem(INGELOGD_KEY); }catch(e){}
       location.reload();
     });
+    laadPloegBolletje(loginState.gekozenId);
   }
 
   // ---------- Persoonlijke pincode-login (zelfde systeem als Dagstaat/Dashboard/Bezetting) ----------
@@ -164,6 +189,7 @@
         var { data: sessieData } = await supa.auth.getSession();
         if(sessieData && sessieData.session){
           DAG_KEY_HEADERS.Authorization = "Bearer " + sessieData.session.access_token;
+          loginState.gekozenId = alreadyId;
           document.getElementById("ingelogdAls").textContent = gekozenPersoon.naam;
           startApp();
           return;
