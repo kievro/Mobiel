@@ -392,6 +392,7 @@
         var { data: sessieData } = await supa.auth.getSession();
         if(sessieData && sessieData.session){
           DAG_KEY_HEADERS.Authorization = "Bearer " + sessieData.session.access_token;
+          loginState.gekozenId = alreadyId;
           document.getElementById("ingelogdAls").textContent = gekozenPersoon.naam;
           startApp();
           return;
