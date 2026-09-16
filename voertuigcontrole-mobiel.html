@@ -165,23 +165,31 @@
       sbSelect("voertuigcontrole_voertuigen?post_id=eq."+postId+"&actief=eq.true&order=volgorde")
     ]);
     var dag = (dagRes[0] && dagRes[0].value) || null;
-    if(!dag || !dag.voertuigIndeling) return { voertuigen: [], geenDagstaat: true };
     var mijnPosities = [];
-    ["dag","avond"].forEach(function(deel){
-      var vi = dag.voertuigIndeling[deel] || {};
-      Object.keys(vi).forEach(function(fid){ if(vi[fid]===loginState.gekozenId && mijnPosities.indexOf(fid)===-1) mijnPosities.push(fid); });
-    });
-    if(!mijnPosities.length) return { voertuigen: [], geenPositie: true };
-    var voertuigen = (voertuigenRes||[]).filter(function(v){ return mijnPosities.indexOf(slug(v.dagstaat_positie))!==-1; });
-    // Status per voertuig ophalen (van vandaag)
-    if(voertuigen.length){
-      var ids = voertuigen.map(function(v){ return v.id; });
-      var uitvoeringenRes = await sbSelect("voertuigcontrole_uitvoeringen?voertuig_id=in.("+ids.join(",")+")&datum=eq."+datumStr);
-      voertuigen.forEach(function(v){
-        var u = (uitvoeringenRes||[]).filter(function(x){ return x.voertuig_id===v.id; })[0];
-        v._uitvoering = u || null;
+    if(dag && dag.voertuigIndeling){
+      ["dag","avond"].forEach(function(deel){
+        var vi = dag.voertuigIndeling[deel] || {};
+        Object.keys(vi).forEach(function(fid){ if(vi[fid]===loginState.gekozenId && mijnPosities.indexOf(fid)===-1) mijnPosities.push(fid); });
       });
     }
+    var viaPositie = (voertuigenRes||[]).filter(function(v){ return mijnPosities.indexOf(slug(v.dagstaat_positie))!==-1; });
+    // Ook expliciet aan mij overgedragen controles van vandaag meenemen, ook
+    // als ik zelf niet op die positie sta.
+    var overgedragenRes = await sbSelect("voertuigcontrole_uitvoeringen?medewerker_id=eq."+loginState.gekozenId+"&datum=eq."+datumStr);
+    var viaOverdracht = (overgedragenRes||[]).map(function(u){
+      var v = (voertuigenRes||[]).filter(function(x){ return x.id===u.voertuig_id; })[0];
+      return v || null;
+    }).filter(Boolean).filter(function(v){ return !viaPositie.some(function(x){ return x.id===v.id; }); });
+    var voertuigen = viaPositie.concat(viaOverdracht);
+    if(!voertuigen.length) return { voertuigen: [], geenPositie: !dag || !dag.voertuigIndeling ? undefined : true, geenDagstaat: !dag || !dag.voertuigIndeling };
+    // Status per voertuig ophalen (van vandaag)
+    var ids = voertuigen.map(function(v){ return v.id; });
+    var uitvoeringenRes = await sbSelect("voertuigcontrole_uitvoeringen?voertuig_id=in.("+ids.join(",")+")&datum=eq."+datumStr);
+    voertuigen.forEach(function(v){
+      var u = (uitvoeringenRes||[]).filter(function(x){ return x.voertuig_id===v.id; })[0];
+      v._uitvoering = u || null;
+      v._overgedragen = !viaPositie.some(function(x){ return x.id===v.id; });
+    });
     return { voertuigen: voertuigen };
   }
 
@@ -211,7 +219,7 @@
         inhoud.innerHTML = '<div class="eyebrow" style="margin-bottom:8px;">Mijn voertuigcontroles — '+aantalGereed+' van '+resultaat.voertuigen.length+' gereed</div>'
           + resultaat.voertuigen.map(function(v){
             return '<div class="card voertuig-card" data-id="'+v.id+'">'
-              + '<div><div class="voertuig-naam">'+escapeHtml(v.voertuignummer)+' — '+escapeHtml(v.omschrijving)+'</div><div class="voertuig-positie">'+escapeHtml(v.dagstaat_positie)+'</div></div>'
+              + '<div><div class="voertuig-naam">'+escapeHtml(v.voertuignummer)+' — '+escapeHtml(v.omschrijving)+'</div><div class="voertuig-positie">'+escapeHtml(v.dagstaat_positie)+(v._overgedragen?' · overgedragen aan jou':'')+'</div></div>'
               + statusPillHtml(v)
               + '</div>';
           }).join("");
@@ -278,6 +286,18 @@
       + '<div class="voortgang-tekst">'+aantalGedaan+' / '+huidigePunten.length+' gecontroleerd</div>'
       + '</div>';
 
+    if(!afgerond){
+      html += '<div class="card" style="margin-bottom:14px;">'
+        + '<div class="eyebrow" style="margin:0 0 6px;">Overdragen aan een collega</div>'
+        + '<div style="display:flex;gap:6px;">'
+        + '<select id="overdragenSelect" style="flex:1;background:var(--surface-2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:6px 8px;font-size:13px;">'
+        + '<option value="">— kies naam —</option>'
+        + loginState.personen.filter(function(p){ return p.id!==loginState.gekozenId; }).map(function(p){ return '<option value="'+p.id+'">'+escapeHtml(p.naam)+'</option>'; }).join("")
+        + '</select>'
+        + '<button type="button" class="btn-vandaag" id="btnOverdragen" style="margin:0;padding:6px 12px;background:var(--surface-2);border:1px solid var(--border);border-radius:6px;">Overdragen</button>'
+        + '</div></div>';
+    }
+
     if(afgerond){
       html += '<div class="afgerond-badge">✓ Controle afgerond</div>';
     }
@@ -300,6 +320,8 @@
 
     inhoud.innerHTML = html;
     document.getElementById("btnTerugNaarLijst").addEventListener("click", laadEnRenderLijst);
+    var overdrachtBtn = document.getElementById("btnOverdragen");
+    if(overdrachtBtn) overdrachtBtn.addEventListener("click", draagOver);
 
     if(!afgerond){
       inhoud.querySelectorAll(".punt-btn").forEach(function(btn){
@@ -355,6 +377,20 @@
     renderChecklist(false);
   }
 
+  async function draagOver(){
+    var select = document.getElementById("overdragenSelect");
+    var nieuweId = select.value;
+    if(!nieuweId) return;
+    var nieuwePersoon = loginState.personen.filter(function(p){ return p.id===nieuweId; })[0];
+    if(!confirm("Deze voertuigcontrole overdragen aan "+(nieuwePersoon?nieuwePersoon.naam:"deze persoon")+"? Die persoon ziet 'm dan in zijn/haar eigen lijst staan.")) return;
+    try{
+      await fetch(DAG_URL+"/rest/v1/voertuigcontrole_uitvoeringen?id=eq."+huidigeUitvoeringId, {
+        method:"PATCH", headers: Object.assign({}, DAG_KEY_HEADERS, {"Content-Type":"application/json","Prefer":"return=minimal"}),
+        body: JSON.stringify({medewerker_id: nieuweId})
+      });
+      laadEnRenderLijst();
+    }catch(e){ alert("Overdragen mislukt, probeer opnieuw."); }
+  }
   async function rondControleAf(){
     try{
       await fetch(DAG_URL+"/rest/v1/voertuigcontrole_uitvoeringen?id=eq."+huidigeUitvoeringId, {
