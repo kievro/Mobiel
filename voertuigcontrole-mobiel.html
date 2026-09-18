@@ -115,10 +115,6 @@
     <div class="brand">VOERTUIGCONTROLE<small id="ingelogdAls"></small></div>
   </div>
 
-  <div class="filter-row">
-    <select id="postFilter"></select>
-  </div>
-
   <div id="inhoud"><div class="empty">Bezig met laden…</div></div>
   <div class="footer-note" id="footerNote"></div>
 </div>
@@ -150,39 +146,62 @@
   function vandaagKey(){ var d=new Date(); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
 
   // ---------- State ----------
-  var POST_KEY = "voertuigcontrole-mobiel-post";
   var scherm = "lijst"; // 'lijst' of 'checklist'
   var huidigVoertuig = null;
   var huidigeUitvoeringId = null;
   var huidigePunten = []; // [{id, omschrijving, resultaatId, status, opmerking}]
+  var huidigJournaal = [];
+  var journaalKeuzeGemaakt = false;
   var mijnVoertuigenCache = [];
 
-  async function bepaalMijnVoertuigen(postId){
+  function voorVrijgave(){
+    return new Date().getHours() < 7;
+  }
+
+  async function bepaalMijnVoertuigen(){
     var datumStr = vandaagKey();
-    var [personenRes, dagRes, voertuigenRes] = await Promise.all([
-      sbSelect("kv_store?key=eq.personen&select=value"),
-      sbSelect("kv_store?key=eq.dag:"+postId+":"+datumStr+"&select=value"),
-      sbSelect("voertuigcontrole_voertuigen?post_id=eq."+postId+"&actief=eq.true&order=volgorde")
-    ]);
-    var dag = (dagRes[0] && dagRes[0].value) || null;
-    var mijnPosities = [];
-    if(dag && dag.voertuigIndeling){
-      ["dag","avond"].forEach(function(deel){
-        var vi = dag.voertuigIndeling[deel] || {};
-        Object.keys(vi).forEach(function(fid){ if(vi[fid]===loginState.gekozenId && mijnPosities.indexOf(fid)===-1) mijnPosities.push(fid); });
-      });
-    }
-    var viaPositie = (voertuigenRes||[]).filter(function(v){ return mijnPosities.indexOf(slug(v.dagstaat_positie))!==-1; });
-    // Ook expliciet aan mij overgedragen controles van vandaag meenemen, ook
-    // als ik zelf niet op die positie sta.
+    var configRes = await sbSelect("kv_store?key=eq.config&select=value");
+    var config = (configRes[0] && configRes[0].value) || {};
+    var posten = config.posten || [];
+
+    // Per post de dagstaat van vandaag ophalen, en daarin kijken of ik ergens
+    // op een voertuigpositie sta -- ongeacht bij welke post dat is.
+    var dagPerPost = {};
+    await Promise.all(posten.map(async function(post){
+      var dagRes = await sbSelect("kv_store?key=eq.dag:"+post.id+":"+datumStr+"&select=value");
+      dagPerPost[post.id] = (dagRes[0] && dagRes[0].value) || null;
+    }));
+
+    var mijnPositiesPerPost = {}; // postId -> [fid, fid, ...]
+    posten.forEach(function(post){
+      var dag = dagPerPost[post.id];
+      var posities = [];
+      if(dag && dag.voertuigIndeling){
+        ["dag","avond"].forEach(function(deel){
+          var vi = dag.voertuigIndeling[deel] || {};
+          Object.keys(vi).forEach(function(fid){ if(vi[fid]===loginState.gekozenId && posities.indexOf(fid)===-1) posities.push(fid); });
+        });
+      }
+      if(posities.length) mijnPositiesPerPost[post.id] = posities;
+    });
+
+    var voertuigenRes = await sbSelect("voertuigcontrole_voertuigen?actief=eq.true&order=volgorde");
+    var alleVoertuigen = voertuigenRes || [];
+    var viaPositie = alleVoertuigen.filter(function(v){
+      var posities = mijnPositiesPerPost[v.post_id];
+      return posities && posities.indexOf(slug(v.dagstaat_positie))!==-1;
+    });
+
+    // Ook expliciet aan mij overgedragen controles van vandaag meenemen, ongeacht post/positie.
     var overgedragenRes = await sbSelect("voertuigcontrole_uitvoeringen?medewerker_id=eq."+loginState.gekozenId+"&datum=eq."+datumStr);
     var viaOverdracht = (overgedragenRes||[]).map(function(u){
-      var v = (voertuigenRes||[]).filter(function(x){ return x.id===u.voertuig_id; })[0];
-      return v || null;
+      return alleVoertuigen.filter(function(x){ return x.id===u.voertuig_id; })[0] || null;
     }).filter(Boolean).filter(function(v){ return !viaPositie.some(function(x){ return x.id===v.id; }); });
+
     var voertuigen = viaPositie.concat(viaOverdracht);
-    if(!voertuigen.length) return { voertuigen: [], geenPositie: !dag || !dag.voertuigIndeling ? undefined : true, geenDagstaat: !dag || !dag.voertuigIndeling };
-    // Status per voertuig ophalen (van vandaag)
+    var ergensEenDagstaat = posten.some(function(post){ return !!dagPerPost[post.id]; });
+    if(!voertuigen.length) return { voertuigen: [], geenPositie: ergensEenDagstaat, geenDagstaat: !ergensEenDagstaat };
+
     var ids = voertuigen.map(function(v){ return v.id; });
     var uitvoeringenRes = await sbSelect("voertuigcontrole_uitvoeringen?voertuig_id=in.("+ids.join(",")+")&datum=eq."+datumStr);
     voertuigen.forEach(function(v){
@@ -204,14 +223,18 @@
     var inhoud = document.getElementById("inhoud");
     inhoud.innerHTML = '<div class="empty">Bezig met laden…</div>';
     scherm = "lijst";
+    if(voorVrijgave()){
+      inhoud.innerHTML = '<div class="card"><div class="empty">Voertuigcontroles worden elke dag om 07:00 vrijgegeven. Kom straks terug.</div></div>';
+      document.getElementById("footerNote").textContent = "";
+      return;
+    }
     try{
-      var postId = document.getElementById("postFilter").value;
-      var resultaat = await bepaalMijnVoertuigen(postId);
+      var resultaat = await bepaalMijnVoertuigen();
       mijnVoertuigenCache = resultaat.voertuigen;
       if(resultaat.geenDagstaat){
-        inhoud.innerHTML = '<div class="card"><div class="empty">Er is nog geen dagstaat ingevuld voor vandaag bij deze post.</div></div>';
+        inhoud.innerHTML = '<div class="card"><div class="empty">Er is nog geen dagstaat ingevuld voor vandaag.</div></div>';
       } else if(resultaat.geenPositie){
-        inhoud.innerHTML = '<div class="card"><div class="empty">Je staat vandaag niet op een voertuigpositie bij deze post — geen voertuigcontrole nodig.</div></div>';
+        inhoud.innerHTML = '<div class="card"><div class="empty">Je staat vandaag niet op een voertuigpositie — geen voertuigcontrole nodig.</div></div>';
       } else if(!resultaat.voertuigen.length){
         inhoud.innerHTML = '<div class="card"><div class="empty">Je positie van vandaag heeft geen gekoppelde voertuigen (nog niet ingesteld in Instellingen).</div></div>';
       } else {
@@ -219,7 +242,7 @@
         inhoud.innerHTML = '<div class="eyebrow" style="margin-bottom:8px;">Mijn voertuigcontroles — '+aantalGereed+' van '+resultaat.voertuigen.length+' gereed</div>'
           + resultaat.voertuigen.map(function(v){
             return '<div class="card voertuig-card" data-id="'+v.id+'">'
-              + '<div><div class="voertuig-naam">'+escapeHtml(v.voertuignummer)+' — '+escapeHtml(v.omschrijving)+'</div><div class="voertuig-positie">'+escapeHtml(v.dagstaat_positie)+(v._overgedragen?' · overgedragen aan jou':'')+'</div></div>'
+              + '<div><div class="voertuig-naam">'+escapeHtml(v.voertuignummer)+' — '+escapeHtml(v.omschrijving)+'</div><div class="voertuig-positie">'+escapeHtml(v.dagstaat_positie)+' · '+escapeHtml(POST_NAMEN[v.post_id]||v.post_id)+(v._overgedragen?' · overgedragen aan jou':'')+'</div></div>'
               + statusPillHtml(v)
               + '</div>';
           }).join("");
@@ -242,6 +265,10 @@
     var datumStr = vandaagKey();
     try{
       var punten = await sbSelect("voertuigcontrole_controlepunten?voertuig_id=eq."+voertuigId+"&actief=eq.true&order=volgorde");
+      var journaalRes = await sbSelect("voertuigcontrole_journaal?voertuig_id=eq."+voertuigId+"&opgelost=eq.false&order=toegevoegd_op.asc");
+      huidigJournaal = journaalRes || [];
+      var mijnMeldingVandaagRes = await sbSelect("voertuigcontrole_journaal?voertuig_id=eq."+voertuigId+"&toegevoegd_door=eq."+loginState.gekozenId+"&toegevoegd_op=gte."+datumStr+"T00:00:00");
+      journaalKeuzeGemaakt = !!(mijnMeldingVandaagRes && mijnMeldingVandaagRes.length);
       var uitvoering = huidigVoertuig._uitvoering;
       if(!uitvoering){
         var dagRes = await sbSelect("kv_store?key=eq.dag:"+huidigVoertuig.post_id+":"+datumStr+"&select=value");
@@ -276,7 +303,7 @@
     var aantalGedaan = huidigePunten.filter(function(p){ return p.status; }).length;
     var pct = huidigePunten.length ? Math.round(100*aantalGedaan/huidigePunten.length) : 0;
     var alleAfwijkingenHebbenOpmerking = huidigePunten.every(function(p){ return p.status!=="afwijking" || (p.opmerking && p.opmerking.trim()); });
-    var klaarOmAfTeRonden = huidigePunten.length>0 && aantalGedaan===huidigePunten.length && alleAfwijkingenHebbenOpmerking;
+    var klaarOmAfTeRonden = huidigePunten.length>0 && aantalGedaan===huidigePunten.length && alleAfwijkingenHebbenOpmerking && journaalKeuzeGemaakt;
 
     var html = '<button class="terug-link" id="btnTerugNaarLijst" style="background:none;border:none;cursor:pointer;padding:0;">← Mijn voertuigcontroles</button>'
       + '<div class="card" style="margin-bottom:14px;">'
@@ -285,6 +312,37 @@
       + '<div class="voortgang-balk"><div class="voortgang-vulling" style="width:'+pct+'%;"></div></div>'
       + '<div class="voortgang-tekst">'+aantalGedaan+' / '+huidigePunten.length+' gecontroleerd</div>'
       + '</div>';
+
+    // ---------- Journaal: openstaande meldingen van eerdere diensten ----------
+    html += '<div class="card" style="margin-bottom:14px;">'
+      + '<div class="eyebrow" style="margin:0 0 6px;">Journaal — openstaande meldingen dit voertuig</div>';
+    if(!huidigJournaal.length){
+      html += '<div class="hint" style="margin:0;">Geen openstaande meldingen.</div>';
+    } else {
+      html += huidigJournaal.map(function(j){
+        var persoon = loginState.personen.filter(function(p){ return p.id===j.toegevoegd_door; })[0];
+        var wanneer = new Date(j.toegevoegd_op).toLocaleDateString("nl-NL",{day:"numeric",month:"short"});
+        return '<div class="journaal-item" data-jid="'+j.id+'" style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);">'
+          + '<div><div style="font-size:13.5px;">'+escapeHtml(j.tekst)+'</div><div class="hint" style="margin:2px 0 0;">'+escapeHtml(persoon?persoon.naam:"?")+' · '+wanneer+'</div></div>'
+          + (afgerond ? '' : '<button type="button" class="btn-vandaag" data-action="lostJournaalOp" style="margin:0;padding:5px 10px;white-space:nowrap;">✓ Opgelost</button>')
+          + '</div>';
+      }).join("");
+    }
+    html += '</div>';
+
+    // ---------- Verplichte melding bij afronden ----------
+    if(!afgerond){
+      html += '<div class="card" style="margin-bottom:14px;">'
+        + '<div class="eyebrow" style="margin:0 0 6px;">Melding voor de volgende chauffeur (verplicht)</div>'
+        + (journaalKeuzeGemaakt
+          ? '<div class="hint" style="margin:0;color:#4CAF7D;">✓ Verwerkt.</div>'
+          : '<textarea id="nieuweJournaalTekst" placeholder="Bijv. moet getankt worden…" style="width:100%;background:var(--surface-2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:8px 10px;font-family:inherit;font-size:13px;min-height:50px;margin-bottom:8px;"></textarea>'
+          + '<div style="display:flex;gap:6px;">'
+          + '<button type="button" class="btn-vandaag" id="btnJournaalToevoegen" style="flex:1;margin:0;padding:8px;">Melding toevoegen</button>'
+          + '<button type="button" class="btn-vandaag" id="btnNietsTeMelden" style="flex:1;margin:0;padding:8px;">Niets te melden</button>'
+          + '</div>')
+        + '</div>';
+    }
 
     if(!afgerond){
       html += '<div class="card" style="margin-bottom:14px;">'
@@ -322,6 +380,20 @@
     document.getElementById("btnTerugNaarLijst").addEventListener("click", laadEnRenderLijst);
     var overdrachtBtn = document.getElementById("btnOverdragen");
     if(overdrachtBtn) overdrachtBtn.addEventListener("click", draagOver);
+    inhoud.querySelectorAll('[data-action="lostJournaalOp"]').forEach(function(btn){
+      btn.addEventListener("click", function(){
+        var jid = btn.closest(".journaal-item").dataset.jid;
+        lostJournaalOp(jid);
+      });
+    });
+    var toevoegBtn = document.getElementById("btnJournaalToevoegen");
+    if(toevoegBtn) toevoegBtn.addEventListener("click", function(){
+      var tekst = document.getElementById("nieuweJournaalTekst").value.trim();
+      if(!tekst){ alert("Vul een melding in, of kies 'Niets te melden'."); return; }
+      voegJournaalToe(tekst);
+    });
+    var nietsBtn = document.getElementById("btnNietsTeMelden");
+    if(nietsBtn) nietsBtn.addEventListener("click", function(){ voegJournaalToe("(Niets te melden)"); });
 
     if(!afgerond){
       inhoud.querySelectorAll(".punt-btn").forEach(function(btn){
@@ -339,6 +411,35 @@
       var afBtn = document.getElementById("btnAfronden");
       if(afBtn) afBtn.addEventListener("click", rondControleAf);
     }
+  }
+
+  async function lostJournaalOp(journaalId){
+    try{
+      await fetch(DAG_URL+"/rest/v1/voertuigcontrole_journaal?id=eq."+journaalId, {
+        method:"PATCH", headers: Object.assign({}, DAG_KEY_HEADERS, {"Content-Type":"application/json","Prefer":"return=minimal"}),
+        body: JSON.stringify({opgelost: true, opgelost_door: loginState.gekozenId, opgelost_op: new Date().toISOString()})
+      });
+      huidigJournaal = huidigJournaal.filter(function(j){ return j.id!==journaalId; });
+      renderChecklist(false);
+    }catch(e){ alert("Opslaan mislukt, probeer opnieuw."); }
+  }
+
+  async function voegJournaalToe(tekst){
+    try{
+      var isNietsTeMelden = tekst==="(Niets te melden)";
+      var nieuw = {
+        voertuig_id: huidigVoertuig.id, tekst: tekst, toegevoegd_door: loginState.gekozenId,
+        opgelost: isNietsTeMelden, // 'niets te melden' hoeft niet als openstaand punt te blijven staan
+        opgelost_door: isNietsTeMelden ? loginState.gekozenId : null,
+        opgelost_op: isNietsTeMelden ? new Date().toISOString() : null
+      };
+      await fetch(DAG_URL+"/rest/v1/voertuigcontrole_journaal", {
+        method:"POST", headers: Object.assign({}, DAG_KEY_HEADERS, {"Content-Type":"application/json","Prefer":"return=minimal"}),
+        body: JSON.stringify(nieuw)
+      });
+      journaalKeuzeGemaakt = true;
+      renderChecklist(false);
+    }catch(e){ alert("Opslaan mislukt, probeer opnieuw."); }
   }
 
   async function zetStatus(controlepuntId, status){
@@ -405,22 +506,7 @@
   function startApp(){
     document.getElementById("toegangsScherm").classList.add("hidden");
     document.getElementById("app").classList.remove("hidden");
-
-    sbSelect("kv_store?key=eq.config&select=value").then(function(configRes){
-      var config = (configRes[0] && configRes[0].value) || {};
-      var select = document.getElementById("postFilter");
-      select.innerHTML = (config.posten||[]).map(function(p){ return '<option value="'+p.id+'">'+escapeHtml(p.naam)+'</option>'; }).join("");
-      try{
-        var opgeslagenPost = localStorage.getItem(POST_KEY);
-        if(opgeslagenPost && [...select.options].some(function(o){return o.value===opgeslagenPost;})) select.value = opgeslagenPost;
-      }catch(e){}
-      select.addEventListener("change", function(){
-        try{ localStorage.setItem(POST_KEY, this.value); }catch(e){}
-        laadEnRenderLijst();
-      });
-      laadEnRenderLijst();
-    });
-
+    laadEnRenderLijst();
     setInterval(function(){ if(scherm==="lijst") laadEnRenderLijst(); }, 120000); // elke 2 minuten verversen, alleen op het overzicht
   }
 
