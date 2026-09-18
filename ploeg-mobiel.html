@@ -1100,9 +1100,9 @@
     val = val.replace(/[^0-9]/g,"").slice(0,6);
     if(val.length < 4){ showToast("Pincode moet minimaal 4 cijfers zijn."); return; }
     runAction(async function(){
-      var res = await upsertLidExtra(id, {pin:val});
+      var res = await sbPloeg.rpc("set_pin", {p_id: id, p_pin: val, p_moet_wijzigen: true});
       if(res.error) throw res.error;
-    }, "Pincode bijgewerkt");
+    }, "Pincode gereset — moet bij eerstvolgende login gewijzigd worden");
   };
   App.updateMemberCorrectie = function(id, val){
     var n = parseInt(val, 10); if(isNaN(n)) n = 0;
