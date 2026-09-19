@@ -177,10 +177,10 @@
       var dag = dagPerPost[post.id];
       var posities = [];
       if(dag && dag.voertuigIndeling){
-        ["dag","avond"].forEach(function(deel){
-          var vi = dag.voertuigIndeling[deel] || {};
-          Object.keys(vi).forEach(function(fid){ if(vi[fid]===loginState.gekozenId && posities.indexOf(fid)===-1) posities.push(fid); });
-        });
+        // Voertuigcontrole wordt alleen gedaan door wie overdag op de functie
+        // zit -- bewust geen avond hier, ook al bestaat die wel in de data.
+        var vi = dag.voertuigIndeling.dag || {};
+        Object.keys(vi).forEach(function(fid){ if(vi[fid]===loginState.gekozenId && posities.indexOf(fid)===-1) posities.push(fid); });
       }
       if(posities.length) mijnPositiesPerPost[post.id] = posities;
     });
