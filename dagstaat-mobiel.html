@@ -55,6 +55,8 @@
   .blokrooster td{padding:6px;border-bottom:1px solid var(--border);vertical-align:middle;line-height:1.3;}
   .blokrooster tr:last-child td{border-bottom:none;}
   .blokrooster .br-functie-col{font-family:var(--font-body);font-size:11px;font-weight:600;color:#fff;}
+  .vc-col{text-align:center !important;padding-left:2px !important;padding-right:2px !important;width:50px;}
+  .vc-badge{display:block;font-size:10px;font-weight:600;color:var(--text-muted);white-space:nowrap;line-height:1.5;}
   .blokrooster .br-naam{font-weight:600;}
   .bv-badge{display:inline-block;font-family:var(--font-body);font-size:9px;font-weight:700;background:rgba(240,169,58,0.18);color:var(--amber);border:1px solid var(--amber);border-radius:3px;padding:1px 4px;margin-left:3px;}
   .blok-leeg{color:var(--text-muted);opacity:0.4;}
@@ -192,10 +194,12 @@
     return luminantie > 0.6 ? "#14181f" : "#ffffff";
   }
 
-  function renderBlokRooster(dag, personenById, functieGroepen, activiteitTypes, werkblokken){
+  function renderBlokRooster(dag, personenById, functieGroepen, activiteitTypes, werkblokken, vcVoertuigen, vcUitvoeringenMap){
     var cellen = dag.cellen || {};
     var vi = (dag.voertuigIndeling && dag.voertuigIndeling.dag) || {};
     var blokken = blokkenMetTijden(werkblokken);
+    vcVoertuigen = vcVoertuigen || [];
+    vcUitvoeringenMap = vcUitvoeringenMap || {};
 
     var volgordeIndex = {}, functiesPerPid = {}, teller = 0;
     functieGroepen.forEach(function(groep){
@@ -217,7 +221,7 @@
     });
     blokken = blokken.filter(function(b){ return b.id!=="avond" || avondHeeftInhoud; });
 
-    var headerHtml = '<tr><th>Functie</th><th>Naam</th>' + blokken.map(function(b){
+    var headerHtml = '<tr><th>Functie</th><th class="vc-col">Vtg.</th><th>Naam</th>' + blokken.map(function(b){
       return '<th>'+b.naam+'<br><span class="blok-tijd">'+b.tijd+'</span></th>';
     }).join("") + '</tr>';
 
@@ -227,6 +231,14 @@
       var isBevelvoerder = persoon && persoon.specialismen && persoon.specialismen.indexOf("Bevelvoerder") !== -1;
       var naamHtml = escapeHtml(naam) + (isBevelvoerder ? ' <span class="bv-badge">BV</span>' : '');
       var functieTekst = functiesPerPid[pid].join(" / ");
+      var vcMatches = vcVoertuigen.filter(function(v){
+        return functiesPerPid[pid].some(function(label){ return slugify(label)===slugify(v.dagstaat_positie); });
+      });
+      var vcCelHtml = vcMatches.map(function(v){
+        var u = vcUitvoeringenMap[v.id];
+        var icoon = !u ? "\u23f3" : (!u.afgerond ? "\ud83d\udd04" : "\u2705");
+        return '<span class="vc-badge">'+escapeHtml(v.voertuignummer.slice(-4))+' '+icoon+'</span>';
+      }).join("");
       var cellenHtml = blokken.map(function(b){
         var entry = (cellen[pid]||{})[b.id];
         var type = entry ? (activiteitTypes||[]).filter(function(a){ return a.id===entry.typeId; })[0] : null;
@@ -236,19 +248,19 @@
         var stijl = "background:"+kleur+";"+(tekstKleur?"color:"+tekstKleur+";":"");
         return '<td style="'+stijl+'">'+(tekst ? escapeHtml(tekst) : '<span class="blok-leeg">\u2013</span>')+'</td>';
       }).join("");
-      return '<tr><td class="br-functie-col">'+escapeHtml(functieTekst)+'</td><td class="br-naam">'+naamHtml+'</td>'+cellenHtml+'</tr>';
+      return '<tr><td class="br-functie-col">'+escapeHtml(functieTekst)+'</td><td class="vc-col">'+vcCelHtml+'</td><td class="br-naam">'+naamHtml+'</td>'+cellenHtml+'</tr>';
     }).join("");
 
     return '<div class="blokrooster-wrap"><table class="blokrooster"><thead>'+headerHtml+'</thead><tbody>'+rowsHtml+'</tbody></table></div>';
   }
 
-  function renderDagstaat(dag, personenById, postConfig, werkblokken, activiteitTypes, postNaam, datumLabel){
+  function renderDagstaat(dag, personenById, postConfig, werkblokken, activiteitTypes, postNaam, datumLabel, vcVoertuigen, vcUitvoeringenMap){
     if(!dag){
       return '<div class="card"><h2>Dagstaat</h2><div class="empty">Geen dagstaat gevonden voor '+escapeHtml(datumLabel)+' bij '+escapeHtml(postNaam)+'.</div></div>';
     }
     var ploegNaam = (dag.ploegAanDienst||"").replace(/^post\d+-ploeg-/,"Ploeg ");
     var functieGroepen = (postConfig && postConfig.voertuigFuncties) || [];
-    var roosterHtml = renderBlokRooster(dag, personenById, functieGroepen, activiteitTypes, werkblokken);
+    var roosterHtml = renderBlokRooster(dag, personenById, functieGroepen, activiteitTypes, werkblokken, vcVoertuigen, vcUitvoeringenMap);
 
     var oefTypeId = null;
     (activiteitTypes||[]).forEach(function(t){ if(t.naam === "Oefening") oefTypeId = t.id; });
@@ -308,20 +320,28 @@
     try{
       var postId = huidigePost();
       var datumKey = toDatumKey(huidigeDatum);
-      var [personenRes, configRes, dagRes] = await Promise.all([
+      var [personenRes, configRes, dagRes, vcVoertuigenRes] = await Promise.all([
         sbSelect("kv_store?key=eq.personen&select=value"),
         sbSelect("kv_store?key=eq.config&select=value"),
-        sbSelect("kv_store?key=eq.dag:"+postId+":"+datumKey+"&select=value")
+        sbSelect("kv_store?key=eq.dag:"+postId+":"+datumKey+"&select=value"),
+        sbSelect("voertuigcontrole_voertuigen?post_id=eq."+postId+"&actief=eq.true&order=volgorde")
       ]);
       var personen = (personenRes[0] && personenRes[0].value) || [];
       var config = (configRes[0] && configRes[0].value) || {};
       var dag = (dagRes[0] && dagRes[0].value) || null;
+      var vcVoertuigen = vcVoertuigenRes || [];
+      var vcUitvoeringenMap = {};
+      if(vcVoertuigen.length){
+        var vcIds = vcVoertuigen.map(function(v){ return v.id; });
+        var vcUitvoeringenRes = await sbSelect("voertuigcontrole_uitvoeringen?voertuig_id=in.("+vcIds.join(",")+")&datum=eq."+datumKey);
+        (vcUitvoeringenRes||[]).forEach(function(u){ vcUitvoeringenMap[u.voertuig_id] = u; });
+      }
       var personenById = {}; personen.forEach(function(p){ personenById[p.id]=p; });
       if(dag && dag.extraPersonen){ dag.extraPersonen.forEach(function(ep){ personenById[ep.personId] = {id:ep.personId, naam:ep.naam}; }); }
       var postConfig = (config.posten||[]).filter(function(p){ return p.id===postId; })[0];
       var datumLabel = huidigeDatum.toLocaleDateString("nl-NL",{day:"numeric",month:"long"});
 
-      inhoud.innerHTML = renderDagstaat(dag, personenById, postConfig, config.werkblokken, config.activiteitTypes, POST_NAMEN[postId], datumLabel);
+      inhoud.innerHTML = renderDagstaat(dag, personenById, postConfig, config.werkblokken, config.activiteitTypes, POST_NAMEN[postId], datumLabel, vcVoertuigen, vcUitvoeringenMap);
       document.getElementById("footerNote").textContent = "Bijgewerkt " + new Date().toLocaleTimeString("nl-NL",{hour:"2-digit",minute:"2-digit"});
     }catch(e){
       inhoud.innerHTML = '<div class="card"><div class="empty">Kon niet laden: '+escapeHtml(e.message||"onbekende fout")+'</div></div>';
