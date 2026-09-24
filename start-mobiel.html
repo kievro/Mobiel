@@ -123,11 +123,10 @@
 
   function escapeHtml(s){ return String(s==null?"":s).replace(/[&<>"']/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
 
-  var PLOEG_URL = "https://gqqflxctuikbygqnbrli.supabase.co";
   async function laadPloegBolletje(persoonId){
     if(!persoonId) return;
     try{
-      var res = await fetch(PLOEG_URL + "/functions/v1/tel-open-diensten?persoonId=" + encodeURIComponent(persoonId));
+      var res = await fetch(DAG_URL + "/functions/v1/tel-open-diensten?persoonId=" + encodeURIComponent(persoonId));
       var data = await res.json();
       var bolletje = document.getElementById("ploegBolletje");
       if(data && data.aantal > 0){
