@@ -125,21 +125,19 @@
   "use strict";
   var APP_VERSIE_DATUM = "29 augustus 2026"; // pas deze regel aan bij elke nieuwe versie die je installeert
 
-  // Zelfde Supabase-projecten als PloegCompleet -- deze mobiele app is een
-  // volledig apart bestand, maar praat met precies dezelfde gegevens.
-  var PLOEG_URL = "https://gqqflxctuikbygqnbrli.supabase.co";
-  var PLOEG_KEY = "sb_publishable_8MFTS2ygpMxPwsl1-EH1aQ_GvmxQAtC";
+  // Eén Supabase-project voor alles -- PloegCompleet is gemigreerd naar
+  // hetzelfde Dagstaat-project als de rest van Brandweer Mobiel.
   var DAG_URL = "https://iyquepqubfqrhybriqif.supabase.co";
   var DAG_KEY = "sb_publishable_Pb0fFfxZQggKnFCtJYMH9A_avw0GaPn";
-  var sbPloeg = window.supabase.createClient(PLOEG_URL, PLOEG_KEY);
   var sbDag = window.supabase.createClient(DAG_URL, DAG_KEY);
 
-  // Openbare VAPID-sleutel -- alleen nodig om je telefoon een pushabonnement
-  // te laten aanmaken. Mag gewoon in de code staan (dat is het hele idee van
-  // de publieke helft van dit sleutelpaar).
-  var VAPID_PUBLIC_KEY = "BLMZJzCHcbn1zYjZtfBSk7zNk138i_GOeGSj00czjBJ6YPT_qtKLywleKHKXuomKkfln6_2dRWY3m4GtKvl_s-0";
+  // Openbare VAPID-sleutel -- LET OP: dit is de OUDE sleutel van het vorige
+  // PloegCompleet-project. Er is een NIEUW VAPID-sleutelpaar aangemaakt in
+  // het Dagstaat-project; vul die nieuwe publieke sleutel hieronder in
+  // vóórdat push-registraties weer gebruikt worden.
+  var VAPID_PUBLIC_KEY = "HIER_NIEUWE_VAPID_PUBLIC_KEY_INVULLEN";
 
-  var LAST_USER_KEY = "ploeg-mobiel-last-user";
+  var INGELOGD_KEY = "brw-mobiel-ingelogd-persoon"; // gedeeld met de hoofdpagina en Dagstaat Mobiel
   var ANTWOORD_LABEL = {ja:"Ja, ik kan", kan_wel:"Kan wel, liever niet", nee:"Nee, ik kan niet"};
   var POST_NAMEN = {post1:"Arnhem Noord", post2:"Arnhem Zuid", post3:"Ede Stad", onbekend:"Post onbekend"};
   var POST_ORDER = ["post1","post2","post3","onbekend"];
@@ -222,13 +220,13 @@
   async function loadAllData(){
     var personenRes = await sbDag.from("kv_store").select("value").eq("key","personen").single();
     var personen = (personenRes.data && personenRes.data.value) || [];
-    var ledenPubRes = await sbPloeg.from("leden_publiek").select("*");
-    var dienstenRes = await sbPloeg.from("diensten").select("*");
-    var slotsRes = await sbPloeg.from("dienst_slots").select("*");
-    var reactiesRes = await sbPloeg.from("reacties").select("*");
-    var toewijzingenRes = await sbPloeg.from("toewijzingen").select("*");
-    var instellingenRes = await sbPloeg.from("instellingen").select("*").eq("id",1).single();
-    var meldingenRes = await sbPloeg.from("meldingen").select("*");
+    var ledenPubRes = await sbDag.from("leden_publiek").select("*");
+    var dienstenRes = await sbDag.from("diensten").select("*");
+    var slotsRes = await sbDag.from("dienst_slots").select("*");
+    var reactiesRes = await sbDag.from("reacties").select("*");
+    var toewijzingenRes = await sbDag.from("toewijzingen").select("*");
+    var instellingenRes = await sbDag.from("instellingen").select("*").eq("id",1).single();
+    var meldingenRes = await sbDag.from("meldingen").select("*");
 
     var extraById = {}; (ledenPubRes.data||[]).forEach(function(e){ extraById[e.id] = e; });
     var dagIds = {};
@@ -278,7 +276,7 @@
       });
     });
     if(toInsert.length){
-      var res = await sbPloeg.from("meldingen").insert(toInsert);
+      var res = await sbDag.from("meldingen").insert(toInsert);
       if(!res.error){ data.meldingen = data.meldingen.concat(toInsert); }
     }
   }
@@ -291,7 +289,28 @@
   async function loadInitial(){
     try{ state.data = await loadAllData(); await syncMeldingenRemote(state.data); }
     catch(e){ state.loadError = "Kon geen verbinding maken (" + (e && e.message ? e.message : "onbekende fout") + ")."; }
-    try{ var last = localStorage.getItem(LAST_USER_KEY); if(last && state.data && getMember(last, state.data)) state.pendingUserId = last; }catch(e){}
+
+    // Centrale login herbruiken: geen eigen naamkeuze/pincode meer. Alleen
+    // doorgaan als er zowel een geldige Dagstaat-sessie is (getSession) als
+    // een bekende, ingelogde persoon in de gedeelde localStorage-sleutel staat.
+    // Ontbreekt een van beide, dan terug naar de hoofdpagina om daar (opnieuw)
+    // in te loggen -- nooit stilzwijgend iemand inloggen op alleen localStorage.
+    var ingelogdId = null;
+    try{ ingelogdId = localStorage.getItem(INGELOGD_KEY); }catch(e){}
+    var sessieGeldig = false;
+    try{
+      var { data: sessieData } = await sbDag.auth.getSession();
+      sessieGeldig = !!(sessieData && sessieData.session);
+    }catch(e){ sessieGeldig = false; }
+
+    if(!ingelogdId || !sessieGeldig || !state.data || !getMember(ingelogdId, state.data)){
+      location.href = "./index.html";
+      return;
+    }
+
+    state.currentUserId = ingelogdId;
+    state.view = "diensten";
+    markeerActief(state.currentUserId);
     state.loading = false;
     render();
     initHerlaadOpAfstand();
@@ -339,10 +358,10 @@
   }
   async function markeerActief(lidId){
     try{
-      await sbPloeg.from("leden_extra").upsert({id:lidId, laatst_actief:new Date().toISOString()}, {onConflict:"id"});
+      await sbDag.from("leden_extra").upsert({id:lidId, laatst_actief:new Date().toISOString()}, {onConflict:"id"});
     }catch(e){ /* dit is puur informatief, mag nooit het inloggen zelf blokkeren */ }
     try{
-      await sbPloeg.from("login_log").insert({lid_id:lidId, app:"mobiel", user_agent:navigator.userAgent});
+      await sbDag.from("login_log").insert({lid_id:lidId, app:"mobiel", user_agent:navigator.userAgent});
     }catch(e){ /* idem: nooit het inloggen blokkeren */ }
   }
 
@@ -365,66 +384,15 @@
       // Dit fysieke toestel-eindpunt mag maar bij één persoon tegelijk geregistreerd
       // staan -- anders blijft een oude naam (van vóór het wisselen van gebruiker
       // op ditzelfde toestel) ook meldingen ontvangen die niet voor hem/haar zijn.
-      await sbPloeg.from("push_subscriptions").delete().eq("subscriptie->>endpoint", subJson.endpoint).neq("lid_id", state.currentUserId);
-      var res = await sbPloeg.from("push_subscriptions").upsert({ lid_id: state.currentUserId, subscriptie: subJson, bijgewerkt_op: new Date().toISOString() }, {onConflict:"lid_id,endpoint"});
+      await sbDag.from("push_subscriptions").delete().eq("subscriptie->>endpoint", subJson.endpoint).neq("lid_id", state.currentUserId);
+      var res = await sbDag.from("push_subscriptions").upsert({ lid_id: state.currentUserId, subscriptie: subJson, bijgewerkt_op: new Date().toISOString() }, {onConflict:"lid_id,endpoint"});
       if(res.error){ showToast("Meldingen: opslaan mislukt \u2013 "+res.error.message); return; }
       showToast("Meldingen ingeschakeld \u2713");
     }catch(e){ showToast("Meldingen: instellen mislukt \u2013 "+(e&&e.message?e.message:e)); }
   }
 
   var App = {}; window.App = App;
-  App.pickName = function(id){ state.pendingUserId = id; state.loginError = null; render(); };
-  App.backToNames = function(){ state.pendingUserId = null; state.loginError = null; state.moetPincodeWijzigen = false; render(); };
-  App.attemptLogin = async function(evt){
-    evt.preventDefault();
-    var pin = evt.target.pin.value.trim();
-    try{
-      var loginRes = await fetch(PLOEG_URL + "/functions/v1/login-pin", {
-        method: "POST",
-        headers: {"Content-Type":"application/json"},
-        body: JSON.stringify({id: state.pendingUserId, pin: pin})
-      });
-      var uitkomst = await loginRes.json();
-      if(uitkomst && uitkomst.ok){
-        if(uitkomst.access_token && uitkomst.refresh_token){
-          try{ await sbPloeg.auth.setSession({access_token: uitkomst.access_token, refresh_token: uitkomst.refresh_token}); }
-          catch(e){ console.error("Sessie instellen mislukt (app werkt nog wel door):", e); }
-        }
-        if(uitkomst.moetWijzigen){
-          state.loginError = null;
-          state.moetPincodeWijzigen = true;
-          render();
-          return false;
-        }
-        state.currentUserId = state.pendingUserId; state.pendingUserId = null; state.loginError = null; state.view = "diensten"; state.moetPincodeWijzigen = false;
-        try{ localStorage.setItem(LAST_USER_KEY, state.currentUserId); }catch(e){}
-        render();
-        markeerActief(state.currentUserId);
-        vraagPushToestemming();
-      } else { state.loginError = "Onjuiste pincode. Probeer opnieuw."; render(); }
-    }catch(e){ state.loginError = "Inloggen mislukt \u2013 controleer de verbinding."; render(); }
-    return false;
-  };
-  App.stelNieuwePincodeIn = async function(evt){
-    evt.preventDefault();
-    var f = evt.target;
-    var p1 = f.pin1.value.trim(), p2 = f.pin2.value.trim();
-    var foutEl = document.getElementById("nieuwPinFout");
-    if(p1.length < 4){ foutEl.textContent = "Minimaal 4 cijfers."; return false; }
-    if(p1 === "1234"){ foutEl.textContent = "Kies een andere code dan de standaardcode 1234."; return false; }
-    if(p1 !== p2){ foutEl.textContent = "De twee codes komen niet overeen."; return false; }
-    try{
-      var res = await sbPloeg.rpc("set_pin", {p_id: state.pendingUserId, p_pin: p1});
-      if(res.error) throw res.error;
-      state.currentUserId = state.pendingUserId; state.pendingUserId = null; state.moetPincodeWijzigen = false; state.view = "diensten";
-      try{ localStorage.setItem(LAST_USER_KEY, state.currentUserId); }catch(e){}
-      render();
-      markeerActief(state.currentUserId);
-      vraagPushToestemming();
-    }catch(e){ foutEl.textContent = "Opslaan mislukt, probeer opnieuw."; }
-    return false;
-  };
-  App.switchUser = function(){ state.currentUserId = null; state.pendingUserId = null; state.pushGevraagd = false; render(); };
+  App.switchUser = function(){ location.href = "./index.html"; };
   App.ververGegevens = function(){
     showToast("Bezig met verversen\u2026");
     refreshAllData().then(function(){ showToast("Bijgewerkt"); }).catch(function(){ showToast("Verversen mislukt \u2013 controleer de verbinding."); });
@@ -434,7 +402,7 @@
       var unreadIds = state.data.meldingen.filter(function(m){ return !m.gelezen; }).map(function(m){ return m.id; });
       if(unreadIds.length){
         state.data.meldingen.forEach(function(m){ if(unreadIds.indexOf(m.id)!==-1) m.gelezen = true; });
-        sbPloeg.from("meldingen").update({gelezen:true}).in("id", unreadIds).then(function(){});
+        sbDag.from("meldingen").update({gelezen:true}).in("id", unreadIds).then(function(){});
       }
     }
     state.bellOpen = !state.bellOpen;
@@ -454,13 +422,13 @@
   };
   App.respond = function(slotId, antwoord){
     runAction(async function(){
-      var res = await sbPloeg.from("reacties").upsert({slot_id:slotId, lid_id:state.currentUserId, antwoord:antwoord, tijdstip:new Date().toISOString()}, {onConflict:"slot_id,lid_id"});
+      var res = await sbDag.from("reacties").upsert({slot_id:slotId, lid_id:state.currentUserId, antwoord:antwoord, tijdstip:new Date().toISOString()}, {onConflict:"slot_id,lid_id"});
       if(res.error) throw res.error;
-      sbPloeg.from("reacties_log").insert({slot_id:slotId, lid_id:state.currentUserId, antwoord:antwoord}).then(function(){});
+      sbDag.from("reacties_log").insert({slot_id:slotId, lid_id:state.currentUserId, antwoord:antwoord}).then(function(){});
       if(antwoord === "ja"){
         var shift = shiftOfSlot(slotId, state.data);
         if(shift && shift.isSpoed && !getSlotAssignment(slotId, state.data)){
-          var r2 = await sbPloeg.from("toewijzingen").upsert({slot_id:slotId, lid_id:state.currentUserId, toegewezen_op:new Date().toISOString(), methode:"auto"}, {onConflict:"slot_id"});
+          var r2 = await sbDag.from("toewijzingen").upsert({slot_id:slotId, lid_id:state.currentUserId, toegewezen_op:new Date().toISOString(), methode:"auto"}, {onConflict:"slot_id"});
           if(r2.error) throw r2.error;
         }
       }
@@ -509,14 +477,14 @@
     if(!meldingsontvangers.length) meldingsontvangers = [state.currentUserId];
     var autoToewijzen = !!(f.autoToewijzen && f.autoToewijzen.checked);
     runAction(async function(){
-      var r1 = await sbPloeg.from("diensten").insert({
+      var r1 = await sbDag.from("diensten").insert({
         id:newId, post_id:post, datum:datumVal, type:type, deadline:deadlineIso, notitie:notitie,
         melding_moment:meldingMoment, doelgroep_specialisme:"alle", doelgroep_aanstelling:"iedereen", is_spoed:isSpoed,
         meldingsontvangers:meldingsontvangers, auto_toewijzen:autoToewijzen,
         aangemaakt_door:getMemberName(state.currentUserId, state.data), aangemaakt_op:new Date().toISOString()
       });
       if(r1.error) throw r1.error;
-      var r2 = await sbPloeg.from("dienst_slots").insert(slots);
+      var r2 = await sbDag.from("dienst_slots").insert(slots);
       if(r2.error) throw r2.error;
     }, "Dienst aangemaakt");
     state.showForm = false;
