@@ -379,6 +379,12 @@
       }
       var toestemming = await Notification.requestPermission();
       if(toestemming !== "granted"){ showToast("Meldingen: toestemming niet gegeven ("+toestemming+")."); return; }
+      // Een bestaande registratie is onlosmakelijk gekoppeld aan de sleutel
+      // waarmee 'ie is aangemaakt -- na het wisselen van VAPID-sleutel (zoals
+      // bij deze migratie) moet de oude registratie eerst worden opgezegd,
+      // anders weigert de browser de nieuwe aanmelding.
+      var bestaandeSub = await reg.pushManager.getSubscription();
+      if(bestaandeSub) await bestaandeSub.unsubscribe();
       var sub = await reg.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY) });
       var subJson = sub.toJSON();
       // Dit fysieke toestel-eindpunt mag maar bij één persoon tegelijk geregistreerd
