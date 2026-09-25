@@ -92,10 +92,11 @@
       <div class="tegel-sub">Diensten &amp; reacties</div>
       <span id="ploegBolletje" class="tegel-bolletje hidden"></span>
     </a>
-    <a class="tegel" href="./voertuigcontrole-mobiel.html">
+    <a class="tegel" href="./voertuigcontrole-mobiel.html" id="tegelVoertuigcontrole">
       <div class="tegel-icoon">✅</div>
       <div class="tegel-naam">Voertuigcontrole</div>
       <div class="tegel-sub">Dagelijkse controle</div>
+      <span id="vcBolletje" class="tegel-bolletje hidden"></span>
     </a>
   </div>
 
@@ -138,6 +139,44 @@
     }catch(e){ /* geen bolletje tonen bij een fout -- geen probleem, gewoon stil laten */ }
   }
 
+  async function laadVoertuigcontroleBolletje(persoonId){
+    if(!persoonId) return;
+    var bolletje = document.getElementById("vcBolletje");
+    try{
+      var vandaag = new Date().toISOString().slice(0,10);
+      var posten = ["post1","post2","post3"];
+      var teTonenAantal = 0;
+      for(var i=0;i<posten.length;i++){
+        var postId = posten[i];
+        // Welke functie(s) heeft deze persoon vandaag, overdag, op deze post?
+        // Voertuigcontrole wordt bewust alleen door de dagbezetting gedaan.
+        var dagRows = await sbSelect("kv_store?key=eq." + encodeURIComponent("dag:"+postId+":"+vandaag) + "&select=value");
+        var dagData = dagRows[0] && dagRows[0].value;
+        var vi = dagData && dagData.voertuigIndeling && dagData.voertuigIndeling.dag;
+        if(!vi) continue;
+        var mijnFuncties = Object.keys(vi).filter(function(fid){ return vi[fid]===persoonId; });
+        if(!mijnFuncties.length) continue;
+        // Welke voertuigen van deze post horen bij die functie(s)?
+        var voertuigen = await sbSelect("voertuigcontrole_voertuigen?post_id=eq."+postId+"&actief=eq.true&select=id,dagstaat_positie");
+        var slugify = function(s){ return String(s||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,""); };
+        var mijnFunctieSlugs = mijnFuncties.map(slugify);
+        var mijnVoertuigIds = voertuigen.filter(function(v){ return mijnFunctieSlugs.indexOf(slugify(v.dagstaat_positie))!==-1; }).map(function(v){ return v.id; });
+        if(!mijnVoertuigIds.length) continue;
+        // Van die voertuigen: hoeveel zijn vandaag nog niet afgerond?
+        var uitvoeringen = await sbSelect("voertuigcontrole_uitvoeringen?datum=eq."+vandaag+"&voertuig_id=in.("+mijnVoertuigIds.join(",")+")&select=voertuig_id,afgerond");
+        var afgerondPerVoertuig = {};
+        uitvoeringen.forEach(function(u){ if(u.afgerond) afgerondPerVoertuig[u.voertuig_id] = true; });
+        mijnVoertuigIds.forEach(function(vid){ if(!afgerondPerVoertuig[vid]) teTonenAantal++; });
+      }
+      if(teTonenAantal > 0){
+        bolletje.textContent = teTonenAantal > 99 ? "99+" : teTonenAantal;
+        bolletje.classList.remove("hidden");
+      } else {
+        bolletje.classList.add("hidden");
+      }
+    }catch(e){ /* geen bolletje tonen bij een fout -- geen probleem, gewoon stil laten */ }
+  }
+
   function startApp(){
     document.getElementById("toegangsScherm").classList.add("hidden");
     document.getElementById("app").classList.remove("hidden");
@@ -146,6 +185,7 @@
       location.reload();
     });
     laadPloegBolletje(loginState.gekozenId);
+    laadVoertuigcontroleBolletje(loginState.gekozenId);
   }
 
   // ---------- Persoonlijke pincode-login (zelfde systeem als Dagstaat/Dashboard/Bezetting) ----------
