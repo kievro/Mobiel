@@ -126,11 +126,11 @@
 
   function exporteerMailmerge(){
     if(!LAATSTE_RESULTAAT.length){ toonMelding("Genereer eerst activatielinks voordat je kunt exporteren.", "fout"); return; }
-    var regels = ["Naam,E-mailadres,ActivatieLink"];
+    var regels = ["Naam;E-mailadres;ActivatieLink"];
     LAATSTE_RESULTAAT.forEach(function(r){
-      regels.push('"'+r.naam.replace(/"/g,'""')+'","'+r.email.replace(/"/g,'""')+'","'+r.link+'"');
+      regels.push('"'+r.naam.replace(/"/g,'""')+'";"'+r.email.replace(/"/g,'""')+'";"'+r.link+'"');
     });
-    var blob = new Blob([regels.join("\n")], {type:"text/csv;charset=utf-8"});
+    var blob = new Blob(["\uFEFF"+regels.join("\n")], {type:"text/csv;charset=utf-8"});
     var url = URL.createObjectURL(blob);
     var a = document.createElement("a");
     a.href = url; a.download = "activatielinks-mailmerge.csv"; a.click();
