@@ -25,7 +25,7 @@
   .topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;}
   .brand{font-family:var(--font-display);font-weight:700;font-size:18px;text-transform:uppercase;}
   .brand small{display:block;font-family:var(--font-body);font-weight:400;font-size:10.5px;color:var(--text-muted);text-transform:none;}
-  .btn-wissel{background:var(--surface-2);border:1px solid var(--border);color:var(--text-muted);font-size:11px;padding:6px 10px;border-radius:6px;cursor:pointer;}
+
 
   .tegel-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
   .tegel{position:relative;}
@@ -72,7 +72,7 @@
 <div id="app" class="hidden">
   <div class="topbar">
     <div class="brand">WELKOM<small id="ingelogdAls"></small></div>
-    <button class="btn-wissel" id="btnAndereGebruiker">wissel</button>
+
   </div>
 
   <div class="tegel-grid">
@@ -180,10 +180,6 @@
   function startApp(){
     document.getElementById("toegangsScherm").classList.add("hidden");
     document.getElementById("app").classList.remove("hidden");
-    document.getElementById("btnAndereGebruiker").addEventListener("click", function(){
-      try{ localStorage.removeItem(INGELOGD_KEY); }catch(e){}
-      location.reload();
-    });
     laadPloegBolletje(loginState.gekozenId);
     laadVoertuigcontroleBolletje(loginState.gekozenId);
   }
