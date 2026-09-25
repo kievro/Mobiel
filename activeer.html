@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Account activeren — Brandweer Mobiel</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --bg:#1a1d23; --surface:#23272f; --border:#343a45; --text:#e8eaed;
+    --text-dim:#9aa1ac; --accent:#d6412f; --ok:#3fb87f;
+  }
+  *{box-sizing:border-box;}
+  body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;}
+  .kaart{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:32px 26px;max-width:380px;width:100%;text-align:center;}
+  h1{font-size:20px;margin:0 0 6px;}
+  .sub{color:var(--text-dim);font-size:13.5px;margin:0 0 22px;}
+  input{width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:12px;font-size:16px;text-align:center;letter-spacing:.2em;margin-bottom:10px;}
+  button{width:100%;background:var(--accent);color:#fff;border:none;border-radius:8px;padding:13px;font-size:15px;font-weight:600;cursor:pointer;margin-top:6px;}
+  button:disabled{opacity:.5;cursor:not-allowed;}
+  .fout{color:#ff7a6e;font-size:13px;margin-top:10px;}
+  .laden, .klaar{color:var(--text-dim);font-size:14px;}
+  .klaar{color:var(--ok);}
+</style>
+</head>
+<body>
+<div class="kaart" id="kaart">
+  <div class="laden">Bezig met controleren…</div>
+</div>
+
+<script>
+  var DAG_URL = "https://iyquepqubfqrhybriqif.supabase.co";
+  var DAG_KEY = "sb_publishable_Pb0fFfxZQggKnFCtJYMH9A_avw0GaPn";
+  var supa = window.supabase.createClient(DAG_URL, DAG_KEY);
+  var INGELOGD_KEY = "brw-mobiel-ingelogd-persoon";
+
+  var token = new URLSearchParams(location.search).get("token");
+  var kaart = document.getElementById("kaart");
+
+  function toonFout(reden){
+    var teksten = {
+      geen_token: "Deze link is onvolledig. Vraag om een nieuwe activatielink.",
+      ongeldig: "Deze activatielink is niet geldig. Vraag om een nieuwe.",
+      al_gebruikt: "Deze activatielink is al eerder gebruikt. Log in met je eigen pincode, of vraag om een nieuwe link als je die nog niet hebt ingesteld.",
+      verlopen: "Deze activatielink is verlopen. Vraag om een nieuwe."
+    };
+    kaart.innerHTML = '<h1>Activeren niet gelukt</h1><p class="sub">'+(teksten[reden]||"Er ging iets mis.")+'</p>';
+  }
+
+  function toonPincodeForm(naam){
+    kaart.innerHTML =
+      '<h1>Welkom, '+naam+'</h1>'
+      + '<p class="sub">Stel hieronder je eigen, persoonlijke pincode in (minimaal 4 cijfers).</p>'
+      + '<form id="pinForm">'
+      + '<input type="password" inputmode="numeric" id="pin1" placeholder="Nieuwe pincode" maxlength="8">'
+      + '<input type="password" inputmode="numeric" id="pin2" placeholder="Herhaal pincode" maxlength="8">'
+      + '<button type="submit">Pincode instellen</button>'
+      + '<div class="fout" id="foutTekst"></div>'
+      + '</form>';
+    document.getElementById("pinForm").addEventListener("submit", verstuurPincode);
+  }
+
+  async function verstuurPincode(e){
+    e.preventDefault();
+    var p1 = document.getElementById("pin1").value.trim();
+    var p2 = document.getElementById("pin2").value.trim();
+    var foutEl = document.getElementById("foutTekst");
+    if(p1.length < 4){ foutEl.textContent = "Minimaal 4 cijfers."; return false; }
+    if(p1 === "1234"){ foutEl.textContent = "Kies een andere code dan 1234."; return false; }
+    if(p1 !== p2){ foutEl.textContent = "De twee codes komen niet overeen."; return false; }
+    var btn = e.target.querySelector("button");
+    btn.disabled = true; btn.textContent = "Bezig…";
+    try{
+      var res = await fetch(DAG_URL + "/functions/v1/stel-pincode-in-na-activatie", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({token:token, pin:p1})
+      });
+      var json = await res.json();
+      if(!json.ok){ foutEl.textContent = "Mislukt: "+(json.reden||json.error||"onbekende fout"); btn.disabled=false; btn.textContent="Pincode instellen"; return; }
+      if(json.access_token && json.refresh_token){
+        await supa.auth.setSession({access_token:json.access_token, refresh_token:json.refresh_token});
+      }
+      try{ localStorage.setItem(INGELOGD_KEY, json.persoonId); }catch(err){}
+      kaart.innerHTML = '<div class="klaar">Gelukt! Je wordt doorgestuurd…</div>';
+      setTimeout(function(){ location.href = "./index.html"; }, 1200);
+    }catch(err){
+      foutEl.textContent = "Mislukt: "+err.message;
+      btn.disabled = false; btn.textContent = "Pincode instellen";
+    }
+  }
+
+  async function init(){
+    if(!token){ toonFout("geen_token"); return; }
+    try{
+      var res = await fetch(DAG_URL + "/functions/v1/activeer-account?token=" + encodeURIComponent(token));
+      var json = await res.json();
+      if(!json.ok){ toonFout(json.reden); return; }
+      toonPincodeForm(json.naam.split(" ")[0]);
+    }catch(e){
+      kaart.innerHTML = '<h1>Er ging iets mis</h1><p class="sub">Controleer je internetverbinding en probeer het opnieuw.</p>';
+    }
+  }
+
+  init();
+</script>
+</body>
+</html>

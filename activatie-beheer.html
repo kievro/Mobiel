@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Activatie Brandweer Mobiel — Beheer</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --bg:#1a1d23; --surface:#23272f; --surface-2:#2b303a; --border:#343a45;
+    --text:#e8eaed; --text-dim:#9aa1ac; --accent:#d6412f; --ok:#3fb87f; --amber:#e8a33d;
+  }
+  *{box-sizing:border-box;}
+  body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;margin:0;padding:24px 20px;}
+  .wrap{max-width:900px;margin:0 auto;}
+  h1{font-size:20px;margin:0 0 4px;}
+  .sub{color:var(--text-dim);font-size:13px;margin:0 0 24px;}
+  table{width:100%;border-collapse:collapse;background:var(--surface);border-radius:10px;overflow:hidden;}
+  th{text-align:left;font-size:12px;text-transform:uppercase;letter-spacing:.03em;color:var(--text-dim);padding:10px 12px;border-bottom:1px solid var(--border);}
+  td{padding:9px 12px;border-bottom:1px solid var(--border);font-size:14px;}
+  tr:last-child td{border-bottom:none;}
+  .status{font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;text-transform:uppercase;}
+  .status.nog-niet{background:rgba(154,161,172,.18);color:var(--text-dim);}
+  .status.verstuurd{background:rgba(232,163,61,.18);color:var(--amber);}
+  .status.geactiveerd{background:rgba(63,184,127,.18);color:var(--ok);}
+  .top-bar{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:10px;}
+  button{background:var(--accent);color:#fff;border:none;border-radius:8px;padding:10px 18px;font-size:14px;font-weight:600;cursor:pointer;}
+  button:disabled{opacity:.5;cursor:not-allowed;}
+  button.secundair{background:var(--surface-2);border:1px solid var(--border);color:var(--text);}
+  .melding{padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:14px;}
+  .melding.ok{background:rgba(63,184,127,.12);color:var(--ok);border:1px solid rgba(63,184,127,.3);}
+  .melding.fout{background:rgba(214,65,47,.12);color:#ff7a6e;border:1px solid rgba(214,65,47,.3);}
+  .geen-toegang{text-align:center;padding:60px 20px;color:var(--text-dim);}
+  a.download-link{display:inline-block;background:var(--ok);color:#fff;text-decoration:none;border-radius:8px;padding:10px 18px;font-weight:600;margin-top:14px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Activatie Brandweer Mobiel</h1>
+  <p class="sub">Verstuur persoonlijke, eenmalige activatielinks waarmee collega's zelf hun pincode instellen.</p>
+  <div id="inhoud">Bezig met laden…</div>
+</div>
+
+<script>
+  var DAG_URL = "https://iyquepqubfqrhybriqif.supabase.co";
+  var DAG_KEY = "sb_publishable_Pb0fFfxZQggKnFCtJYMH9A_avw0GaPn";
+  var supa = window.supabase.createClient(DAG_URL, DAG_KEY);
+  var INGELOGD_KEY = "brw-mobiel-ingelogd-persoon";
+
+  // Pas dit aan naar waar activeer.html daadwerkelijk gehost wordt.
+  var ACTIVATIE_BASIS_URL = location.href.replace(/activatie-beheer\.html.*$/, "");
+
+  function escapeHtml(s){ return String(s==null?"":s).replace(/[&<>"']/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
+
+  var ALLE_PERSONEN = [];
+
+  async function laadPersoneel(){
+    var personenRes = await supa.from("kv_store").select("value").eq("key","personen").maybeSingle();
+    var personen = (personenRes.data && personenRes.data.value) || [];
+    var authRes = await supa.from("personeel_auth").select("persoon_id, moet_wijzigen");
+    var authById = {};
+    (authRes.data||[]).forEach(function(a){ authById[a.persoon_id] = a; });
+    var tokensRes = await supa.from("activatie_tokens").select("persoon_id, gebruikt_op, aangemaakt_op").order("aangemaakt_op",{ascending:false});
+    var laatsteTokenPerPersoon = {};
+    (tokensRes.data||[]).forEach(function(t){ if(!laatsteTokenPerPersoon[t.persoon_id]) laatsteTokenPerPersoon[t.persoon_id] = t; });
+
+    ALLE_PERSONEN = personen.map(function(p){
+      var auth = authById[p.id];
+      var token = laatsteTokenPerPersoon[p.id];
+      var status = "nog-niet";
+      if(auth && auth.moet_wijzigen === false) status = "geactiveerd";
+      else if(token) status = "verstuurd";
+      return { id:p.id, naam:p.naam||p.id, email:p.email||"", status:status };
+    }).sort(function(a,b){ return a.naam.localeCompare(b.naam,"nl"); });
+  }
+
+  function statusLabel(s){ return {"nog-niet":"Nog niet uitgenodigd","verstuurd":"Uitnodiging verstuurd","geactiveerd":"Geactiveerd"}[s]||s; }
+
+  function render(){
+    var inhoud = document.getElementById("inhoud");
+    inhoud.innerHTML =
+      '<div class="top-bar">'
+      + '<label><input type="checkbox" id="selectAll"> Alles selecteren</label>'
+      + '<div><button class="secundair" id="btnExport">Exporteer voor mailmerge</button> '
+      + '<button id="btnVerstuur">Activatielink(s) genereren</button></div>'
+      + '</div>'
+      + '<div id="meldingZone"></div>'
+      + '<table><thead><tr><th></th><th>Naam</th><th>E-mailadres</th><th>Status</th></tr></thead><tbody>'
+      + ALLE_PERSONEN.map(function(p){
+          return '<tr><td><input type="checkbox" class="rijSelect" data-id="'+p.id+'"></td>'
+            + '<td>'+escapeHtml(p.naam)+'</td>'
+            + '<td>'+(p.email?escapeHtml(p.email):'<span style="color:var(--text-dim)">(geen mailadres)</span>')+'</td>'
+            + '<td><span class="status '+p.status+'">'+statusLabel(p.status)+'</span></td></tr>';
+        }).join('')
+      + '</tbody></table>';
+
+    document.getElementById("selectAll").addEventListener("change", function(e){
+      document.querySelectorAll(".rijSelect").forEach(function(cb){ cb.checked = e.target.checked; });
+    });
+    document.getElementById("btnVerstuur").addEventListener("click", genereerLinks);
+    document.getElementById("btnExport").addEventListener("click", exporteerMailmerge);
+  }
+
+  var LAATSTE_RESULTAAT = [];
+
+  async function genereerLinks(){
+    var geselecteerd = [...document.querySelectorAll(".rijSelect:checked")].map(function(cb){ return cb.dataset.id; });
+    if(!geselecteerd.length){ toonMelding("Selecteer eerst minimaal één persoon.", "fout"); return; }
+    var btn = document.getElementById("btnVerstuur");
+    btn.disabled = true; btn.textContent = "Bezig…";
+    try{
+      var { data: sessieData } = await supa.auth.getSession();
+      var res = await fetch(DAG_URL + "/functions/v1/genereer-activatielinks", {
+        method:"POST",
+        headers:{"Content-Type":"application/json", "Authorization":"Bearer "+(sessieData.session?sessieData.session.access_token:"")},
+        body: JSON.stringify({ persoonIds: geselecteerd, activatieBasisUrl: ACTIVATIE_BASIS_URL })
+      });
+      var json = await res.json();
+      if(!json.ok){ toonMelding("Mislukt: "+(json.reden||json.error||"onbekende fout"), "fout"); return; }
+      LAATSTE_RESULTAAT = json.resultaat;
+      toonMelding(json.aantal+" activatielink(s) aangemaakt. Gebruik 'Exporteer voor mailmerge' om ze te versturen.", "ok");
+      await laadPersoneel(); render();
+    }catch(e){ toonMelding("Mislukt: "+e.message, "fout"); }
+    finally{ btn.disabled = false; btn.textContent = "Activatielink(s) genereren"; }
+  }
+
+  function exporteerMailmerge(){
+    if(!LAATSTE_RESULTAAT.length){ toonMelding("Genereer eerst activatielinks voordat je kunt exporteren.", "fout"); return; }
+    var regels = ["Naam,E-mailadres,ActivatieLink"];
+    LAATSTE_RESULTAAT.forEach(function(r){
+      regels.push('"'+r.naam.replace(/"/g,'""')+'","'+r.email.replace(/"/g,'""')+'","'+r.link+'"');
+    });
+    var blob = new Blob([regels.join("\n")], {type:"text/csv;charset=utf-8"});
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url; a.download = "activatielinks-mailmerge.csv"; a.click();
+  }
+
+  function toonMelding(tekst, soort){
+    document.getElementById("meldingZone").innerHTML = '<div class="melding '+soort+'">'+escapeHtml(tekst)+'</div>';
+  }
+
+  async function init(){
+    var ingelogdId = null;
+    try{ ingelogdId = localStorage.getItem(INGELOGD_KEY); }catch(e){}
+    var { data: sessieData } = await supa.auth.getSession();
+    if(!ingelogdId || !sessieData.session){ location.href = "./index.html"; return; }
+
+    var authRes = await supa.from("personeel_auth").select("rol").eq("persoon_id", ingelogdId).maybeSingle();
+    if(!authRes.data || authRes.data.rol !== "beheer"){
+      document.getElementById("inhoud").innerHTML = '<div class="geen-toegang">Deze pagina is alleen toegankelijk voor beheerders.</div>';
+      return;
+    }
+
+    await laadPersoneel();
+    render();
+  }
+
+  init();
+</script>
+</body>
+</html>
