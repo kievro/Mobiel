@@ -581,6 +581,8 @@ async function sGet(key,fallback,shared){
     }
   }
   console.warn(`[dagplanning] '${key}' kon na ${pogingen} pogingen niet worden opgehaald -- terugvallen op standaardwaarde. Als dit een 'is dit al eerder gedaan'-controle betreft, kan dit ten onrechte als 'nog niet gedaan' worden behandeld.`);
+  if(!State.laadFouten) State.laadFouten = [];
+  State.laadFouten.push(key);
   return fallback;
 }
 async function sSet(key,value,shared){
@@ -754,9 +756,12 @@ async function supaSelectMetRetry(query, omschrijving){
     if(i<pogingen-1) await new Promise(res=>setTimeout(res, 200*(i+1)));
   }
   console.warn(`[dagplanning] '${omschrijving}' kon na ${pogingen} pogingen niet worden opgehaald -- terugvallen op lege lijst.`);
+  if(!State.laadFouten) State.laadFouten = [];
+  State.laadFouten.push(omschrijving);
   return { data: [], error: true };
 }
 async function loadAll(){
+  State.laadFouten = [];
   const [config, personen, log, oefeningen, werkzaamhedenRuw, agendaResultaat, materialenResultaat, materialenInhoudResultaat, vcVoertuigenResultaat] = await Promise.all([
     sGet('config', defaultConfig(), true),
     sGet('personen', defaultPersonen(), true),
@@ -4635,7 +4640,43 @@ function toonGereed(){
       <div class="welkom-groet">✓ Gereed</div>
       <div class="welkom-status">De gegevens zijn geladen.</div>
       <button class="btn primary" id="btnGereedSluiten">Aan de slag</button>`;
-    document.getElementById('btnGereedSluiten').addEventListener('click', resolve);
+    document.getElementById('btnGereedSluiten').addEventListener('click', async ()=>{
+      // Vóór we daadwerkelijk doorgaan: controleren of alles bij het laden ook
+      // echt is gelukt. Zo niet, dan hier stoppen met een duidelijke
+      // foutmelding, in plaats van door te gaan met onvolledige gegevens.
+      if(State.laadFouten && State.laadFouten.length){
+        toonLaadFout(State.laadFouten, resolve);
+        return;
+      }
+      resolve();
+    });
+  });
+}
+function toonLaadFout(fouten, resolveNaOpnieuwGelukt){
+  document.getElementById('loadScreenInner').innerHTML = `
+    <div class="welkom-groet">⚠ Oeps, er ging iets mis</div>
+    <div class="welkom-status">Niet alle gegevens konden worden opgehaald (${esc(fouten.join(', '))}). Klik hieronder om het opnieuw te proberen.</div>
+    <button class="btn primary" id="btnOpnieuwProberen">Gegevens opnieuw ophalen</button>`;
+  document.getElementById('btnOpnieuwProberen').addEventListener('click', async ()=>{
+    document.getElementById('loadScreenInner').innerHTML = `
+      <div class="welkom-groet">Bezig…</div>
+      <div class="welkom-status">Gegevens worden opnieuw opgehaald…</div>`;
+    await loadAll();
+    if(State.laadFouten && State.laadFouten.length){
+      toonLaadFout(State.laadFouten, resolveNaOpnieuwGelukt);
+    } else {
+      await toonGereedZonderControle();
+      resolveNaOpnieuwGelukt();
+    }
+  });
+}
+function toonGereedZonderControle(){
+  return new Promise(resolve=>{
+    document.getElementById('loadScreenInner').innerHTML = `
+      <div class="welkom-groet">✓ Gereed</div>
+      <div class="welkom-status">De gegevens zijn nu volledig geladen.</div>
+      <button class="btn primary" id="btnGereedSluiten2">Aan de slag</button>`;
+    document.getElementById('btnGereedSluiten2').addEventListener('click', resolve);
   });
 }
 async function verwerkResetToken(token){
