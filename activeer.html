@@ -81,8 +81,12 @@
         await supa.auth.setSession({access_token:json.access_token, refresh_token:json.refresh_token});
       }
       try{ localStorage.setItem(INGELOGD_KEY, json.persoonId); }catch(err){}
-      kaart.innerHTML = '<div class="klaar">Gelukt! Je wordt doorgestuurd…</div>';
-      setTimeout(function(){ location.href = "./index.html"; }, 1200);
+      kaart.innerHTML =
+        '<div class="klaar">✓ Je pincode is ingesteld!</div>'
+        + '<p class="sub" style="text-align:left;margin-top:16px;">Nog één ding: zet Brandweer Mobiel op je beginscherm, zodat je hem makkelijk terugvindt.</p>'
+        + '<p class="sub" style="text-align:left;">Op de iPhone: tik op het deel-icoontje onderin Safari → "Zet op beginscherm". Op Android: tik op het menu (⋮) → "Toevoegen aan startscherm".</p>'
+        + '<button id="btnDoorNaarApp" style="margin-top:10px;">Ga naar Brandweer Mobiel</button>';
+      document.getElementById("btnDoorNaarApp").addEventListener("click", function(){ location.href = "./index.html"; });
     }catch(err){
       foutEl.textContent = "Mislukt: "+err.message;
       btn.disabled = false; btn.textContent = "Pincode instellen";
