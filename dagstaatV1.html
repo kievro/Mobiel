@@ -742,6 +742,20 @@ async function migratePloegCorrecties(){
   await sSet('migratie-ploegfix-v2', true, true);
 }
 
+async function supaSelectMetRetry(query, omschrijving){
+  const pogingen = 3;
+  for(let i=0; i<pogingen; i++){
+    const resultaat = await query();
+    if(!resultaat.error){
+      if(i>0) console.info(`[dagplanning] ophalen van '${omschrijving}' lukte alsnog bij poging ${i+1}.`);
+      return resultaat;
+    }
+    console.warn(`[dagplanning] poging ${i+1}/${pogingen} om '${omschrijving}' op te halen mislukte:`, resultaat.error.message||resultaat.error);
+    if(i<pogingen-1) await new Promise(res=>setTimeout(res, 200*(i+1)));
+  }
+  console.warn(`[dagplanning] '${omschrijving}' kon na ${pogingen} pogingen niet worden opgehaald -- terugvallen op lege lijst.`);
+  return { data: [], error: true };
+}
 async function loadAll(){
   const [config, personen, log, oefeningen, werkzaamhedenRuw, agendaResultaat, materialenResultaat, materialenInhoudResultaat, vcVoertuigenResultaat] = await Promise.all([
     sGet('config', defaultConfig(), true),
@@ -749,10 +763,10 @@ async function loadAll(){
     sGet('log', [], true),
     sGet('oefeningen', [], true),
     sGet('werkzaamheden-historie', [], true),
-    supa.from('kazerne_agenda').select('*').order('start_tijd', {ascending:true}).then(r=>r, e=>({error:e})),
-    supa.from('oefenmaterialen').select('*').eq('actief', true).order('categorie').order('naam').then(r=>r, e=>({error:e})),
-    supa.from('oefenmaterialen_inhoud').select('*').order('volgorde').then(r=>r, e=>({error:e})),
-    supa.from('voertuigcontrole_voertuigen').select('*').order('volgorde').then(r=>r, e=>({error:e}))
+    supaSelectMetRetry(()=>supa.from('kazerne_agenda').select('*').order('start_tijd', {ascending:true}).then(r=>r, e=>({error:e})), 'kazerne_agenda'),
+    supaSelectMetRetry(()=>supa.from('oefenmaterialen').select('*').eq('actief', true).order('categorie').order('naam').then(r=>r, e=>({error:e})), 'oefenmaterialen'),
+    supaSelectMetRetry(()=>supa.from('oefenmaterialen_inhoud').select('*').order('volgorde').then(r=>r, e=>({error:e})), 'oefenmaterialen_inhoud'),
+    supaSelectMetRetry(()=>supa.from('voertuigcontrole_voertuigen').select('*').order('volgorde').then(r=>r, e=>({error:e})), 'voertuigcontrole_voertuigen')
   ]);
   State.config = config;
   State.personen = personen;
