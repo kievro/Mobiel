@@ -762,9 +762,9 @@ async function supaSelectMetRetry(query, omschrijving){
 }
 async function loadAll(overslaanDag){
   State.laadFouten = [];
-  const [config, personen, log, oefeningen, werkzaamhedenRuw, agendaResultaat, materialenResultaat, materialenInhoudResultaat, vcVoertuigenResultaat] = await Promise.all([
+  const [config, personenResultaat, log, oefeningen, werkzaamhedenRuw, agendaResultaat, materialenResultaat, materialenInhoudResultaat, vcVoertuigenResultaat] = await Promise.all([
     sGet('config', defaultConfig(), true),
-    sGet('personen', defaultPersonen(), true),
+    supaSelectMetRetry(()=>supa.from('personen').select('*').then(r=>r, e=>({error:e})), 'personen'),
     sGet('log', [], true),
     sGet('oefeningen', [], true),
     sGet('werkzaamheden-historie', [], true),
@@ -774,7 +774,14 @@ async function loadAll(overslaanDag){
     supaSelectMetRetry(()=>supa.from('voertuigcontrole_voertuigen').select('*').order('volgorde').then(r=>r, e=>({error:e})), 'voertuigcontrole_voertuigen')
   ]);
   State.config = config;
-  State.personen = personen;
+  // Kolomnamen (snake_case) terugvertalen naar de veldnamen die de rest van
+  // de app al overal gebruikt (camelCase) -- zo hoeft verder nergens anders
+  // in de code iets te veranderen.
+  State.personen = ((personenResultaat && !personenResultaat.error) ? (personenResultaat.data||[]) : []).map(r=>({
+    id: r.id, naam: r.naam, persoonsnummer: r.persoonsnummer, ploegId: r.ploeg_id, postId: r.post_id,
+    type: r.type, specialismen: r.specialismen||[], email: r.email, actief: r.actief
+  }));
+  if(personenResultaat && personenResultaat.error){ if(!State.laadFouten) State.laadFouten=[]; State.laadFouten.push('personen'); }
   State.log = log;
   State.oefeningen = oefeningen;
   State.werkzaamhedenHistorie = werkzaamhedenRuw.map(h=> typeof h==='string' ? {tekst:h, typeId:''} : h);
@@ -1028,7 +1035,24 @@ async function koppelOefeningNaarPlanning(oefening){
   await addLog(`Oefening '${oefening.thema}' gezet in planning van ${datumStr}, ${ploegNaam}${ploegWissel}${skipMelding}.`, oefening.postId);
 }
 async function saveConfig(){ await sSet('config', State.config, true); }
-async function savePersonen(){ await sSet('personen', State.personen, true); }
+async function savePersonen(){
+  // Personen staat sinds vandaag in een eigen tabel (niet meer als één groot
+  // blok in kv_store) -- upsert elke rij apart, en verwijder rijen die niet
+  // meer in State.personen voorkomen (iemand is verwijderd).
+  const rijen = State.personen.map(p=>({
+    id: p.id, naam: p.naam, persoonsnummer: p.persoonsnummer||null,
+    ploeg_id: p.ploegId||null, post_id: p.postId||null, type: p.type||'onbekend',
+    specialismen: p.specialismen||[], email: p.email||null, actief: p.actief!==false
+  }));
+  if(rijen.length){
+    const { error } = await supa.from('personen').upsert(rijen, {onConflict:'id'});
+    if(error){ console.error('[dagplanning] opslaan van personen mislukt:', error.message); throw error; }
+  }
+  const { data: bestaandeIds } = await supa.from('personen').select('id');
+  const huidigeIds = new Set(State.personen.map(p=>p.id));
+  const teVerwijderen = (bestaandeIds||[]).filter(r=>!huidigeIds.has(r.id)).map(r=>r.id);
+  if(teVerwijderen.length) await supa.from('personen').delete().in('id', teVerwijderen);
+}
 async function saveOefeningen(){ await sSet('oefeningen', State.oefeningen, true); }
 async function voegWerkzaamheidToeAanHistorie(tekst, typeId){
   tekst = (tekst||'').trim();
