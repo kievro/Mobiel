@@ -760,7 +760,7 @@ async function supaSelectMetRetry(query, omschrijving){
   State.laadFouten.push(omschrijving);
   return { data: [], error: true };
 }
-async function loadAll(){
+async function loadAll(overslaanDag){
   State.laadFouten = [];
   const [config, personen, log, oefeningen, werkzaamhedenRuw, agendaResultaat, materialenResultaat, materialenInhoudResultaat, vcVoertuigenResultaat] = await Promise.all([
     sGet('config', defaultConfig(), true),
@@ -819,7 +819,7 @@ async function loadAll(){
   const voorkeur = await sGet('voorkeur-post', null, false);
   State.currentPost = (voorkeur && State.config.posten.some(p=>p.id===voorkeur)) ? voorkeur : State.config.posten[0].id;
 
-  await loadDag(State.currentPost, State.currentDate);
+  if(!overslaanDag) await loadDag(State.currentPost, State.currentDate);
 
   const key = fmtKey(new Date());
   const firstPost = State.config.posten[0].id;
@@ -866,6 +866,53 @@ async function sGetDagMetRetry(key, pogingen){
   console.warn(`[dagplanning] '${key}' kon na ${pogingen} pogingen niet worden opgehaald — wordt behandeld als (nog) niet ingevuld. Als je verwachtte dat hier al gegevens stonden, klik op 'Opnieuw laden'.`);
   return { ok:false, data:null, updatedAt:null };
 }
+let dagRealtimeChannel = null;
+let dagRealtimeWachtendeUpdate = null;
+function isTekstveldActiefBinnenTab(){
+  const el = document.activeElement;
+  if(!el) return false;
+  const tag = (el.tagName||'').toLowerCase();
+  if(tag!=='input' && tag!=='textarea') return false;
+  // Alleen relevant als dat veld ook daadwerkelijk in de planning/voertuigindeling-tab zit.
+  return !!(el.closest('#tab-planning') || el.closest('#tab-voertuigindeling'));
+}
+function pasBinnenkomendeDagUpdateToe(nieuweWaarde, postId, datumStr){
+  const dagData = normaliseerDag(nieuweWaarde);
+  const verwerkt = pasRotatieToe(dagData, postId, parseKey(datumStr));
+  if(postId===State.currentPost){
+    State.dag = verwerkt;
+    State.dagUpdatedAt[postId+':'+datumStr] = new Date().toISOString();
+    if(State.activeTab==='planning' || State.activeTab==='voertuigindeling') render();
+  } else {
+    State.pinCache[postId+':'+datumStr] = verwerkt;
+  }
+}
+function abonneerOpDagRealtime(postId, datumStr){
+  if(!supa) return;
+  if(dagRealtimeChannel){ supa.removeChannel(dagRealtimeChannel); dagRealtimeChannel = null; }
+  dagRealtimeWachtendeUpdate = null;
+  const key = 'dag:'+postId+':'+datumStr;
+  dagRealtimeChannel = supa.channel('dag-realtime-'+key)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'kv_store', filter: `key=eq.${key}` }, (payload)=>{
+      if(!payload.new || payload.new.value===undefined) return;
+      if(isTekstveldActiefBinnenTab()){
+        // Nu niet toepassen om lopende invoer niet te verstoren -- bewaren
+        // voor zodra het veld de focus verliest.
+        dagRealtimeWachtendeUpdate = { waarde: payload.new.value, postId, datumStr };
+        return;
+      }
+      pasBinnenkomendeDagUpdateToe(payload.new.value, postId, datumStr);
+    })
+    .subscribe();
+}
+document.addEventListener('focusout', ()=>{
+  if(dagRealtimeWachtendeUpdate){
+    const w = dagRealtimeWachtendeUpdate; dagRealtimeWachtendeUpdate = null;
+    // Klein uitstel zodat een eventuele bijbehorende 'change'/opslaan-actie
+    // van het zojuist verlaten veld eerst zijn gang kan gaan.
+    setTimeout(()=>{ if(!isTekstveldActiefBinnenTab()) pasBinnenkomendeDagUpdateToe(w.waarde, w.postId, w.datumStr); }, 300);
+  }
+});
 async function loadDag(postId, date){
   const key = postId+':'+fmtKey(date);
   const resultaat = await sGetDagMetRetry('dag:'+key);
@@ -874,6 +921,7 @@ async function loadDag(postId, date){
   State.dag = pasRotatieToe(dagData, postId, date);
   State.dagUpdatedAt[key] = resultaat.updatedAt;
   if(resultaat.ok) State.laatsteOphaling = new Date();
+  abonneerOpDagRealtime(postId, fmtKey(date));
 }
 // Checkt of iemand anders deze dag heeft opgeslagen sinds wij 'm voor het
 // laatst inlaadden -- dit voorkomt dat twee mensen die gelijktijdig aan
@@ -4266,11 +4314,31 @@ function wireEvents(){
   document.getElementById('closeSettings').addEventListener('click', closeSettings);
   document.getElementById('brandName').addEventListener('click', openSettings);
 
+  const TAB_DATA_AFHANKELIJKHEDEN = {
+    'oefenrooster': ['oefeningen','oefenmaterialen','oefenmaterialen_inhoud'],
+    'personeel': ['personen'],
+    'voertuigcontrole': ['voertuigcontrole_voertuigen'],
+    'dashboard': ['kazerne_agenda'],
+  };
   document.querySelectorAll('nav.tabs button').forEach(btn=>{
-    btn.addEventListener('click', ()=>{
+    btn.addEventListener('click', async ()=>{
+      const nieuweTab = btn.dataset.tab;
+      const afhankelijkheden = TAB_DATA_AFHANKELIJKHEDEN[nieuweTab];
+      const missendeData = afhankelijkheden && State.laadFouten && afhankelijkheden.some(k=>State.laadFouten.includes(k));
+      if(missendeData){
+        btn.disabled = true;
+        const oudeTekst = btn.textContent;
+        btn.textContent = '⏳ Bezig…';
+        await loadAll();
+        btn.disabled = false;
+        btn.textContent = oudeTekst;
+        if(afhankelijkheden.some(k=>State.laadFouten.includes(k))){
+          alert('Kon de gegevens voor dit tabblad nog steeds niet volledig ophalen. Controleer de verbinding en probeer het tabblad opnieuw te openen.');
+        }
+      }
       document.querySelectorAll('nav.tabs button').forEach(b=>b.classList.remove('active'));
       btn.classList.add('active');
-      State.activeTab = btn.dataset.tab;
+      State.activeTab = nieuweTab;
       document.getElementById('tab-dashboard').classList.toggle('hidden', State.activeTab!=='dashboard');
       document.getElementById('tab-voertuigindeling').classList.toggle('hidden', State.activeTab!=='voertuigindeling');
       document.getElementById('tab-voertuigcontrole').classList.toggle('hidden', State.activeTab!=='voertuigcontrole');
@@ -4890,6 +4958,16 @@ async function init(){
   document.getElementById('app').classList.remove('hidden');
   render();
   pasRolToe();
+
+  // Periodiek, op de achtergrond, de niet-dag-gebonden gegevens verversen
+  // (config/personeel/oefeningen/materialen/agenda) -- zodat wijzigingen van
+  // collega's ook zonder handmatige actie zichtbaar worden. De dagplanning
+  // zelf loopt via de losse, realtime-koppeling (zie abonneerOpDagRealtime).
+  setInterval(async ()=>{
+    if(document.activeElement && ['input','textarea'].includes((document.activeElement.tagName||'').toLowerCase())) return; // niet verstoren tijdens actief typen
+    await loadAll(true);
+    render();
+  }, 45000);
 }
 init();
 })();
