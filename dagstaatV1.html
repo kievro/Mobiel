@@ -783,38 +783,43 @@ async function loadAll(overslaanDag){
   const inhoudRuw = (materialenInhoudResultaat && !materialenInhoudResultaat.error) ? (materialenInhoudResultaat.data||[]) : [];
   State.oefenmaterialen = materialenRuw.map(m=>({...m, inhoud: inhoudRuw.filter(i=>i.oefenmateriaal_id===m.id)}));
   State.vcVoertuigen = (vcVoertuigenResultaat && !vcVoertuigenResultaat.error) ? (vcVoertuigenResultaat.data||[]) : [];
-  if(!State.config.posten || State.config.posten.length===0) State.config.posten = JSON.parse(JSON.stringify(IMPORTED_POSTEN));
-  if(!State.config.werkblokken || !State.config.werkblokken.some(b=>b.id==='briefing')){
-    State.config.werkblokken = defaultConfig().werkblokken;
-    await saveConfig();
-  }
-  if(!State.config.rooster || !State.config.rooster.ankers || State.config.rooster.ankers.length===0){
-    State.config.rooster = defaultConfig().rooster;
-    await saveConfig();
-  }
-  if(!State.config.themas){
-    State.config.themas = defaultConfig().themas;
-    await saveConfig();
-  }
-  if(!State.config.materialenEmails){
-    State.config.materialenEmails = defaultConfig().materialenEmails;
-    await saveConfig();
-  }
-  let functiesGewijzigd = false;
-  State.config.posten.forEach(post=>{
-    if(!post.voertuigFuncties){
-      post.voertuigFuncties = JSON.parse(JSON.stringify(STANDAARD_VOERTUIG_FUNCTIE_GROEPEN));
-      functiesGewijzigd = true;
+  const configEnPersonenOk = !State.laadFouten.includes('config') && !State.laadFouten.includes('personen');
+  if(!configEnPersonenOk){
+    console.warn('[dagplanning] config en/of personen konden niet worden opgehaald -- automatische correcties en opslag-acties worden bewust overgeslagen om te voorkomen dat verouderde noodgreep-data wordt teruggeschreven naar de database. De "Aan de slag"-controle vangt dit verderop af.');
+  } else {
+    if(!State.config.posten || State.config.posten.length===0) State.config.posten = JSON.parse(JSON.stringify(IMPORTED_POSTEN));
+    if(!State.config.werkblokken || !State.config.werkblokken.some(b=>b.id==='briefing')){
+      State.config.werkblokken = defaultConfig().werkblokken;
+      await saveConfig();
     }
-  });
-  if(functiesGewijzigd) await saveConfig();
-  await migrateFuncties();
-  await migratePloegCorrecties();
-  let emailsGewijzigd = false;
-  State.personen.forEach(p=>{
-    if(!p.email){ p.email = genereerEmail(p.naam); emailsGewijzigd = true; }
-  });
-  if(emailsGewijzigd){ await savePersonen(); await addLog(`E-mailadressen automatisch gegenereerd voor ${State.personen.length} personen (voornaam.tussenvoegsel.achternaam@vggm.nl).`, null); }
+    if(!State.config.rooster || !State.config.rooster.ankers || State.config.rooster.ankers.length===0){
+      State.config.rooster = defaultConfig().rooster;
+      await saveConfig();
+    }
+    if(!State.config.themas){
+      State.config.themas = defaultConfig().themas;
+      await saveConfig();
+    }
+    if(!State.config.materialenEmails){
+      State.config.materialenEmails = defaultConfig().materialenEmails;
+      await saveConfig();
+    }
+    let functiesGewijzigd = false;
+    State.config.posten.forEach(post=>{
+      if(!post.voertuigFuncties){
+        post.voertuigFuncties = JSON.parse(JSON.stringify(STANDAARD_VOERTUIG_FUNCTIE_GROEPEN));
+        functiesGewijzigd = true;
+      }
+    });
+    if(functiesGewijzigd) await saveConfig();
+    await migrateFuncties();
+    await migratePloegCorrecties();
+    let emailsGewijzigd = false;
+    State.personen.forEach(p=>{
+      if(!p.email){ p.email = genereerEmail(p.naam); emailsGewijzigd = true; }
+    });
+    if(emailsGewijzigd){ await savePersonen(); await addLog(`E-mailadressen automatisch gegenereerd voor ${State.personen.length} personen (voornaam.tussenvoegsel.achternaam@vggm.nl).`, null); }
+  }
 
   const voorkeur = await sGet('voorkeur-post', null, false);
   State.currentPost = (voorkeur && State.config.posten.some(p=>p.id===voorkeur)) ? voorkeur : State.config.posten[0].id;
