@@ -758,7 +758,7 @@ async function supaSelectMetRetry(query, omschrijving){
   console.warn(`[dagplanning] '${omschrijving}' kon na ${pogingen} pogingen niet worden opgehaald -- terugvallen op lege lijst.`);
   if(!State.laadFouten) State.laadFouten = [];
   State.laadFouten.push(omschrijving);
-  return { data: [], error: true };
+  return { data: [], error: { message: `Kon '${omschrijving}' niet ophalen na ${pogingen} pogingen.` } };
 }
 async function loadAll(overslaanDag){
   State.laadFouten = [];
@@ -3120,7 +3120,7 @@ async function renderVoertuigcontroleOverzicht(){
   const datumStr = fmtKey(State.currentDate);
   wrap.innerHTML = '<div class="empty-hint">Bezig met laden…</div>';
   try{
-    const { data: voertuigen, error: vErr } = await supa.from('voertuigcontrole_voertuigen').select('*').eq('post_id', postId).eq('actief', true).order('volgorde');
+    const { data: voertuigen, error: vErr } = await supaSelectMetRetry(()=>supa.from('voertuigcontrole_voertuigen').select('*').eq('post_id', postId).eq('actief', true).order('volgorde').then(r=>r, e=>({error:e})), 'voertuigcontrole overzicht');
     if(vErr) throw vErr;
     if(!voertuigen || !voertuigen.length){
       wrap.innerHTML = `<div class="empty-hint">Nog geen voertuigen ingesteld voor ${esc(postNaam(postId))} (Instellingen → Voertuigcontrole).</div>`;
