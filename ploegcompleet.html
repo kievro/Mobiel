@@ -731,9 +731,11 @@
       + '<p style="color:var(--text-muted);font-size:13px;margin:0 0 12px;">'+escapeHtml(shift.thema||shift.datum)+'</p>'
       + overzicht
       + '<button id="btnVerstuurReactieBevestig" style="width:100%;margin-top:16px;padding:12px;background:var(--lime);color:#12161B;border:none;border-radius:8px;font-weight:700;font-size:15px;cursor:pointer;">Verstuur reactie</button>'
+      + '<button id="btnAnnuleerReactie" style="width:100%;margin-top:8px;padding:10px;background:transparent;color:var(--text-muted);border:1px solid var(--border);border-radius:8px;font-size:13px;cursor:pointer;">Oeps, foutje — annuleer</button>'
       + '<div id="verstuurReactieStatus" style="margin-top:10px;font-size:13px;text-align:center;"></div>'
       + '</div>';
     document.body.appendChild(overlay);
+    document.getElementById("btnAnnuleerReactie").addEventListener("click", function(){ overlay.remove(); });
     document.getElementById("btnVerstuurReactieBevestig").addEventListener("click", async function(){
       var statusEl = document.getElementById("verstuurReactieStatus");
       var btn = document.getElementById("btnVerstuurReactieBevestig");
