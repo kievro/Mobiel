@@ -759,10 +759,11 @@ async function supaSelectMetRetry(query, omschrijving){
 }
 async function loadAll(overslaanDag){
   State.laadFouten = [];
-  const [config, personenResultaat, postenResultaat, log, oefeningen, werkzaamhedenRuw, agendaResultaat, materialenResultaat, materialenInhoudResultaat, vcVoertuigenResultaat] = await Promise.all([
+  const [config, personenResultaat, postenResultaat, ploegenResultaat, log, oefeningen, werkzaamhedenRuw, agendaResultaat, materialenResultaat, materialenInhoudResultaat, vcVoertuigenResultaat] = await Promise.all([
     sGet('config', defaultConfig(), true),
     supaSelectMetRetry(()=>supa.from('personen').select('*').then(r=>r, e=>({error:e})), 'personen'),
     supaSelectMetRetry(()=>supa.from('posten').select('*').then(r=>r, e=>({error:e})), 'posten'),
+    supaSelectMetRetry(()=>supa.from('ploegen').select('*').then(r=>r, e=>({error:e})), 'ploegen'),
     sGet('log', [], true),
     sGet('oefeningen', [], true),
     sGet('werkzaamheden-historie', [], true),
@@ -776,6 +777,10 @@ async function loadAll(overslaanDag){
     id: r.id, naam: r.naam, voertuigFuncties: r.voertuig_functies||[]
   }));
   if(postenResultaat && postenResultaat.error){ if(!State.laadFouten) State.laadFouten=[]; State.laadFouten.push('posten'); }
+  State.config.ploegen = ((ploegenResultaat && !ploegenResultaat.error) ? (ploegenResultaat.data||[]) : []).map(r=>({
+    id: r.id, naam: r.naam, postId: r.post_id
+  }));
+  if(ploegenResultaat && ploegenResultaat.error){ if(!State.laadFouten) State.laadFouten=[]; State.laadFouten.push('ploegen'); }
   // Kolomnamen (snake_case) terugvertalen naar de veldnamen die de rest van
   // de app al overal gebruikt (camelCase) -- zo hoeft verder nergens anders
   // in de code iets te veranderen.
@@ -792,7 +797,7 @@ async function loadAll(overslaanDag){
   const inhoudRuw = (materialenInhoudResultaat && !materialenInhoudResultaat.error) ? (materialenInhoudResultaat.data||[]) : [];
   State.oefenmaterialen = materialenRuw.map(m=>({...m, inhoud: inhoudRuw.filter(i=>i.oefenmateriaal_id===m.id)}));
   State.vcVoertuigen = (vcVoertuigenResultaat && !vcVoertuigenResultaat.error) ? (vcVoertuigenResultaat.data||[]) : [];
-  const configEnPersonenOk = !State.laadFouten.includes('config') && !State.laadFouten.includes('personen') && !State.laadFouten.includes('posten');
+  const configEnPersonenOk = !State.laadFouten.includes('config') && !State.laadFouten.includes('personen') && !State.laadFouten.includes('posten') && !State.laadFouten.includes('ploegen');
   if(!configEnPersonenOk){
     console.warn('[dagplanning] config en/of personen konden niet worden opgehaald -- automatische correcties en opslag-acties worden bewust overgeslagen om te voorkomen dat verouderde noodgreep-data wordt teruggeschreven naar de database. De "Aan de slag"-controle vangt dit verderop af.');
   } else {
@@ -1055,10 +1060,22 @@ async function saveConfig(){
   const teVerwijderenPosten = (bestaandePostenIds||[]).filter(r=>!huidigePostenIds.has(r.id)).map(r=>r.id);
   if(teVerwijderenPosten.length) await supa.from('posten').delete().in('id', teVerwijderenPosten);
 
+  // Ploegen -- zelfde patroon.
+  const ploegenRijen = (State.config.ploegen||[]).map(p=>({id:p.id, naam:p.naam, post_id:p.postId}));
+  if(ploegenRijen.length){
+    const { error } = await supa.from('ploegen').upsert(ploegenRijen, {onConflict:'id'});
+    if(error){ console.error('[dagplanning] opslaan van ploegen mislukt:', error.message); throw error; }
+  }
+  const { data: bestaandePloegenIds } = await supa.from('ploegen').select('id');
+  const huidigePloegenIds = new Set((State.config.ploegen||[]).map(p=>p.id));
+  const teVerwijderenPloegen = (bestaandePloegenIds||[]).filter(r=>!huidigePloegenIds.has(r.id)).map(r=>r.id);
+  if(teVerwijderenPloegen.length) await supa.from('ploegen').delete().in('id', teVerwijderenPloegen);
+
   // De rest van de configuratie (nog niet gemigreerde onderdelen) blijft
   // voorlopig gewoon als kleiner blok in kv_store staan.
   const restConfig = Object.assign({}, State.config);
   delete restConfig.posten;
+  delete restConfig.ploegen;
   await sSet('config', restConfig, true);
 }
 async function savePersonen(){
@@ -4370,12 +4387,12 @@ function wireEvents(){
   document.getElementById('brandName').addEventListener('click', openSettings);
 
   const TAB_DATA_AFHANKELIJKHEDEN = {
-    'oefenrooster': ['oefeningen','oefenmaterialen','oefenmaterialen_inhoud','posten'],
-    'personeel': ['personen','posten'],
+    'oefenrooster': ['oefeningen','oefenmaterialen','oefenmaterialen_inhoud','posten','ploegen'],
+    'personeel': ['personen','posten','ploegen'],
     'voertuigcontrole': ['voertuigcontrole_voertuigen','posten'],
-    'dashboard': ['kazerne_agenda','posten'],
-    'planning': ['posten'],
-    'voertuigindeling': ['posten'],
+    'dashboard': ['kazerne_agenda','posten','ploegen'],
+    'planning': ['posten','ploegen'],
+    'voertuigindeling': ['posten','ploegen'],
   };
   document.querySelectorAll('nav.tabs button').forEach(btn=>{
     btn.addEventListener('click', async ()=>{
