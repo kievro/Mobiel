@@ -472,7 +472,22 @@
       + '<div id="verstuurReactieStatus" style="margin-top:10px;font-size:13px;text-align:center;"></div>'
       + '</div>';
     document.body.appendChild(overlay);
-    document.getElementById("btnAnnuleerReactie").addEventListener("click", function(){ overlay.remove(); });
+    document.getElementById("btnAnnuleerReactie").addEventListener("click", async function(){
+      var btnAnnuleer = document.getElementById("btnAnnuleerReactie");
+      var statusEl = document.getElementById("verstuurReactieStatus");
+      btnAnnuleer.disabled = true; btnAnnuleer.textContent = "Bezig met ongedaan maken…";
+      try{
+        var slotIds = shift.slots.map(function(sl){ return sl.slotId; });
+        var del = await sbDag.from("reacties").delete().eq("lid_id", state.currentUserId).in("slot_id", slotIds);
+        if(del.error) throw del.error;
+        await refreshAllData();
+        overlay.remove();
+        showToast("Reactie ongedaan gemaakt — je kunt opnieuw kiezen.", true);
+      }catch(e){
+        statusEl.innerHTML = '<span style="color:#ff7a6e;">Ongedaan maken mislukt: '+escapeHtml(e.message||"onbekende fout")+'</span>';
+        btnAnnuleer.disabled = false; btnAnnuleer.textContent = "Oeps, foutje — annuleer";
+      }
+    });
     document.getElementById("btnVerstuurReactieBevestig").addEventListener("click", async function(){
       var statusEl = document.getElementById("verstuurReactieStatus");
       var btn = document.getElementById("btnVerstuurReactieBevestig");
