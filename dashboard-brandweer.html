@@ -45,6 +45,11 @@
   @media(prefers-reduced-motion:reduce){ .scroll-inner.scrollend{animation:none;} }
 
   .card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:18px 20px;margin-bottom:18px;}
+  .mededelingen-grid{display:grid;grid-template-columns:repeat(auto-fit, minmax(280px, 1fr));gap:14px;align-items:stretch;}
+  .mededeling-item{background:var(--surface-2, rgba(255,255,255,0.04));border-radius:8px;padding:16px 18px;border-left:4px solid var(--accent, #d6412f);min-height:200px;overflow:hidden;display:flex;flex-direction:column;}
+  .mededeling-tekst{display:-webkit-box;-webkit-line-clamp:8;-webkit-box-orient:vertical;overflow:hidden;}
+  .mededeling-titel{font-weight:700;font-size:17px;margin-bottom:7px;}
+  .mededeling-tekst{font-size:15px;line-height:1.45;color:var(--text-muted);}
   .card h2{margin:0 0 14px;font-family:var(--font-display);font-weight:700;text-transform:uppercase;font-size:21px;letter-spacing:0.03em;color:var(--text);display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;}
   .eyebrow{font-family:var(--font-body);font-weight:600;font-size:12.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--text-muted);margin:8px 0 4px;}
   .eyebrow:first-child{margin-top:0;}
@@ -75,9 +80,12 @@
   .blokrooster td{padding:6px 6px;border-bottom:1px solid var(--border);vertical-align:middle;white-space:normal;line-height:1.35;overflow-wrap:break-word;}
   .blokrooster tr:last-child td{border-bottom:none;}
   .blokrooster th:nth-child(1), .blokrooster td:nth-child(1){width:78px;}
-  .blokrooster th:nth-child(2), .blokrooster td:nth-child(2){width:130px;}
+  .blokrooster th:nth-child(2), .blokrooster td:nth-child(2){width:56px;}
+  .blokrooster th:nth-child(3), .blokrooster td:nth-child(3){width:130px;}
   .blokrooster .br-functie-col{font-family:var(--font-body);font-size:11.5px;font-weight:600;color:#ffffff;white-space:normal;line-height:1.35;}
   .blokrooster .br-naam{font-weight:600;white-space:normal;overflow-wrap:break-word;}
+  .vc-col{text-align:center !important;padding-left:2px !important;padding-right:2px !important;}
+  .vc-badge{display:block;font-family:var(--font-body);font-size:10px;font-weight:600;color:var(--text-muted);white-space:nowrap;line-height:1.5;}
   .bv-badge{display:inline-block;font-family:var(--font-body);font-size:9.5px;font-weight:700;letter-spacing:0.03em;background:rgba(240,169,58,0.18);color:var(--amber);border:1px solid var(--amber);border-radius:3px;padding:1px 4px;vertical-align:middle;margin-left:3px;}
   .deadline-tag{display:block;margin-top:5px;font-family:var(--font-body);font-weight:600;font-size:12.5px;color:var(--amber);font-variant-numeric:tabular-nums;}
   .deadline-tag.deadline-verstreken{color:var(--text-muted);}
@@ -218,10 +226,18 @@
 <script>
 (function(){
   "use strict";
-  var PLOEG_URL = "https://gqqflxctuikbygqnbrli.supabase.co";
-  var PLOEG_KEY_HEADERS = {"apikey":"sb_publishable_8MFTS2ygpMxPwsl1-EH1aQ_GvmxQAtC","Authorization":"Bearer sb_publishable_8MFTS2ygpMxPwsl1-EH1aQ_GvmxQAtC"};
+
   var DAG_URL = "https://iyquepqubfqrhybriqif.supabase.co";
   var DAG_KEY_HEADERS = {"apikey":"sb_publishable_Pb0fFfxZQggKnFCtJYMH9A_avw0GaPn","Authorization":"Bearer sb_publishable_Pb0fFfxZQggKnFCtJYMH9A_avw0GaPn"};
+  var HUIDIGE_REFRESH_TOKEN = null;
+  // Vul hier je EIGEN CARTO-basemap API-sleutel in (https://carto.com/basemaps/apikey/).
+  // De openbare OSM-tegelserver is niet geschikt voor dit gebruik en is verwijderd.
+  var CARTO_BASEMAP_API_KEY = "cb1_3nhs_1_163f71e7e596fb3cfcbb0340";
+  // Vul de NIEUWE TomTom-sleutel lokaal in; publiceer hem niet in een openbare repository.
+  var TOMTOM_API_KEY = "mP2EB1fU8ob3RD9FBoXHY93rgpve2iJk";
+  var VERKEERSLAAG_VERVERS_MS = 60000;
+  var VERKEERSLAAG_TIMER = null;
+  var VERKEERSLAGEN = [];
 
   var POST_NAMEN = {post1:"Arnhem Noord", post2:"Arnhem Zuid", post3:"Ede Stad"};
   var POST_ORDER = ["post1","post2","post3"];
@@ -338,10 +354,12 @@
   // met alle functies samengevoegd -- de volgorde van de rijen volgt de eerst
   // toegewezen functie van die persoon, zodat het overzicht netjes per
   // functiegroep gesorteerd blijft (TS boven, dan MS, dan HW, enz).
-  function renderBlokRooster(dag, personenById, functieGroepen, activiteitTypes, werkblokken){
+  function renderBlokRooster(dag, personenById, functieGroepen, activiteitTypes, werkblokken, vcVoertuigen, vcUitvoeringenMap){
     var cellen = dag.cellen || {};
     var vi = (dag.voertuigIndeling && dag.voertuigIndeling.dag) || {};
     var blokken = blokkenMetTijden(werkblokken);
+    vcVoertuigen = vcVoertuigen || [];
+    vcUitvoeringenMap = vcUitvoeringenMap || {};
 
     var volgordeIndex = {}; // pid -> laagste volgorde-nummer van zijn functies
     var functiesPerPid = {}; // pid -> [labels]
@@ -368,14 +386,16 @@
     });
     blokken = blokken.filter(function(b){ return b.id!=="avond" || avondHeeftInhoud; });
 
-    var headerHtml = '<tr><th>Functie</th><th>Naam</th>' + blokken.map(function(b){
+    var headerHtml = '<tr><th>Functie</th><th class="vc-col">Vtg.</th><th>Naam</th>' + blokken.map(function(b){
       return '<th>'+b.naam+'<br><span class="blok-tijd">'+b.tijd+'</span></th>';
     }).join("") + '</tr>';
 
+    var wijzigingenDag = (dag.voertuigWijzigingen && dag.voertuigWijzigingen.dag) || {};
     var rowsHtml = pids.map(function(pid){
       var persoon = personenById[pid];
       var naam = (persoon && persoon.naam) || pid;
       var isBevelvoerder = persoon && persoon.specialismen && persoon.specialismen.indexOf("Bevelvoerder") !== -1;
+      var isGewijzigd = functiesPerPid[pid].some(function(label){ return !!wijzigingenDag[slugify(label)]; });
       var naamHtml = escapeHtml(naam) + (isBevelvoerder ? ' <span class="bv-badge" title="Bevelvoerder">BV</span>' : '');
       var functieTekst = functiesPerPid[pid].join(" / ");
       var cellenHtml = blokken.map(function(b){
@@ -390,19 +410,28 @@
         var stijl = "background:"+kleur+";"+(tekstKleur?"color:"+tekstKleur+";":"");
         return '<td style="'+stijl+'">'+(tekst ? escapeHtml(tekst) : '<span class="blok-leeg">\u2013</span>')+'</td>';
       }).join("");
-      return '<tr><td class="br-functie-col">'+escapeHtml(functieTekst)+'</td><td class="br-naam">'+naamHtml+'</td>'+cellenHtml+'</tr>';
+      var naamCelStijl = isGewijzigd ? ' style="background:#7a4a1a;color:#fff;"' : '';
+      var vcMatches = vcVoertuigen.filter(function(v){
+        return functiesPerPid[pid].some(function(label){ return slugify(label)===slugify(v.dagstaat_positie); });
+      });
+      var vcCelHtml = vcMatches.length ? vcMatches.map(function(v){
+        var u = vcUitvoeringenMap[v.id];
+        var icoon = !u ? "\u23f3" : (!u.afgerond ? "\ud83d\udd04" : "\u2705");
+        return '<span class="vc-badge" title="'+escapeHtml(v.voertuignummer)+' \u2014 '+escapeHtml(v.omschrijving)+'">'+escapeHtml(v.voertuignummer.slice(-4))+' '+icoon+'</span>';
+      }).join("") : '';
+      return '<tr><td class="br-functie-col">'+escapeHtml(functieTekst)+'</td><td class="vc-col">'+vcCelHtml+'</td><td class="br-naam"'+naamCelStijl+' title="'+(isGewijzigd?'Toewijzing is recent gewijzigd':'')+'">'+naamHtml+'</td>'+cellenHtml+'</tr>';
     }).join("");
 
     return '<div class="blokrooster-wrap"><table class="blokrooster"><thead>'+headerHtml+'</thead><tbody>'+rowsHtml+'</tbody></table></div>';
   }
 
-  function renderDagstaat(dag, personenById, postConfig, werkblokken, activiteitTypes){
+  function renderDagstaat(dag, personenById, postConfig, werkblokken, activiteitTypes, vcVoertuigen, vcUitvoeringenMap){
     if(!dag){
       return '<div class="card"><h2>Dagstaat</h2><div class="empty">Geen dagstaat gevonden voor vandaag bij '+escapeHtml(POST_NAMEN[POST_ID])+'.</div></div>';
     }
     var ploegNaam = (dag.ploegAanDienst||"").replace(/^post\d+-ploeg-/,"Ploeg ");
     var functieGroepen = (postConfig && postConfig.voertuigFuncties) || [];
-    var roosterHtml = renderBlokRooster(dag, personenById, functieGroepen, activiteitTypes, werkblokken);
+    var roosterHtml = renderBlokRooster(dag, personenById, functieGroepen, activiteitTypes, werkblokken, vcVoertuigen, vcUitvoeringenMap);
 
     // Oefening-type-id opzoeken en oefeningen van vandaag verzamelen.
     // Belangrijk: we kijken alleen naar mensen MET een voertuigfunctie (zelfde
@@ -478,6 +507,33 @@
       if(isNieuwer) perWaarschuwing[key] = ww;
     });
     return Object.keys(perWaarschuwing).map(function(k){ return perWaarschuwing[k]; });
+  }
+
+  var WEEKBERICHT_ITEMS_PER_PAGINA = 8;
+  var WEEKBERICHT_SUBPAGINA = 0;
+
+  function renderWeekbericht(wb){
+    if(!wb || !wb.items || !wb.items.length){
+      return '<div class="card" style="grid-column:1/-1;"><h2>Weekbericht</h2><div class="empty">Nog geen weekbericht gepubliceerd.</div></div>';
+    }
+    var aantalSubpaginas = Math.ceil(wb.items.length / WEEKBERICHT_ITEMS_PER_PAGINA);
+    var huidigeSub = WEEKBERICHT_SUBPAGINA % aantalSubpaginas;
+    var start = huidigeSub * WEEKBERICHT_ITEMS_PER_PAGINA;
+    var zichtbareItems = wb.items.slice(start, start + WEEKBERICHT_ITEMS_PER_PAGINA);
+
+    var itemsHtml = zichtbareItems.map(function(item){
+      return '<div class="mededeling-item"><div class="mededeling-titel">'+escapeHtml(item.titel)+'</div>'
+        + '<div class="mededeling-tekst">'+escapeHtml(item.samenvatting)+'</div></div>';
+    }).join('');
+
+    var subPaginaStipjes = '';
+    if(aantalSubpaginas > 1){
+      subPaginaStipjes = '<span style="font-size:13px;font-weight:400;color:var(--text-muted, #999);">'
+        + (huidigeSub+1) + ' / ' + aantalSubpaginas + '</span>';
+    }
+
+    return '<div class="card" style="grid-column:1/-1;"><h2>\uD83D\uDCE2 Weekbericht \u2014 '+escapeHtml(wb.weekLabel)+' '+subPaginaStipjes+'</h2>'
+      + '<div class="mededelingen-grid">'+itemsHtml+'</div></div>';
   }
 
   function renderWeer(w, waarschuwingenRuw){
@@ -649,6 +705,23 @@
   var ACTIEVE_MELDINGEN = {}; // key: melding.id -> {melding, laag, voertuigen}
   var MELDING_WEERGAVEDUUR_MS = 5*60*1000; // 5 minuten
 
+  function startVerkeerslagen(){
+    if(!ROUTE_KAART_INSTANTIE || !TOMTOM_API_KEY || TOMTOM_API_KEY.indexOf("VUL_HIER_") === 0) return;
+    // Transparante rastertegels: verkeersdrukte en incidenten op de bestaande kaart.
+    var basis = "https://api.tomtom.com/traffic/map/4/tile/";
+    var opties = {tileSize:256, maxZoom:19, opacity:0.85,
+      attribution:'Verkeersinformatie &copy; <a href="https://www.tomtom.com/">TomTom</a>'};
+    var sleutel = encodeURIComponent(TOMTOM_API_KEY);
+    var flow = L.tileLayer(basis + "flow/relative0/{z}/{x}/{y}.png?key=" + sleutel, opties);
+    var incidenten = L.tileLayer(basis + "incidents/s3/{z}/{x}/{y}.png?key=" + sleutel, opties);
+    VERKEERSLAGEN = [flow, incidenten];
+    VERKEERSLAGEN.forEach(function(laag){ laag.addTo(ROUTE_KAART_INSTANTIE); });
+    if(VERKEERSLAAG_TIMER) clearInterval(VERKEERSLAAG_TIMER);
+    VERKEERSLAAG_TIMER = setInterval(function(){
+      VERKEERSLAGEN.forEach(function(laag){ laag.setUrl(laag._url.replace(/([?&])v=\d+/, "$1").replace(/&$/, "") + "&v=" + Date.now()); });
+    }, VERKEERSLAAG_VERVERS_MS);
+  }
+
   function extraheerVoertuigen(ruweTekst){
     // Alle cijferreeksen van 4+ die aan het eind van de tekst staan zijn
     // voertuignummers (er kunnen er meerdere zijn, bv. bij 2 uitgerukte voertuigen).
@@ -792,6 +865,39 @@
     return { lat: punt[1], lon: punt[0] };
   }
 
+  // Herkent een spoorweg-overweg-verwijzing in de ruwe tekst, bv. "Ow Bosbeekweg 79.26".
+  // Geeft null terug als er geen zo'n patroon in staat.
+  function herkenSpoorwegOverweg(ruweTekst){
+    var match = String(ruweTekst||"").match(/\bOw\s+([A-Za-z][A-Za-z\s]+?)\s+(\d{1,3})[.,](\d{1,2})\b/);
+    if(!match) return null;
+    return { naam: match[1].trim(), kmWaarde: parseFloat(match[2] + "." + match[3]) };
+  }
+
+  // Zoekt de coördinaten van een spoorweg-overweg op via de open ProRail/PDOK-
+  // dienst. In tegenstelling tot wegen/vaarwegen heeft elke overweg hier al een
+  // eigen naam ÉN directe coördinaten -- geen interpolatie nodig, gewoon op
+  // naam opzoeken (en bij meerdere gelijknamige overwegen de dichtstbijzijnde
+  // kilometerwaarde kiezen als extra houvast).
+  async function haalOverwegPuntOp(info){
+    var naamFilter = "strToLowerCase(locatieaanduiding) LIKE '%" + info.naam.toLowerCase() + "%'";
+    var url = "https://service.pdok.nl/prorail/spoorwegen/wfs/v1_0?service=WFS&version=2.0.0&request=GetFeature&typeName=spoorwegen:overweg&outputFormat=json&srsName=EPSG:4326&CQL_FILTER=" + encodeURIComponent(naamFilter);
+    console.log("Spoorweg overweg -- URL:", url);
+    var res = await fetch(url);
+    var data = await res.json();
+    console.log("Spoorweg overweg -- aantal gevonden:", data.features ? data.features.length : "(fout)");
+    if(!data.features || !data.features.length) return null;
+
+    var kandidaten = data.features;
+    if(kandidaten.length > 1 && info.kmWaarde){
+      kandidaten.sort(function(a,b){
+        return Math.abs(a.properties.kmGeocode - info.kmWaarde) - Math.abs(b.properties.kmGeocode - info.kmWaarde);
+      });
+    }
+    var beste = kandidaten[0];
+    console.log("Spoorweg overweg resultaat:", beste.properties.locatieaanduiding, beste.properties.gemeente, beste.properties.latitude, beste.properties.longitude);
+    return { lat: beste.properties.latitude, lon: beste.properties.longitude };
+  }
+
   function schoonAdresTekst(melding){
     var tekst = String(melding.tekst||"").trim();
     var plaats = String(melding.plaats||"").trim();
@@ -922,8 +1028,13 @@
       document.getElementById("routeOverlay").classList.remove("hidden");
 
       if(!ROUTE_KAART_INSTANTIE){
-        ROUTE_KAART_INSTANTIE = L.map("routeKaart", {zoomControl:false, attributionControl:false});
-        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png").addTo(ROUTE_KAART_INSTANTIE);
+        ROUTE_KAART_INSTANTIE = L.map("routeKaart", {zoomControl:false, attributionControl:true});
+        // CARTO-sleutel is alleen de sleutel, niet een volledige URL.
+        L.tileLayer("https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png?key=" + encodeURIComponent(CARTO_BASEMAP_API_KEY), {
+          maxZoom: 19,
+          attribution: '&copy; <a href="https://carto.com/attributions">CARTO</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>'
+        }).addTo(ROUTE_KAART_INSTANTIE);
+        startVerkeerslagen();
       }
       if(!POST_MARKER_GEZET){
         var postCoord0 = POST_COORDS[POST_ID];
@@ -968,6 +1079,20 @@
               incidentLat = vaarwegPunt.lat; incidentLon = vaarwegPunt.lon;
             }
           }catch(e){ console.error("Vaarweg-opzoeking mislukt", e); }
+        }
+      }
+
+      // Daarna checken op een spoorweg-overweg-verwijzing (bv. "Ow Bosbeekweg 79.26")
+      if(incidentLat === undefined){
+        var overwegInfo = herkenSpoorwegOverweg(melding.tekst);
+        console.log("Spoorweg-overweg-herkenning:", JSON.stringify(overwegInfo));
+        if(overwegInfo){
+          try{
+            var overwegPunt = await haalOverwegPuntOp(overwegInfo);
+            if(overwegPunt){
+              incidentLat = overwegPunt.lat; incidentLon = overwegPunt.lon;
+            }
+          }catch(e){ console.error("Overweg-opzoeking mislukt", e); }
         }
       }
 
@@ -1038,7 +1163,7 @@
             L.polyline(coords, {color:"#000000", weight:5, opacity:0.9}).addTo(meldingLaag);
             var km = (routeData.routes[0].distance/1000).toFixed(1);
             var min = Math.round(routeData.routes[0].duration/60);
-            afstandTekst = km + " km \u00b7 " + min + " min rijden";
+            afstandTekst = "Indicatieve autoroute: " + km + " km \u00b7 " + min + " min (LiveNav is leidend)";
           }
         }catch(e){ /* route is een bonus; adres + kaart blijven ook zonder route bruikbaar */ }
       } else {
@@ -1193,6 +1318,7 @@
   // Laatst opgehaalde gegevens, zodat het wisselen van pagina niet elke keer
   // opnieuw hoeft op te halen -- alleen loadAndRender (elke minuut) haalt vers op.
   var laatsteData = null;
+  var APP_VERSIE_DATUM = "16 september 2026"; // pas deze regel aan bij elke nieuwe versie die je installeert
   var HUIDIGE_PAGINA = 1;
   var PAGINA_WISSEL_MS = 20000;
 
@@ -1202,10 +1328,10 @@
       var coords = POST_COORDS[POST_ID];
       var vandaag = todayStr();
 
-      var personenP = sbSelect(DAG_URL, DAG_KEY_HEADERS, "kv_store?key=eq.personen&select=value");
+      var personenP = sbSelect(DAG_URL, DAG_KEY_HEADERS, "personen?select=*");
       var configP = sbSelect(DAG_URL, DAG_KEY_HEADERS, "kv_store?key=eq.config&select=value");
       var dagP = sbSelect(DAG_URL, DAG_KEY_HEADERS, "kv_store?key=eq.dag:"+POST_ID+":"+vandaag+"&select=value");
-      var dienstenP = sbSelect(PLOEG_URL, PLOEG_KEY_HEADERS, "dashboard_open_diensten?select=*&order=datum.asc");
+      var dienstenP = sbSelect(DAG_URL, DAG_KEY_HEADERS, "dashboard_open_diensten?select=*&order=datum.asc");
       var eenMaandGeleden = new Date(Date.now() - 30*24*60*60*1000);
       var eenMaandGeledenStr = eenMaandGeleden.getFullYear()+"-"+pad(eenMaandGeleden.getMonth()+1)+"-"+pad(eenMaandGeleden.getDate());
       var datumFilter = "or(eind_datum.gte."+vandaag+",and(eind_datum.is.null,start_datum.gte."+eenMaandGeledenStr+"))";
@@ -1214,10 +1340,13 @@
       var wegP = sbSelect(DAG_URL, DAG_KEY_HEADERS, "wegafsluitingen?select=*&and=("+datumFilter+",or("+plaatsenFilter+"))&order=created_at.desc&limit=10");
       var knmiP = sbSelect(DAG_URL, DAG_KEY_HEADERS, "knmi_waarschuwingen?select=*&provincie=eq.Gelderland");
       var agendaP = sbSelect(DAG_URL, DAG_KEY_HEADERS, "kazerne_agenda?select=*&post_id=eq."+POST_ID+"&order=start_tijd.asc");
+      var vcVoertuigenP = sbSelect(DAG_URL, DAG_KEY_HEADERS, "voertuigcontrole_voertuigen?select=*&post_id=eq."+POST_ID+"&actief=eq.true&order=volgorde.asc");
       var weerP = fetch("https://api.open-meteo.com/v1/forecast?latitude="+coords.lat+"&longitude="+coords.lon+"&current=temperature_2m,weather_code&hourly=temperature_2m,weather_code,precipitation_probability&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=Europe%2FAmsterdam&forecast_days=1").then(function(r){ return r.json(); }).catch(function(){ return null; });
 
-      var results = await Promise.all([personenP, configP, dagP, dienstenP, weerP, wegP, knmiP, agendaP]);
-      var personen = (results[0][0] && results[0][0].value) || [];
+      var results = await Promise.all([personenP, configP, dagP, dienstenP, weerP, wegP, knmiP, agendaP, vcVoertuigenP]);
+      var personen = (results[0]||[]).map(function(r){
+        return { id:r.id, naam:r.naam, persoonsnummer:r.persoonsnummer, ploegId:r.ploeg_id, postId:r.post_id, type:r.type, specialismen:r.specialismen||[], email:r.email, actief:r.actief };
+      });
       var config = (results[1][0] && results[1][0].value) || {};
       var dag = (results[2][0] && results[2][0].value) || null;
       var diensten = results[3] || [];
@@ -1225,6 +1354,13 @@
       var wegafsluitingen = results[5] || [];
       var knmiWaarschuwingen = results[6] || [];
       var agenda = results[7] || [];
+      var vcVoertuigen = results[8] || [];
+      var vcUitvoeringenMap = {};
+      if(vcVoertuigen.length){
+        var vcIds = vcVoertuigen.map(function(v){ return v.id; });
+        var vcUitvoeringen = await sbSelect(DAG_URL, DAG_KEY_HEADERS, "voertuigcontrole_uitvoeringen?select=*&voertuig_id=in.("+vcIds.join(",")+")&datum=eq."+vandaag);
+        (vcUitvoeringen||[]).forEach(function(u){ vcUitvoeringenMap[u.voertuig_id] = u; });
+      }
 
       var personenById = {}; personen.forEach(function(p){ personenById[p.id] = p; });
       // Ad-hoc toegevoegde personen (bv. Corne Koekoek) staan niet in de vaste personeelslijst,
@@ -1234,10 +1370,10 @@
       }
       var postConfig = (config.posten||[]).filter(function(p){ return p.id===POST_ID; })[0];
 
-      laatsteData = { dag:dag, personenById:personenById, postConfig:postConfig, config:config, diensten:diensten, weer:weer, wegafsluitingen:wegafsluitingen, knmiWaarschuwingen:knmiWaarschuwingen, agenda:agenda };
+      laatsteData = { dag:dag, personenById:personenById, postConfig:postConfig, config:config, diensten:diensten, weer:weer, wegafsluitingen:wegafsluitingen, knmiWaarschuwingen:knmiWaarschuwingen, agenda:agenda, vcVoertuigen:vcVoertuigen, vcUitvoeringenMap:vcUitvoeringenMap };
       renderHuidigePagina();
 
-      document.getElementById("footerNote").textContent = "Bijgewerkt " + new Date().toLocaleTimeString("nl-NL",{hour:"2-digit",minute:"2-digit"}) + " \u00b7 ververst elke minuut";
+      document.getElementById("footerNote").textContent = "Bijgewerkt " + new Date().toLocaleTimeString("nl-NL",{hour:"2-digit",minute:"2-digit"}) + " \u00b7 ververst elke minuut \u00b7 versie " + APP_VERSIE_DATUM;
     }catch(e){
       grid.innerHTML = '<div class="card" style="grid-column:1/-1;"><h2>Kan niet laden</h2><div class="empty">'+escapeHtml(e.message||"Onbekende fout")+'</div></div>';
     }
@@ -1248,30 +1384,51 @@
     var grid = document.getElementById("grid");
     var d = laatsteData;
     if(HUIDIGE_PAGINA === 1){
-      grid.innerHTML = '<div style="grid-column:1/-1;">' + renderDagstaat(d.dag, d.personenById, d.postConfig, d.config.werkblokken, d.config.activiteitTypes) + '</div>';
-    } else {
+      grid.innerHTML = '<div style="grid-column:1/-1;">' + renderDagstaat(d.dag, d.personenById, d.postConfig, d.config.werkblokken, d.config.activiteitTypes, d.vcVoertuigen, d.vcUitvoeringenMap) + '</div>';
+    } else if(HUIDIGE_PAGINA === 2){
       grid.innerHTML = '<div style="grid-column:1/-1;" class="onderrij onderrij-alleen">'
         + renderAgenda(d.agenda)
         + renderDiensten(d.diensten)
         + renderWegafsluitingen(d.wegafsluitingen)
         + renderWeer(d.weer, d.knmiWaarschuwingen)
         + '</div>';
+    } else {
+      grid.innerHTML = renderWeekbericht(d.config.weekbericht);
     }
     pasAutoScrollToe();
     var indicatorEl = document.getElementById("paginaIndicator");
     if(indicatorEl){
-      indicatorEl.innerHTML = '<span class="punt '+(HUIDIGE_PAGINA===1?'actief':'')+'"></span><span class="punt '+(HUIDIGE_PAGINA===2?'actief':'')+'"></span>';
+      indicatorEl.innerHTML = '<span class="punt '+(HUIDIGE_PAGINA===1?'actief':'')+'"></span><span class="punt '+(HUIDIGE_PAGINA===2?'actief':'')+'"></span><span class="punt '+(HUIDIGE_PAGINA===3?'actief':'')+'"></span>';
     }
   }
 
   function wisselPagina(){
-    HUIDIGE_PAGINA = HUIDIGE_PAGINA === 1 ? 2 : 1;
+    HUIDIGE_PAGINA = HUIDIGE_PAGINA === 3 ? 1 : HUIDIGE_PAGINA + 1;
     renderHuidigePagina();
   }
 
   // ---------- Persoonlijke pincode-login (hergebruikt Dagstaats personeel_auth) ----------
   var INGELOGD_KEY = "dashboard-ingelogd-persoon";
   var loginState = { personen: [], gekozenId: null };
+
+  // Een sessie-token verloopt na ongeveer een uur. Omdat dit scherm vaak
+  // dagenlang open blijft staan, moet het token dus periodiek ververst worden
+  // -- anders lopen alle aanvragen na verloop van tijd stilletjes vast.
+  async function verversSessieToken(){
+    if(!HUIDIGE_REFRESH_TOKEN) return;
+    try{
+      var res = await fetch(DAG_URL + "/auth/v1/token?grant_type=refresh_token", {
+        method: "POST",
+        headers: {"Content-Type":"application/json", "apikey":"sb_publishable_Pb0fFfxZQggKnFCtJYMH9A_avw0GaPn"},
+        body: JSON.stringify({refresh_token: HUIDIGE_REFRESH_TOKEN})
+      });
+      var data = await res.json();
+      if(data && data.access_token){
+        DAG_KEY_HEADERS.Authorization = "Bearer " + data.access_token;
+        if(data.refresh_token) HUIDIGE_REFRESH_TOKEN = data.refresh_token;
+      }
+    }catch(e){ console.error("Token verversen mislukt (probeert het over 45 min opnieuw):", e); }
+  }
 
   function startDashboard(){
     document.getElementById("toegangsScherm").classList.add("hidden");
@@ -1282,6 +1439,11 @@
     loadAndRender();
     setInterval(loadAndRender, 60000);
     setInterval(wisselPagina, PAGINA_WISSEL_MS);
+    setInterval(verversSessieToken, 45*60000);
+    setInterval(function(){
+      WEEKBERICHT_SUBPAGINA++;
+      if(HUIDIGE_PAGINA === 3) renderHuidigePagina();
+    }, 20000);
     laadMeldingsTermen().then(function(){
       loadTicker();
       setInterval(loadTicker, 15000); // elke 15 sec nieuwe P2000-meldingen checken, zodat de kaart snel omspringt
@@ -1354,12 +1516,22 @@
       var alreadyId = null;
       try{ alreadyId = localStorage.getItem(INGELOGD_KEY); }catch(e){}
 
-      var personenRes = await sbSelect(DAG_URL, DAG_KEY_HEADERS, "kv_store?key=eq.personen&select=value");
-      loginState.personen = ((personenRes[0] && personenRes[0].value) || []).slice().sort(function(a,b){ return a.naam.localeCompare(b.naam); });
+      var personenRes = await sbSelect(DAG_URL, DAG_KEY_HEADERS, "personen?select=id,naam");
+      loginState.personen = (personenRes || []).slice().sort(function(a,b){ return a.naam.localeCompare(b.naam); });
 
       if(alreadyId && loginState.personen.some(function(p){ return p.id===alreadyId; })){
-        startDashboard();
-        return;
+        var hersteld = false;
+        try{
+          var bewaardToken = localStorage.getItem(INGELOGD_KEY + "-refresh");
+          if(bewaardToken){
+            HUIDIGE_REFRESH_TOKEN = bewaardToken;
+            await verversSessieToken();
+            hersteld = !!HUIDIGE_REFRESH_TOKEN && DAG_KEY_HEADERS.Authorization.indexOf("sb_publishable_") === -1;
+          }
+        }catch(e){}
+        if(hersteld){ startDashboard(); return; }
+        // Geen (geldig) bewaard token meer -- gewoon opnieuw om de pincode vragen.
+        try{ localStorage.removeItem(INGELOGD_KEY); localStorage.removeItem(INGELOGD_KEY + "-refresh"); }catch(e){}
       }
       toonNaamLijst("");
     }catch(e){
@@ -1381,14 +1553,23 @@
     var pin = document.getElementById("pinInvoer").value.trim();
     var foutEl = document.getElementById("pinFout");
     try{
-      var res = await sbRpc(DAG_URL, DAG_KEY_HEADERS, "verify_pin", {p_persoon_id: loginState.gekozenId, p_pin: pin});
+      var loginRes = await fetch(DAG_URL + "/functions/v1/login-pin", {
+        method: "POST",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({persoonId: loginState.gekozenId, pin: pin})
+      });
+      var res = await loginRes.json();
       if(res && res.ok){
+        // Nieuw: de echte, door Supabase afgegeven token voortaan gebruiken
+        // voor alle volgende aanvragen, in plaats van de kale publieke sleutel.
+        if(res.access_token){ DAG_KEY_HEADERS.Authorization = "Bearer " + res.access_token; }
+        if(res.refresh_token){ HUIDIGE_REFRESH_TOKEN = res.refresh_token; }
         if(res.moetWijzigen){
           document.getElementById("loginPinStap").classList.add("hidden");
           document.getElementById("loginNieuwPinStap").classList.remove("hidden");
           document.getElementById("nieuwPin1").focus();
         } else {
-          try{ localStorage.setItem(INGELOGD_KEY, loginState.gekozenId); }catch(e){}
+          try{ localStorage.setItem(INGELOGD_KEY, loginState.gekozenId); if(res.refresh_token) localStorage.setItem(INGELOGD_KEY+"-refresh", res.refresh_token); }catch(e){}
           startDashboard();
         }
       } else {
@@ -1412,7 +1593,7 @@
     if(p1 !== p2){ foutEl.textContent = "De twee codes komen niet overeen."; return false; }
     try{
       await sbRpc(DAG_URL, DAG_KEY_HEADERS, "set_pin", {p_persoon_id: loginState.gekozenId, p_pin: p1, p_moet_wijzigen: false});
-      try{ localStorage.setItem(INGELOGD_KEY, loginState.gekozenId); }catch(e){}
+      try{ localStorage.setItem(INGELOGD_KEY, loginState.gekozenId); if(HUIDIGE_REFRESH_TOKEN) localStorage.setItem(INGELOGD_KEY+"-refresh", HUIDIGE_REFRESH_TOKEN); }catch(e){}
       startDashboard();
     }catch(e){ foutEl.textContent = "Opslaan mislukt, probeer opnieuw."; }
     return false;
