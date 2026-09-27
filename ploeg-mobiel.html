@@ -467,7 +467,7 @@
       + '<h3 style="margin:0 0 4px;">Bevestig je reactie</h3>'
       + '<p style="color:var(--text-muted);font-size:13px;margin:0 0 12px;">'+escapeHtml(shift.thema||shift.datum)+'</p>'
       + overzicht
-      + '<button id="btnVerstuurReactieBevestig" class="primary-btn" style="width:100%;margin-top:16px;">Verstuur reactie</button>'
+      + '<button id="btnVerstuurReactieBevestig" style="width:100%;margin-top:16px;padding:12px;background:var(--lime);color:#12161B;border:none;border-radius:8px;font-weight:700;font-size:15px;cursor:pointer;">Verstuur reactie</button>'
       + '<div id="verstuurReactieStatus" style="margin-top:10px;font-size:13px;text-align:center;"></div>'
       + '</div>';
     document.body.appendChild(overlay);
@@ -788,7 +788,7 @@
       + '<div class="field-checkbox"><input type="checkbox" name="spoed" id="spoedCheck" onchange="App.toggleSpoedFields(this.checked)" /><label for="spoedCheck">\uD83D\uDEA8 Spoedmelding \u2013 vandaag nodig, sluit automatisch over 2 uur</label></div>'
       + '<div id="datumDeadlineWrap">'
       + '<div class="field"><label>Datum</label><input type="date" name="datum" /></div>'
-      + '<div class="field"><label>Reageren mogelijk tot</label><input type="datetime-local" name="deadline" /></div>'
+      + '<div class="field"><label>Reageren mogelijk tot</label><input type="datetime-local" name="deadline" step="1800" /></div>'
       + '</div>'
       + '<div class="field"><label>Type</label><select name="type"><option value="heel">Hele 24-uursdienst</option><option value="split">Dag + avond/nacht apart</option><option value="dag">Alleen dag</option><option value="avond">Alleen avond/nacht</option></select>'
       + '<div style="font-size:12px;color:var(--text-muted);margin-top:4px;">Standaardtijden: '+esc(tijden.ochtend)+'\u2013'+esc(tijden.avond)+'</div></div>'
