@@ -699,7 +699,66 @@
           if(r2.error) throw r2.error;
         }
       }
-    }, "Reactie opgeslagen");
+    }, "Reactie opgeslagen").then(function(){
+      // Bij een gedeelde dienst (meerdere tijdvakken): pas de bevestigingspopup
+      // tonen zodra ALLE tijdvakken van deze dienst een reactie van deze
+      // persoon hebben -- dus na het tweede (of latere) antwoord, niet na elk
+      // los tijdvak apart. Dit is een EXTRA bevestigingsstap, bovenop de
+      // bestaande, directe opslag hierboven (die blijft ongewijzigd werken).
+      var shift = shiftOfSlot(slotId, state.data);
+      if(shift){
+        var alleBeantwoord = shift.slots.every(function(sl){
+          return state.data.reacties.some(function(r){ return r.slotId===sl.slotId && r.lidId===state.currentUserId; });
+        });
+        if(alleBeantwoord) App.toonVerstuurReactiePopup(shift.id);
+      }
+    });
+  };
+
+  App.toonVerstuurReactiePopup = function(shiftId){
+    var shift = state.data.shifts.filter(function(s){ return s.id===shiftId; })[0];
+    if(!shift) return;
+    var overzicht = shift.slots.map(function(sl){
+      var r = state.data.reacties.filter(function(x){ return x.slotId===sl.slotId && x.lidId===state.currentUserId; })[0];
+      return '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);"><span>'+escapeHtml(sl.label)+'</span><strong>'+(r?ANTWOORD_LABEL[r.antwoord]:'—')+'</strong></div>';
+    }).join("");
+    var overlay = document.createElement("div");
+    overlay.className = "popup-overlay";
+    overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:9999;";
+    overlay.innerHTML =
+      '<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:22px;max-width:360px;width:90%;">'
+      + '<h3 style="margin:0 0 4px;">Bevestig je reactie</h3>'
+      + '<p style="color:var(--text-muted);font-size:13px;margin:0 0 12px;">'+escapeHtml(shift.thema||shift.datum)+'</p>'
+      + overzicht
+      + '<button id="btnVerstuurReactieBevestig" style="width:100%;margin-top:16px;padding:12px;background:var(--lime);color:#12161B;border:none;border-radius:8px;font-weight:700;font-size:15px;cursor:pointer;">Verstuur reactie</button>'
+      + '<div id="verstuurReactieStatus" style="margin-top:10px;font-size:13px;text-align:center;"></div>'
+      + '</div>';
+    document.body.appendChild(overlay);
+    document.getElementById("btnVerstuurReactieBevestig").addEventListener("click", async function(){
+      var statusEl = document.getElementById("verstuurReactieStatus");
+      var btn = document.getElementById("btnVerstuurReactieBevestig");
+      btn.disabled = true; btn.textContent = "Bezig…";
+      statusEl.textContent = "Bevestiging ophalen bij de server…";
+      try{
+        // De reacties zijn al opgeslagen (per tijdvak, hierboven) -- dit is
+        // een expliciete, verse controle bij de database dat beide reacties
+        // daar ook daadwerkelijk aanwezig zijn, als extra geruststelling.
+        var slotIds = shift.slots.map(function(sl){ return sl.slotId; });
+        var check = await sbDag.from("reacties").select("slot_id,antwoord").eq("lid_id", state.currentUserId).in("slot_id", slotIds);
+        if(check.error) throw check.error;
+        var aantalOntvangen = (check.data||[]).length;
+        if(aantalOntvangen === shift.slots.length){
+          statusEl.innerHTML = '<span style="color:var(--ok, #3fb87f);">✓ Bevestigd: je reactie is ontvangen door het systeem.</span>';
+          setTimeout(function(){ overlay.remove(); }, 1800);
+        } else {
+          statusEl.innerHTML = '<span style="color:#ff7a6e;">Nog niet alle reacties gevonden ('+aantalOntvangen+'/'+shift.slots.length+') — probeer het nog eens.</span>';
+          btn.disabled = false; btn.textContent = "Opnieuw proberen";
+        }
+      }catch(e){
+        statusEl.innerHTML = '<span style="color:#ff7a6e;">Controle mislukt: '+escapeHtml(e.message||"onbekende fout")+'</span>';
+        btn.disabled = false; btn.textContent = "Opnieuw proberen";
+      }
+    });
   };
 
   App.assignSlot = function(slotId, lidId, methode){
@@ -1510,7 +1569,7 @@
       : '';
     var datumDeadline = '<div id="datumDeadlineWrap">'
       + '<div class="field"><label>Datum</label><input type="date" name="datum" value="'+(shift?shift.datum:'')+'" required /></div>'
-      + '<div class="field"><label>Reageren mogelijk tot</label><input type="datetime-local" name="deadline" value="'+(shift?toLocalDateTimeStr(new Date(shift.deadline)):'')+'" required /></div>'
+      + '<div class="field"><label>Reageren mogelijk tot</label><input type="datetime-local" name="deadline" step="1800" value="'+(shift?toLocalDateTimeStr(new Date(shift.deadline)):'')+'" required /></div>'
       + '</div>';
     var meldingsontvangersField = editing ? '' : (function(){
       var kandidaten = state.data.members.filter(function(m){ return kanDienstenBeheren(m.rol); })
@@ -1537,7 +1596,7 @@
       + meldingsontvangersField
       + '<div class="field"><label>Melding aan beheerders</label><select name="meldingMoment">'
         + '<option value="direct" '+(shift&&shift.meldingMoment==="direct"?"selected":"")+'>Direct bij elke reactie</option>'
-        + '<option value="na_sluiting" '+(shift&&shift.meldingMoment==="na_sluiting"?"selected":"")+'>Pas na sluiten reactietermijn</option>'
+        + '<option value="na_sluiting" '+((shift?shift.meldingMoment==="na_sluiting":true)?"selected":"")+'>Pas na sluiten reactietermijn</option>'
       + '</select></div>'
       + '<div class="field-checkbox"><input type="checkbox" name="autoToewijzen" id="autoToewijzenCheck" '+(shift&&shift.autoToewijzen?"checked":"")+' /><label for="autoToewijzenCheck">Automatisch toewijzen zodra de reactietermijn sluit (geen handmatige toewijzing nodig)</label></div>'
       + '<div class="field"><label>Notitie (optioneel)</label><textarea name="notitie">'+(shift?escapeHtml(shift.notitie):'')+'</textarea></div>'
