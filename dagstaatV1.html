@@ -759,9 +759,10 @@ async function supaSelectMetRetry(query, omschrijving){
 }
 async function loadAll(overslaanDag){
   State.laadFouten = [];
-  const [config, personenResultaat, log, oefeningen, werkzaamhedenRuw, agendaResultaat, materialenResultaat, materialenInhoudResultaat, vcVoertuigenResultaat] = await Promise.all([
+  const [config, personenResultaat, postenResultaat, log, oefeningen, werkzaamhedenRuw, agendaResultaat, materialenResultaat, materialenInhoudResultaat, vcVoertuigenResultaat] = await Promise.all([
     sGet('config', defaultConfig(), true),
     supaSelectMetRetry(()=>supa.from('personen').select('*').then(r=>r, e=>({error:e})), 'personen'),
+    supaSelectMetRetry(()=>supa.from('posten').select('*').then(r=>r, e=>({error:e})), 'posten'),
     sGet('log', [], true),
     sGet('oefeningen', [], true),
     sGet('werkzaamheden-historie', [], true),
@@ -771,6 +772,10 @@ async function loadAll(overslaanDag){
     supaSelectMetRetry(()=>supa.from('voertuigcontrole_voertuigen').select('*').order('volgorde').then(r=>r, e=>({error:e})), 'voertuigcontrole_voertuigen')
   ]);
   State.config = config;
+  State.config.posten = ((postenResultaat && !postenResultaat.error) ? (postenResultaat.data||[]) : []).map(r=>({
+    id: r.id, naam: r.naam, voertuigFuncties: r.voertuig_functies||[]
+  }));
+  if(postenResultaat && postenResultaat.error){ if(!State.laadFouten) State.laadFouten=[]; State.laadFouten.push('posten'); }
   // Kolomnamen (snake_case) terugvertalen naar de veldnamen die de rest van
   // de app al overal gebruikt (camelCase) -- zo hoeft verder nergens anders
   // in de code iets te veranderen.
@@ -787,7 +792,7 @@ async function loadAll(overslaanDag){
   const inhoudRuw = (materialenInhoudResultaat && !materialenInhoudResultaat.error) ? (materialenInhoudResultaat.data||[]) : [];
   State.oefenmaterialen = materialenRuw.map(m=>({...m, inhoud: inhoudRuw.filter(i=>i.oefenmateriaal_id===m.id)}));
   State.vcVoertuigen = (vcVoertuigenResultaat && !vcVoertuigenResultaat.error) ? (vcVoertuigenResultaat.data||[]) : [];
-  const configEnPersonenOk = !State.laadFouten.includes('config') && !State.laadFouten.includes('personen');
+  const configEnPersonenOk = !State.laadFouten.includes('config') && !State.laadFouten.includes('personen') && !State.laadFouten.includes('posten');
   if(!configEnPersonenOk){
     console.warn('[dagplanning] config en/of personen konden niet worden opgehaald -- automatische correcties en opslag-acties worden bewust overgeslagen om te voorkomen dat verouderde noodgreep-data wordt teruggeschreven naar de database. De "Aan de slag"-controle vangt dit verderop af.');
   } else {
@@ -1035,7 +1040,27 @@ async function koppelOefeningNaarPlanning(oefening){
   const skipMelding = overgeslagen>0 ? ` — ${overgeslagen} persoon/personen met vrije dienst zijn overgeslagen` : '';
   await addLog(`Oefening '${oefening.thema}' gezet in planning van ${datumStr}, ${ploegNaam}${ploegWissel}${skipMelding}.`, oefening.postId);
 }
-async function saveConfig(){ await sSet('config', State.config, true); }
+async function saveConfig(){
+  // Posten staat sinds vandaag in een eigen tabel -- upsert per rij, plus
+  // verwijderen van rijen die niet meer voorkomen. Zelfde patroon als
+  // savePersonen(), en om dezelfde reden: een storing bij het opslaan van
+  // deze ene lijst mag niet meer de rest van de configuratie kunnen raken.
+  const postenRijen = (State.config.posten||[]).map(p=>({id:p.id, naam:p.naam, voertuig_functies:p.voertuigFuncties||[]}));
+  if(postenRijen.length){
+    const { error } = await supa.from('posten').upsert(postenRijen, {onConflict:'id'});
+    if(error){ console.error('[dagplanning] opslaan van posten mislukt:', error.message); throw error; }
+  }
+  const { data: bestaandePostenIds } = await supa.from('posten').select('id');
+  const huidigePostenIds = new Set((State.config.posten||[]).map(p=>p.id));
+  const teVerwijderenPosten = (bestaandePostenIds||[]).filter(r=>!huidigePostenIds.has(r.id)).map(r=>r.id);
+  if(teVerwijderenPosten.length) await supa.from('posten').delete().in('id', teVerwijderenPosten);
+
+  // De rest van de configuratie (nog niet gemigreerde onderdelen) blijft
+  // voorlopig gewoon als kleiner blok in kv_store staan.
+  const restConfig = Object.assign({}, State.config);
+  delete restConfig.posten;
+  await sSet('config', restConfig, true);
+}
 async function savePersonen(){
   // Personen staat sinds vandaag in een eigen tabel (niet meer als één groot
   // blok in kv_store) -- upsert elke rij apart, en verwijder rijen die niet
@@ -4345,10 +4370,12 @@ function wireEvents(){
   document.getElementById('brandName').addEventListener('click', openSettings);
 
   const TAB_DATA_AFHANKELIJKHEDEN = {
-    'oefenrooster': ['oefeningen','oefenmaterialen','oefenmaterialen_inhoud'],
-    'personeel': ['personen'],
-    'voertuigcontrole': ['voertuigcontrole_voertuigen'],
-    'dashboard': ['kazerne_agenda'],
+    'oefenrooster': ['oefeningen','oefenmaterialen','oefenmaterialen_inhoud','posten'],
+    'personeel': ['personen','posten'],
+    'voertuigcontrole': ['voertuigcontrole_voertuigen','posten'],
+    'dashboard': ['kazerne_agenda','posten'],
+    'planning': ['posten'],
+    'voertuigindeling': ['posten'],
   };
   document.querySelectorAll('nav.tabs button').forEach(btn=>{
     btn.addEventListener('click', async ()=>{
