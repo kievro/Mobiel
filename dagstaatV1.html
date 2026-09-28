@@ -3594,9 +3594,16 @@ function openDuikOefeningPlanModal(bestaandId){
           ${team.map(p=>`<label style="display:flex;gap:6px;align-items:center;padding:2px 0;"><input type="checkbox" name="deelnemers" value="${p.id}" ${bestaand&&bestaand.deelnemer_ids.includes(p.id)?'checked':''}> ${esc(p.naam)} <span class="empty-hint" style="padding:0;">(${duikFunctiesVanPersoon(p).map(f=>DUIK_FUNCTIE_LABEL[f]).join(', ')})</span></label>`).join('')}
         </div>
       </div>
+      <div class="field"><label>Zet in de dagplanning bij blok(ken) (optioneel)</label>
+        <div class="table-wrap-scroll" style="max-height:120px;border:1px solid var(--border-soft);border-radius:var(--radius);padding:6px 10px;">
+          ${State.config.werkblokken.map(b=>`<label style="display:flex;gap:6px;align-items:center;padding:2px 0;"><input type="checkbox" name="blokken" value="${b.id}" ${bestaand&&(bestaand.blokken||[]).includes(b.id)?'checked':''}> ${esc(b.naam)} <span class="empty-hint" style="padding:0;">(${b.start}–${b.eind})</span></label>`).join('')}
+        </div>
+        <div class="hint">Zet bij de gekozen deelnemers een regel in de dagplanning van Arnhem Zuid op deze datum. Staat iemand die dag niet al ingedeeld, dan wordt hij/zij automatisch als extra persoon toegevoegd.</div>
+      </div>
       <div class="hint">Bij het markeren als uitgevoerd wordt voor elke deelnemer automatisch een registratie aangemaakt op de geselecteerde code(s) — alleen voor de codes die bij de eigen functie(s) van die persoon horen.</div>
       <div class="modal-actions">
         ${bestaand?`<button type="button" class="btn ghost" id="duikOefPlanVerwijder" style="margin-right:auto;color:var(--red-text);">Verwijderen</button>`:''}
+        ${bestaand&&bestaand.blokken&&bestaand.blokken.length?`<button type="button" class="btn ghost" id="duikOefPlanKoppel">Opnieuw in planning zetten</button>`:''}
         <button type="button" class="btn ghost" data-close="modal">Annuleren</button>
         <button type="submit" class="btn primary">${bestaand?'Opslaan':'Inplannen'}</button>
       </div>
@@ -3608,20 +3615,25 @@ function openDuikOefeningPlanModal(bestaandId){
     const rij = {
       id: bestaand ? bestaand.id : uid(),
       datum: fd.get('datum'), post_id: 'post2', omschrijving: fd.get('omschrijving')||null,
-      codes: fd.getAll('codes'), deelnemer_ids: fd.getAll('deelnemers'),
+      codes: fd.getAll('codes'), deelnemer_ids: fd.getAll('deelnemers'), blokken: fd.getAll('blokken'),
       aangemaakt_door: (State.ingelogdPersoon&&State.ingelogdPersoon.naam)||null
     };
     try{
+      let record;
       if(bestaand){
         const {error} = await supa.from('duik_oefeningen').update(rij).eq('id', bestaand.id);
         if(error) throw error;
         Object.assign(bestaand, rij);
+        record = bestaand;
       } else {
         const {data, error} = await supa.from('duik_oefeningen').insert(rij).select().single();
         if(error) throw error;
         State.duikOefeningen.push(data);
+        record = data;
       }
-      closeModal(); box.classList.remove('wide'); renderDuikSub();
+      closeModal(); box.classList.remove('wide');
+      if(record.blokken && record.blokken.length) await koppelDuikOefeningNaarPlanning(record);
+      renderDuikSub();
     }catch(err){ alert('Opslaan mislukt: '+(err.message||err)); }
   });
   if(bestaand){
@@ -3634,7 +3646,48 @@ function openDuikOefeningPlanModal(bestaandId){
         closeModal(); box.classList.remove('wide'); renderDuikSub();
       }catch(err){ alert('Verwijderen mislukt: '+(err.message||err)); }
     });
+    const btnKoppel = document.getElementById('duikOefPlanKoppel');
+    if(btnKoppel) btnKoppel.addEventListener('click', async ()=>{ await koppelDuikOefeningNaarPlanning(bestaand); closeModal(); box.classList.remove('wide'); });
   }
+}
+
+async function koppelDuikOefeningNaarPlanning(duikOefening){
+  const postId = duikOefening.post_id, datumStr = duikOefening.datum;
+  const isHuidige = postId===State.currentPost && datumStr===fmtKey(State.currentDate);
+  let dagData = isHuidige ? State.dag : await loadDagRaw(postId, datumStr);
+  const themaTekst = 'Duikoefening — ' + duikOefening.codes.join(', ') + (duikOefening.omschrijving?' ('+duikOefening.omschrijving+')':'');
+  let toegevoegdAlsExtra = 0;
+  duikOefening.deelnemer_ids.forEach(personId=>{
+    const aanwezig = getPersonRijenVoorDag(dagData).some(r=>r.rowId===personId);
+    if(!aanwezig){
+      const p = State.personen.find(x=>x.id===personId);
+      if(p){ dagData.extraPersonen = dagData.extraPersonen||[]; dagData.extraPersonen.push({id:uid(), personId:p.id, naam:p.naam}); toegevoegdAlsExtra++; }
+    }
+  });
+  duikOefening.blokken.forEach(blokId=>{
+    duikOefening.deelnemer_ids.forEach(personId=>{
+      setCel(dagData, personId, blokId, {tekst: themaTekst, typeId: 't-oef'});
+    });
+  });
+  const sleutel = postId+':'+datumStr;
+  if(await isGewijzigdSindsLaden(sleutel)){
+    dagData = await loadDagRaw(postId, datumStr); // vers inladen, dezelfde koppeling er alsnog overheen zetten
+    duikOefening.deelnemer_ids.forEach(personId=>{
+      const aanwezig = getPersonRijenVoorDag(dagData).some(r=>r.rowId===personId);
+      if(!aanwezig){
+        const p = State.personen.find(x=>x.id===personId);
+        if(p){ dagData.extraPersonen = dagData.extraPersonen||[]; dagData.extraPersonen.push({id:uid(), personId:p.id, naam:p.naam}); }
+      }
+    });
+    duikOefening.blokken.forEach(blokId=>{
+      duikOefening.deelnemer_ids.forEach(personId=>{ setCel(dagData, personId, blokId, {tekst: themaTekst, typeId: 't-oef'}); });
+    });
+  }
+  await sSet('dag:'+sleutel, dagData, true);
+  State.dagUpdatedAt[sleutel] = new Date().toISOString();
+  if(isHuidige) State.dag = dagData; else State.pinCache[sleutel] = dagData;
+  await addLog(`Duikoefening van ${datumStr} in de planning gezet (${duikOefening.deelnemer_ids.length} perso(o)n(en), ${duikOefening.blokken.length} blok(ken))${toegevoegdAlsExtra?`, ${toegevoegdAlsExtra} als extra persoon toegevoegd`:''}.`, postId);
+  if(isHuidige) render();
 }
 
 async function duikOefeningMarkeerUitgevoerd(oefeningId){
