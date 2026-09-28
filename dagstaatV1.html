@@ -709,7 +709,7 @@ const State = {
   pinCache:{}, dagLoadOnzeker:false, werkzaamhedenHistorie:[],
   calendarOpen:false, calendarViewMonth:null, laatsteOphaling:null, rol:'manschap', rolWerkelijk:'manschap', ingelogdPersoon:null, kazerneAgenda:[], maandcontroleOpen:false, agendaOpen:false,
   dagUpdatedAt:{}, // per 'postId:datum' de laatst-bekende opslagtijd op de server, om botsende gelijktijdige wijzigingen te kunnen signaleren
-  oefenmaterialen:[], vcVoertuigen:[],
+  oefenmaterialen:[], vcVoertuigen:[], oefenkaarten:[],
   duikGeladen:false, duikLaadFout:null, duikNormen:[], duikRegistraties:[], duikLogregels:[], duikInstellingen:null,
   oefSubtab:'rooster', duikPersoonId:null
 };
@@ -796,18 +796,22 @@ async function supaSelectMetRetry(query, omschrijving){
 }
 async function loadAll(overslaanDag){
   State.laadFouten = [];
-  const [config, personenResultaat, postenResultaat, ploegenResultaat, log, oefeningen, werkzaamhedenRuw, agendaResultaat, materialenResultaat, materialenInhoudResultaat, vcVoertuigenResultaat] = await Promise.all([
+  const [config, personenResultaat, postenResultaat, ploegenResultaat, activiteitResultaat, werkblokResultaat, themasResultaat, log, oefeningenResultaat, werkzaamhedenRuw, agendaResultaat, materialenResultaat, materialenInhoudResultaat, vcVoertuigenResultaat, oefenkaartenResultaat] = await Promise.all([
     sGet('config', defaultConfig(), true),
     supaSelectMetRetry(()=>supa.from('personen').select('*').then(r=>r, e=>({error:e})), 'personen'),
     supaSelectMetRetry(()=>supa.from('posten').select('*').then(r=>r, e=>({error:e})), 'posten'),
     supaSelectMetRetry(()=>supa.from('ploegen').select('*').then(r=>r, e=>({error:e})), 'ploegen'),
+    supaSelectMetRetry(()=>supa.from('activiteit_types').select('*').then(r=>r, e=>({error:e})), 'activiteit_types'),
+    supaSelectMetRetry(()=>supa.from('werkblokken').select('*').order('volgorde').then(r=>r, e=>({error:e})), 'werkblokken'),
+    supaSelectMetRetry(()=>supa.from('oefen_themas').select('naam').order('naam').then(r=>r, e=>({error:e})), 'oefen_themas'),
     sGet('log', [], true),
-    sGet('oefeningen', [], true),
+    supaSelectMetRetry(()=>supa.from('oefeningen').select('*').order('datum').then(r=>r, e=>({error:e})), 'oefeningen'),
     sGet('werkzaamheden-historie', [], true),
     supaSelectMetRetry(()=>supa.from('kazerne_agenda').select('*').order('start_tijd', {ascending:true}).then(r=>r, e=>({error:e})), 'kazerne_agenda'),
     supaSelectMetRetry(()=>supa.from('oefenmaterialen').select('*').eq('actief', true).order('categorie').order('naam').then(r=>r, e=>({error:e})), 'oefenmaterialen'),
     supaSelectMetRetry(()=>supa.from('oefenmaterialen_inhoud').select('*').order('volgorde').then(r=>r, e=>({error:e})), 'oefenmaterialen_inhoud'),
-    supaSelectMetRetry(()=>supa.from('voertuigcontrole_voertuigen').select('*').order('volgorde').then(r=>r, e=>({error:e})), 'voertuigcontrole_voertuigen')
+    supaSelectMetRetry(()=>supa.from('voertuigcontrole_voertuigen').select('*').order('volgorde').then(r=>r, e=>({error:e})), 'voertuigcontrole_voertuigen'),
+    supaSelectMetRetry(()=>supa.from('oefenkaarten').select('*').eq('actief',true).order('nummer').then(r=>r, e=>({error:e})), 'oefenkaarten')
   ]);
   State.config = config;
   State.config.posten = ((postenResultaat && !postenResultaat.error) ? (postenResultaat.data||[]) : []).map(r=>({
@@ -818,6 +822,16 @@ async function loadAll(overslaanDag){
     id: r.id, naam: r.naam, postId: r.post_id
   }));
   if(ploegenResultaat && ploegenResultaat.error){ if(!State.laadFouten) State.laadFouten=[]; State.laadFouten.push('ploegen'); }
+  State.config.activiteitTypes = ((activiteitResultaat && !activiteitResultaat.error) ? (activiteitResultaat.data||[]) : []).map(r=>({
+    id: r.id, naam: r.naam, kleur: r.kleur
+  }));
+  if(activiteitResultaat && activiteitResultaat.error){ if(!State.laadFouten) State.laadFouten=[]; State.laadFouten.push('activiteit_types'); }
+  State.config.werkblokken = ((werkblokResultaat && !werkblokResultaat.error) ? (werkblokResultaat.data||[]) : []).map(r=>({
+    id: r.id, naam: r.naam, start: r.start, eind: r.eind
+  }));
+  if(werkblokResultaat && werkblokResultaat.error){ if(!State.laadFouten) State.laadFouten=[]; State.laadFouten.push('werkblokken'); }
+  State.config.themas = ((themasResultaat && !themasResultaat.error) ? (themasResultaat.data||[]) : []).map(r=>r.naam);
+  if(themasResultaat && themasResultaat.error){ if(!State.laadFouten) State.laadFouten=[]; State.laadFouten.push('oefen_themas'); }
   // Kolomnamen (snake_case) terugvertalen naar de veldnamen die de rest van
   // de app al overal gebruikt (camelCase) -- zo hoeft verder nergens anders
   // in de code iets te veranderen.
@@ -827,14 +841,22 @@ async function loadAll(overslaanDag){
   }));
   if(personenResultaat && personenResultaat.error){ if(!State.laadFouten) State.laadFouten=[]; State.laadFouten.push('personen'); }
   State.log = log;
-  State.oefeningen = oefeningen;
+  State.oefeningen = ((oefeningenResultaat && !oefeningenResultaat.error) ? (oefeningenResultaat.data||[]) : []).map(r=>({
+    id: r.id, datum: r.datum, postId: r.post_id, ploegId: r.ploeg_id, thema: r.thema,
+    welkeOefening: r.welke_oefening, oefenkaartNummer: r.oefenkaart_nummer, vorm: r.vorm,
+    ruimteGereserveerd: r.ruimte_gereserveerd, oefenleidingType: r.oefenleiding_type,
+    oefenleiders: r.oefenleiders||[], blokken: r.blokken||[], bijzonderheden: r.bijzonderheden,
+    materialen: r.materialen||[], bijlagen: r.bijlagen||[]
+  }));
+  if(oefeningenResultaat && oefeningenResultaat.error){ if(!State.laadFouten) State.laadFouten=[]; State.laadFouten.push('oefeningen'); }
+  State.oefenkaarten = (oefenkaartenResultaat && !oefenkaartenResultaat.error) ? (oefenkaartenResultaat.data||[]) : [];
   State.werkzaamhedenHistorie = werkzaamhedenRuw.map(h=> typeof h==='string' ? {tekst:h, typeId:''} : h);
   State.kazerneAgenda = (agendaResultaat && !agendaResultaat.error) ? (agendaResultaat.data||[]) : [];
   const materialenRuw = (materialenResultaat && !materialenResultaat.error) ? (materialenResultaat.data||[]) : [];
   const inhoudRuw = (materialenInhoudResultaat && !materialenInhoudResultaat.error) ? (materialenInhoudResultaat.data||[]) : [];
   State.oefenmaterialen = materialenRuw.map(m=>({...m, inhoud: inhoudRuw.filter(i=>i.oefenmateriaal_id===m.id)}));
   State.vcVoertuigen = (vcVoertuigenResultaat && !vcVoertuigenResultaat.error) ? (vcVoertuigenResultaat.data||[]) : [];
-  const configEnPersonenOk = !State.laadFouten.includes('config') && !State.laadFouten.includes('personen') && !State.laadFouten.includes('posten') && !State.laadFouten.includes('ploegen');
+  const configEnPersonenOk = ['config','personen','posten','ploegen','activiteit_types','werkblokken','oefen_themas'].every(k=>!State.laadFouten.includes(k));
   if(!configEnPersonenOk){
     console.warn('[dagplanning] config en/of personen konden niet worden opgehaald -- automatische correcties en opslag-acties worden bewust overgeslagen om te voorkomen dat verouderde noodgreep-data wordt teruggeschreven naar de database. De "Aan de slag"-controle vangt dit verderop af.');
   } else {
@@ -1108,11 +1130,48 @@ async function saveConfig(){
   const teVerwijderenPloegen = (bestaandePloegenIds||[]).filter(r=>!huidigePloegenIds.has(r.id)).map(r=>r.id);
   if(teVerwijderenPloegen.length) await supa.from('ploegen').delete().in('id', teVerwijderenPloegen);
 
+  // Activiteittypen -- zelfde patroon.
+  const activiteitRijen = (State.config.activiteitTypes||[]).map(a=>({id:a.id, naam:a.naam, kleur:a.kleur||'#9aa1aa'}));
+  if(activiteitRijen.length){
+    const { error } = await supa.from('activiteit_types').upsert(activiteitRijen, {onConflict:'id'});
+    if(error){ console.error('[dagplanning] opslaan van activiteittypen mislukt:', error.message); throw error; }
+  }
+  const { data: bestaandeActiviteitIds } = await supa.from('activiteit_types').select('id');
+  const huidigeActiviteitIds = new Set((State.config.activiteitTypes||[]).map(a=>a.id));
+  const teVerwijderenActiviteit = (bestaandeActiviteitIds||[]).filter(r=>!huidigeActiviteitIds.has(r.id)).map(r=>r.id);
+  if(teVerwijderenActiviteit.length) await supa.from('activiteit_types').delete().in('id', teVerwijderenActiviteit);
+
+  // Werkblokken -- zelfde patroon, met volgorde (de lijst heeft een vaste, betekenisvolle volgorde).
+  const werkblokkenRijen = (State.config.werkblokken||[]).map((w,i)=>({id:w.id, naam:w.naam, start:w.start, eind:w.eind, volgorde:i}));
+  if(werkblokkenRijen.length){
+    const { error } = await supa.from('werkblokken').upsert(werkblokkenRijen, {onConflict:'id'});
+    if(error){ console.error('[dagplanning] opslaan van werkblokken mislukt:', error.message); throw error; }
+  }
+  const { data: bestaandeWerkblokIds } = await supa.from('werkblokken').select('id');
+  const huidigeWerkblokIds = new Set((State.config.werkblokken||[]).map(w=>w.id));
+  const teVerwijderenWerkblok = (bestaandeWerkblokIds||[]).filter(r=>!huidigeWerkblokIds.has(r.id)).map(r=>r.id);
+  if(teVerwijderenWerkblok.length) await supa.from('werkblokken').delete().in('id', teVerwijderenWerkblok);
+
+  // Thema's -- naam zelf is de sleutel (geen los id), dus alles vervangen i.p.v. upserten.
+  const { data: bestaandeThemas } = await supa.from('oefen_themas').select('naam');
+  const huidigeThemas = new Set(State.config.themas||[]);
+  const bestaandeThemaSet = new Set((bestaandeThemas||[]).map(t=>t.naam));
+  const nieuweThemas = (State.config.themas||[]).filter(t=>!bestaandeThemaSet.has(t)).map(naam=>({naam}));
+  if(nieuweThemas.length){
+    const { error } = await supa.from('oefen_themas').insert(nieuweThemas);
+    if(error){ console.error('[dagplanning] opslaan van thema\'s mislukt:', error.message); throw error; }
+  }
+  const teVerwijderenThemas = [...bestaandeThemaSet].filter(t=>!huidigeThemas.has(t));
+  if(teVerwijderenThemas.length) await supa.from('oefen_themas').delete().in('naam', teVerwijderenThemas);
+
   // De rest van de configuratie (nog niet gemigreerde onderdelen) blijft
   // voorlopig gewoon als kleiner blok in kv_store staan.
   const restConfig = Object.assign({}, State.config);
   delete restConfig.posten;
   delete restConfig.ploegen;
+  delete restConfig.activiteitTypes;
+  delete restConfig.werkblokken;
+  delete restConfig.themas;
   await sSet('config', restConfig, true);
 }
 async function savePersonen(){
@@ -1133,7 +1192,23 @@ async function savePersonen(){
   const teVerwijderen = (bestaandeIds||[]).filter(r=>!huidigeIds.has(r.id)).map(r=>r.id);
   if(teVerwijderen.length) await supa.from('personen').delete().in('id', teVerwijderen);
 }
-async function saveOefeningen(){ await sSet('oefeningen', State.oefeningen, true); }
+async function saveOefeningen(){
+  const rijen = State.oefeningen.map(o=>({
+    id:o.id, datum:o.datum, post_id:o.postId, ploeg_id:o.ploegId, thema:o.thema,
+    welke_oefening:o.welkeOefening||null, oefenkaart_nummer:o.oefenkaartNummer||null, vorm:o.vorm,
+    ruimte_gereserveerd:!!o.ruimteGereserveerd, oefenleiding_type:o.oefenleidingType,
+    oefenleiders:o.oefenleiders||[], blokken:o.blokken||[], bijzonderheden:o.bijzonderheden||null,
+    materialen:o.materialen||[], bijlagen:o.bijlagen||[]
+  }));
+  if(rijen.length){
+    const { error } = await supa.from('oefeningen').upsert(rijen, {onConflict:'id'});
+    if(error){ console.error('[dagplanning] opslaan van oefeningen mislukt:', error.message); throw error; }
+  }
+  const { data: bestaandeIds } = await supa.from('oefeningen').select('id');
+  const huidigeIds = new Set(State.oefeningen.map(o=>o.id));
+  const teVerwijderen = (bestaandeIds||[]).filter(r=>!huidigeIds.has(r.id)).map(r=>r.id);
+  if(teVerwijderen.length) await supa.from('oefeningen').delete().in('id', teVerwijderen);
+}
 async function voegWerkzaamheidToeAanHistorie(tekst, typeId){
   tekst = (tekst||'').trim();
   if(!tekst || tekst.length<2) return;
@@ -2772,7 +2847,8 @@ function openOefeningModal(existingId){
         </div>
         <div class="field"><label>Welke oefening</label><input type="text" name="welkeOefening" value="${existing?esc(existing.welkeOefening||''):''}" placeholder="Bijv. Redden vanaf platte daken"></div>
       </div>
-      <div class="field"><label>Oefenkaart-nummer (optioneel)</label><input type="text" name="oefenkaartNummer" value="${existing?esc(existing.oefenkaartNummer||''):''}" placeholder="Bijv. OK-014"></div>
+      <div class="field"><label>Oefenkaart-nummer (optioneel)</label><input type="text" name="oefenkaartNummer" list="dlOefenkaarten" value="${existing?esc(existing.oefenkaartNummer||''):''}" placeholder="Bijv. 3 of BRW-BWD.03"><datalist id="dlOefenkaarten">${State.oefenkaarten.map(k=>`<option value="${esc(k.nummer)}">${esc(k.omschrijving)}</option>`).join('')}</datalist></div>
+      <div class="hint" style="margin-top:-8px;">${State.oefenkaarten.length?'Kies uit de catalogus (Instellingen &gt; Oefenkaarten) of typ een eigen nummer.':'De oefenkaarten-catalogus is nog leeg -- typ hier gewoon vrij het nummer in.'}</div>
       <div class="fieldrow">
         <div class="field"><label>Vorm</label>
           <div class="radio-row">
@@ -4841,11 +4917,11 @@ function wireEvents(){
   document.getElementById('brandName').addEventListener('click', openSettings);
 
   const TAB_DATA_AFHANKELIJKHEDEN = {
-    'oefenrooster': ['oefeningen','oefenmaterialen','oefenmaterialen_inhoud','posten','ploegen'],
+    'oefenrooster': ['oefeningen','oefenmaterialen','oefenmaterialen_inhoud','posten','ploegen','activiteit_types','werkblokken','oefen_themas'],
     'personeel': ['personen','posten','ploegen'],
     'voertuigcontrole': ['voertuigcontrole_voertuigen','posten'],
     'dashboard': ['kazerne_agenda','posten','ploegen'],
-    'planning': ['posten','ploegen'],
+    'planning': ['posten','ploegen','activiteit_types','werkblokken'],
     'voertuigindeling': ['posten','ploegen'],
   };
   document.querySelectorAll('nav.tabs button').forEach(btn=>{
