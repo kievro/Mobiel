@@ -607,6 +607,18 @@
     return '<div class="card'+(heeftSpoed?' card-spoed':'')+'"><h2>'+(heeftSpoed?'\uD83D\uDEA8 ':'')+'Openstaande diensten <span class="eyebrow" style="margin:0;">alle posten</span></h2>'+items+'</div>';
   }
 
+  function renderDuikoefeningen(list){
+    if(!list || !list.length) return '';
+    var items = list.map(function(o){
+      var datum = new Date(o.datum+"T00:00:00").toLocaleDateString("nl-NL",{weekday:"long",day:"numeric",month:"short"});
+      return '<div class="dienst-item">'
+        + '<div class="dienst-top"><span class="datum-tag">'+datum+'</span><span class="duik-tag">'+escapeHtml((o.codes||[]).join(', '))+'</span></div>'
+        + (o.omschrijving ? '<div class="dienst-detail"><div class="notitie">'+escapeHtml(o.omschrijving)+'</div></div>' : '')
+        + '</div>';
+    }).join("");
+    return '<div class="card"><h2>Geplande duikoefeningen</h2>'+items+'</div>';
+  }
+
   function renderTickerRij(elementId, meldingen, leegTekst){
     var track = document.getElementById(elementId);
     if(!meldingen.length){
@@ -1341,9 +1353,10 @@
       var knmiP = sbSelect(DAG_URL, DAG_KEY_HEADERS, "knmi_waarschuwingen?select=*&provincie=eq.Gelderland");
       var agendaP = sbSelect(DAG_URL, DAG_KEY_HEADERS, "kazerne_agenda?select=*&post_id=eq."+POST_ID+"&order=start_tijd.asc");
       var vcVoertuigenP = sbSelect(DAG_URL, DAG_KEY_HEADERS, "voertuigcontrole_voertuigen?select=*&post_id=eq."+POST_ID+"&actief=eq.true&order=volgorde.asc");
+      var duikoefeningenP = POST_ID==='post2' ? sbSelect(DAG_URL, DAG_KEY_HEADERS, "dashboard_duikoefeningen?select=*") : Promise.resolve([]);
       var weerP = fetch("https://api.open-meteo.com/v1/forecast?latitude="+coords.lat+"&longitude="+coords.lon+"&current=temperature_2m,weather_code&hourly=temperature_2m,weather_code,precipitation_probability&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=Europe%2FAmsterdam&forecast_days=1").then(function(r){ return r.json(); }).catch(function(){ return null; });
 
-      var results = await Promise.all([personenP, configP, dagP, dienstenP, weerP, wegP, knmiP, agendaP, vcVoertuigenP]);
+      var results = await Promise.all([personenP, configP, dagP, dienstenP, weerP, wegP, knmiP, agendaP, vcVoertuigenP, duikoefeningenP]);
       var personen = (results[0]||[]).map(function(r){
         return { id:r.id, naam:r.naam, persoonsnummer:r.persoonsnummer, ploegId:r.ploeg_id, postId:r.post_id, type:r.type, specialismen:r.specialismen||[], email:r.email, actief:r.actief };
       });
@@ -1355,6 +1368,7 @@
       var knmiWaarschuwingen = results[6] || [];
       var agenda = results[7] || [];
       var vcVoertuigen = results[8] || [];
+      var duikoefeningen = results[9] || [];
       var vcUitvoeringenMap = {};
       if(vcVoertuigen.length){
         var vcIds = vcVoertuigen.map(function(v){ return v.id; });
@@ -1370,7 +1384,7 @@
       }
       var postConfig = (config.posten||[]).filter(function(p){ return p.id===POST_ID; })[0];
 
-      laatsteData = { dag:dag, personenById:personenById, postConfig:postConfig, config:config, diensten:diensten, weer:weer, wegafsluitingen:wegafsluitingen, knmiWaarschuwingen:knmiWaarschuwingen, agenda:agenda, vcVoertuigen:vcVoertuigen, vcUitvoeringenMap:vcUitvoeringenMap };
+      laatsteData = { dag:dag, personenById:personenById, postConfig:postConfig, config:config, diensten:diensten, weer:weer, wegafsluitingen:wegafsluitingen, knmiWaarschuwingen:knmiWaarschuwingen, agenda:agenda, vcVoertuigen:vcVoertuigen, vcUitvoeringenMap:vcUitvoeringenMap, duikoefeningen:duikoefeningen };
       renderHuidigePagina();
 
       document.getElementById("footerNote").textContent = "Bijgewerkt " + new Date().toLocaleTimeString("nl-NL",{hour:"2-digit",minute:"2-digit"}) + " \u00b7 ververst elke minuut \u00b7 versie " + APP_VERSIE_DATUM;
@@ -1389,6 +1403,7 @@
       grid.innerHTML = '<div style="grid-column:1/-1;" class="onderrij onderrij-alleen">'
         + renderAgenda(d.agenda)
         + renderDiensten(d.diensten)
+        + renderDuikoefeningen(d.duikoefeningen)
         + renderWegafsluitingen(d.wegafsluitingen)
         + renderWeer(d.weer, d.knmiWaarschuwingen)
         + '</div>';
