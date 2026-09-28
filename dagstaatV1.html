@@ -3606,6 +3606,7 @@ function openDuikOefeningPlanModal(bestaandId){
     e.preventDefault();
     const fd = new FormData(e.target);
     const rij = {
+      id: bestaand ? bestaand.id : uid(),
       datum: fd.get('datum'), post_id: 'post2', omschrijving: fd.get('omschrijving')||null,
       codes: fd.getAll('codes'), deelnemer_ids: fd.getAll('deelnemers'),
       aangemaakt_door: (State.ingelogdPersoon&&State.ingelogdPersoon.naam)||null
