@@ -195,6 +195,30 @@ select.add-select{background:var(--surface-2);border:1px dashed var(--border);co
 .activiteit-titel{font-size:13px;font-weight:600;line-height:1.3;}
 .activiteit-meta{font-size:11px;color:var(--text-dim);margin-top:3px;font-family:var(--font-mono);}
 .empty-hint{color:var(--text-faint);font-size:12px;font-style:italic;padding:6px 0;}
+.oef-subtabs{display:flex;gap:6px;margin-bottom:16px;border-bottom:1px solid var(--border);}
+.oef-subtab-btn{background:none;border:none;color:var(--text-dim);padding:9px 14px;font-family:var(--font-display);font-size:14px;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;}
+.oef-subtab-btn.active{color:var(--text);border-bottom-color:var(--red);}
+.duik-hint{background:var(--surface-2);border:1px solid var(--border-soft);border-radius:var(--radius);padding:10px 14px;font-size:12px;color:var(--text-dim);margin-bottom:16px;}
+.duik-pill{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;white-space:nowrap;}
+.duik-pill.groen{background:rgba(76,175,125,.15);color:var(--green);}
+.duik-pill.oranje{background:rgba(245,166,35,.15);color:var(--amber);}
+.duik-pill.rood{background:var(--red-glow);color:var(--red-text);}
+.duik-pill.info{background:var(--surface-3);color:var(--text-faint);}
+.duik-team-row{display:grid;grid-template-columns:minmax(0,1.6fr) 90px 90px 110px 130px;gap:10px;align-items:center;padding:10px 4px;border-top:1px solid var(--border-soft);font-size:13px;cursor:pointer;}
+.duik-team-row:hover{background:var(--surface-2);}
+.duik-team-head{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-faint);padding:0 4px 6px;}
+.duik-waarom{grid-column:1/-1;font-size:12px;color:var(--text-dim);padding-top:2px;}
+.duik-kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin:14px 0;}
+.duik-kpi{background:var(--surface-2);border-radius:var(--radius);padding:10px 14px;}
+.duik-kpi .lbl{font-size:11px;color:var(--text-faint);}
+.duik-kpi .val{font-size:19px;font-weight:700;margin-top:2px;}
+.duik-item-row{display:grid;grid-template-columns:minmax(0,1fr) 110px 50px 90px;gap:10px;align-items:center;padding:8px 4px;border-top:1px solid var(--border-soft);font-size:13px;}
+.duik-bar{height:6px;border-radius:3px;background:var(--border);overflow:hidden;}
+.duik-bar i{display:block;height:100%;background:var(--green);}
+.duik-cat-kop{font-family:var(--font-display);font-size:13px;color:var(--text-dim);margin:16px 0 4px;padding-top:8px;border-top:1px solid var(--border);}
+.duik-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px 20px;margin-bottom:16px;}
+.duik-back{background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:13px;margin-bottom:10px;padding:0;}
+.duik-back:hover{color:var(--text);}
 .btn-add-inline{background:none;border:1px dashed var(--border);color:var(--text-dim);border-radius:6px;padding:7px;font-size:12px;text-align:center;width:100%;}
 .btn-add-inline:hover{border-color:var(--amber);color:var(--amber);}
 
@@ -402,24 +426,35 @@ footer.pagefoot{margin-top:40px;text-align:center;color:var(--text-faint);font-s
   </section>
 
   <section id="tab-oefenrooster" class="hidden">
-    <div class="filters-row">
-      <select id="oefFilterPost"><option value="">Alle posten</option></select>
-      <select id="oefFilterPloeg"><option value="">Alle ploegen</option></select>
-      <button class="btn ghost" id="btnOefSjabloon">⬇ Sjabloon</button>
-      <button class="btn ghost" id="btnOefImport">⬆ Importeren</button>
-      <input type="file" id="oefImportFile" accept=".xlsx,.xls,.csv" class="hidden">
-      <button class="btn ghost" id="btnOefJaarImport">⬆ Jaarrooster importeren</button>
-      <input type="file" id="oefJaarImportFile" accept=".xlsx,.xls" class="hidden">
-      <button class="btn ghost" id="btnOefExport">⬇ Exporteren</button>
-      <button class="btn primary" id="btnAddOefening" style="margin-left:auto;">+ Oefening toevoegen</button>
+    <nav class="oef-subtabs">
+      <button class="oef-subtab-btn active" data-oefsub="rooster">Oefenrooster</button>
+      <button class="oef-subtab-btn" data-oefsub="duik">Vakbekwaamheid duikteam</button>
+    </nav>
+
+    <div id="oefSubRooster">
+      <div class="filters-row">
+        <select id="oefFilterPost"><option value="">Alle posten</option></select>
+        <select id="oefFilterPloeg"><option value="">Alle ploegen</option></select>
+        <button class="btn ghost" id="btnOefSjabloon">⬇ Sjabloon</button>
+        <button class="btn ghost" id="btnOefImport">⬆ Importeren</button>
+        <input type="file" id="oefImportFile" accept=".xlsx,.xls,.csv" class="hidden">
+        <button class="btn ghost" id="btnOefJaarImport">⬆ Jaarrooster importeren</button>
+        <input type="file" id="oefJaarImportFile" accept=".xlsx,.xls" class="hidden">
+        <button class="btn ghost" id="btnOefExport">⬇ Exporteren</button>
+        <button class="btn primary" id="btnAddOefening" style="margin-left:auto;">+ Oefening toevoegen</button>
+      </div>
+      <div class="table-wrap-scroll">
+        <table class="pers-table" id="oefTable">
+          <thead><tr>
+            <th>Datum</th><th>Post</th><th>Ploeg</th><th>Thema</th><th>Oefening</th><th></th><th>Vorm</th><th>Ruimte</th><th>Oefenleiding</th><th>Oefenstaf</th><th>Blokken</th><th>Bijzonderheden</th>
+          </tr></thead>
+          <tbody id="oefTableBody"></tbody>
+        </table>
+      </div>
     </div>
-    <div class="table-wrap-scroll">
-      <table class="pers-table" id="oefTable">
-        <thead><tr>
-          <th>Datum</th><th>Post</th><th>Ploeg</th><th>Thema</th><th>Oefening</th><th></th><th>Vorm</th><th>Ruimte</th><th>Oefenleiding</th><th>Oefenstaf</th><th>Blokken</th><th>Bijzonderheden</th>
-        </tr></thead>
-        <tbody id="oefTableBody"></tbody>
-      </table>
+
+    <div id="oefSubDuik" class="hidden">
+      <div id="duikInhoud"><div class="empty-hint">Bezig met laden…</div></div>
     </div>
   </section>
 
@@ -674,7 +709,9 @@ const State = {
   pinCache:{}, dagLoadOnzeker:false, werkzaamhedenHistorie:[],
   calendarOpen:false, calendarViewMonth:null, laatsteOphaling:null, rol:'manschap', rolWerkelijk:'manschap', ingelogdPersoon:null, kazerneAgenda:[], maandcontroleOpen:false, agendaOpen:false,
   dagUpdatedAt:{}, // per 'postId:datum' de laatst-bekende opslagtijd op de server, om botsende gelijktijdige wijzigingen te kunnen signaleren
-  oefenmaterialen:[], vcVoertuigen:[]
+  oefenmaterialen:[], vcVoertuigen:[],
+  duikGeladen:false, duikLaadFout:null, duikNormen:[], duikRegistraties:[], duikLogregels:[], duikInstellingen:null,
+  oefSubtab:'rooster', duikPersoonId:null
 };
 
 /* ---------- load / save ---------- */
@@ -2533,6 +2570,7 @@ function renderOefenrooster(){
   const body = document.getElementById('oefTableBody');
   if(lijst.length===0){
     body.innerHTML = `<tr><td colspan="12" class="empty-hint">Nog geen oefeningen gepland.</td></tr>`;
+    if(State.oefSubtab==='duik' && State.duikGeladen) renderDuikSub();
     return;
   }
   body.innerHTML = lijst.map(o=>{
@@ -2557,6 +2595,7 @@ function renderOefenrooster(){
       <td>${esc(o.bijzonderheden||'')}</td>
     </tr>`;
   }).join('');
+  if(State.oefSubtab==='duik' && State.duikGeladen) renderDuikSub();
 }
 function materialenOverzichtHtml(){
   if(!State.oefenmaterialen || !State.oefenmaterialen.length) return '<div class="empty-hint">Geen materialenlijst geladen.</div>';
@@ -3068,6 +3107,421 @@ function openPersoonModal(existingId){
 }
 
 function closeModal(){ document.getElementById('modalOverlay').classList.add('hidden'); const box=document.getElementById('modalBox'); box.innerHTML=''; box.classList.remove('wide'); }
+
+/* ================= Vakbekwaamheid duikteam =================
+   Indicatief hulpmiddel binnen Oefenrooster. Dagstaat is NIET het officiële
+   registratiesysteem of duiklogboek -- de bestaande officiële werkwijze en
+   registratie (werkenonderoverdruk.nl) blijven volledig bestaan en leidend.
+   Bron normen: Brancherichtlijn blijvende vakbekwaamheid Brandweerduiker en
+   Duikploegleider (Brandweer Nederland, maart 2026). */
+const DUIK_INVOEREN_ROLLEN = ['instructeur','pco','beheer'];
+const DUIK_BEHEER_ROLLEN = ['pco','beheer'];
+const DUIK_FUNCTIE_LABEL = {BWD:'Brandweerduiker', DPL:'Duikploegleider'};
+const DUIK_CAT_LABEL = {theorie:'Theorie', virtueel:'Virtueel en casuïstiek', praktijk_basis:'Praktijk basiseisen', praktijk_regio:'Praktijk regio-specifiek', praktijk_situatie:'Praktijk situatie-specifiek'};
+const DUIK_CAT_VOLGORDE = ['theorie','virtueel','praktijk_basis','praktijk_regio','praktijk_situatie'];
+const DUIK_DAG = 86400000;
+const DUIK_MAAND = 30.44;
+
+function duikFmt(x){ return (Math.round(x*10)/10).toString().replace('.',','); }
+function duikMndTekst(m){ return m>=3 ? String(Math.round(m)) : duikFmt(m); }
+
+// Pure rekenfunctie -- apart getest (19 scenario's, zie ontwikkeltranscript) op
+// o.a. de kernregel "resterende tijd weegt mee, niet alleen het aantal", de
+// >3-maanden-waarschuwing, beginstand-verwerking en instelbare drempels.
+function duikBerekenStand(inv){
+  const reg=inv.registratie, functie=inv.functie, inst=inv.instellingen, nu=inv.nu;
+  const isDpl = functie==='DPL';
+  const start=parseKey(reg.start_datum), eind=parseKey(reg.eind_datum);
+  const standPer = reg.stand_per ? parseKey(reg.stand_per) : null;
+  const periodeMaanden = Math.max(1, (eind.getTime()+DUIK_DAG-start.getTime())/DUIK_DAG/DUIK_MAAND);
+  const maandenOver = (eind.getTime()+DUIK_DAG-nu.getTime())/DUIK_DAG/DUIK_MAAND;
+  const nogNietGestart = nu.getTime() < start.getTime();
+  const mijn = inv.logregels.filter(l=>l.persoon_id===reg.persoon_id);
+  const inPeriode = mijn.filter(l=>{ const d=parseKey(l.datum); return d>=start && d<=eind && (!standPer || d>standPer); });
+  const duikRegels = inPeriode.filter(l=>l.is_duik && (!isDpl || l.geleid));
+  const duikenGedaan = (Number(reg.stand_duiken)||0) + duikRegels.length;
+  const minutenGedaan = (Number(reg.stand_minuten)||0) + duikRegels.reduce((s,l)=>s+(Number(l.duur_minuten)||0),0);
+  const standCodes = reg.stand_codes || {};
+  const redenen = [];
+  const voegReden = (niveau,tekst)=>{ if(niveau==='rood'||niveau==='oranje') redenen.push({niveau,tekst}); };
+
+  const items = inv.normen.filter(n=>n.functie===functie && n.van_toepassing!==false && Number(n.norm)>0)
+    .sort((a,b)=>(a.volgorde||0)-(b.volgorde||0))
+    .map(n=>{
+      const norm = Number(n.norm);
+      const gedaan = (Number(standCodes[n.code])||0) + inPeriode.filter(l=>(l.codes||[]).includes(n.code)).length;
+      const rest = Math.max(0, norm-gedaan);
+      let status;
+      if(rest===0) status='gereed';
+      else if(n.verplicht===false) status='info';
+      else if(maandenOver<=0) status='rood';
+      else {
+        const t = maandenOver/rest;
+        status = t>=inst.oranje_maanden_per_oefening ? 'groen' : (t>=inst.rood_maanden_per_oefening ? 'oranje' : 'rood');
+      }
+      if(status==='rood' && maandenOver<=0) voegReden('rood', `${n.omschrijving}: nog ${rest}, periode voorbij`);
+      else if(status==='rood' || status==='oranje') voegReden(status, `${n.omschrijving}: nog ${rest}, nog ${duikMndTekst(maandenOver)} mnd (${duikFmt(maandenOver/rest)} mnd per oefening)`);
+      return {code:n.code, omschrijving:n.omschrijving, categorie:n.categorie, norm, gedaan, rest, status, verplicht:n.verplicht!==false, teBevestigen:!!n.te_bevestigen};
+    });
+
+  const tempo = (norm,gedaan)=>{
+    const rest = Math.max(0, norm-gedaan);
+    if(rest===0) return {norm, gedaan, rest, status:'gereed', nodig:0};
+    if(maandenOver<=0) return {norm, gedaan, rest, status:'rood', nodig:null};
+    const nodig = rest/maandenOver, normaal = norm/periodeMaanden, ratio = nodig/normaal;
+    const status = ratio<=inst.oranje_tempo ? 'groen' : (ratio<=inst.rood_tempo ? 'oranje' : 'rood');
+    return {norm, gedaan, rest, status, nodig};
+  };
+  const duiken = tempo(isDpl ? inst.dpl_geleide_duiken : inst.bwd_duiken, duikenGedaan);
+  const minuten = isDpl ? null : tempo(inst.bwd_minuten, minutenGedaan);
+  const meld = (t,label,eenheid)=>{
+    if(t.status!=='rood' && t.status!=='oranje') return;
+    voegReden(t.status, maandenOver<=0 ? `${label}: nog ${t.rest}${eenheid}, periode voorbij` : `${label}: nog ${t.rest}${eenheid} in ${duikMndTekst(maandenOver)} mnd (${duikFmt(t.nodig)}${eenheid} per maand)`);
+  };
+  meld(duiken, isDpl ? 'Geleide duiken' : 'Duiken', '');
+  if(minuten) meld(minuten, 'Onderwatertijd', ' min');
+
+  const soort = isDpl ? 'geleide duik' : 'duik';
+  let laatste = reg.stand_laatste_duik || null;
+  mijn.filter(l=>l.is_duik && (!isDpl || l.geleid)).forEach(l=>{ if(!laatste || l.datum>laatste) laatste=l.datum; });
+  let laatsteStatus='groen', dagen=null;
+  if(!laatste){
+    laatsteStatus='oranje';
+    voegReden('oranje', `Nog geen ${soort} geregistreerd. Vul de beginstand of een registratie in.`);
+  } else {
+    dagen = Math.floor((nu.getTime()-parseKey(laatste).getTime())/DUIK_DAG);
+    if(dagen>=inst.rood_dagen_zonder_duik){ laatsteStatus='rood'; voegReden('rood', `Meer dan ${Math.round(inst.rood_dagen_zonder_duik/DUIK_MAAND)} maanden zonder ${soort} (${dagen} dagen)`); }
+    else if(dagen>=inst.oranje_dagen_zonder_duik){ laatsteStatus='oranje'; voegReden('oranje', `Laatste ${soort} ${dagen} dagen geleden`); }
+  }
+
+  redenen.sort((a,b)=>(a.niveau==='rood'?0:1)-(b.niveau==='rood'?0:1));
+  const status = redenen.some(r=>r.niveau==='rood') ? 'rood' : (redenen.length ? 'oranje' : 'groen');
+  return {status, redenen, items, duiken, minuten, laatste:{datum:laatste, dagen, status:laatsteStatus}, maandenOver, periodeMaanden, nogNietGestart, verstreken:maandenOver<=0, start:reg.start_datum, eind:reg.eind_datum};
+}
+
+async function laadDuikData(){
+  State.duikLaadFout = null;
+  const [normenR, instR, regR, logR] = await Promise.all([
+    supaSelectMetRetry(()=>supa.from('duik_normen').select('*').then(r=>r,e=>({error:e})), 'duik_normen'),
+    supaSelectMetRetry(()=>supa.from('duik_instellingen').select('*').eq('id',1).single().then(r=>r,e=>({error:e})), 'duik_instellingen'),
+    supaSelectMetRetry(()=>supa.from('duik_registraties').select('*').eq('actief',true).then(r=>r,e=>({error:e})), 'duik_registraties'),
+    supaSelectMetRetry(()=>supa.from('duik_logregels').select('*').then(r=>r,e=>({error:e})), 'duik_logregels'),
+  ]);
+  if(normenR.error || instR.error || regR.error || logR.error){
+    State.duikLaadFout = 'Kon de duikgegevens niet (volledig) ophalen. Controleer de verbinding.';
+    return false;
+  }
+  State.duikNormen = normenR.data||[];
+  State.duikInstellingen = instR.data || {periode_maanden:24, bwd_duiken:30, bwd_minuten:300, dpl_geleide_duiken:30, oranje_maanden_per_oefening:3, rood_maanden_per_oefening:1.5, oranje_tempo:1, rood_tempo:1.5, oranje_dagen_zonder_duik:60, rood_dagen_zonder_duik:90};
+  State.duikRegistraties = (regR.data||[]).map(r=>({...r, start_datum:r.start_datum, eind_datum:r.eind_datum}));
+  State.duikLogregels = logR.data||[];
+  State.duikGeladen = true;
+  return true;
+}
+
+// Duikteam = personen met specialisme Duiker, DPL of Ass DPL. "Ass DPL" komt niet
+// voor in de richtlijn en telt hier standaard als duiker (BWD) -- per registratie
+// zelf aan te passen via het formulier.
+function duikTeamLeden(){
+  return State.personen.filter(p=>(p.specialismen||[]).some(s=>s==='Duiker'||s==='DPL'||s==='Ass DPL'));
+}
+function duikFunctiesVanPersoon(p){
+  const uit = [];
+  if((p.specialismen||[]).includes('DPL')) uit.push('DPL');
+  if((p.specialismen||[]).includes('Duiker') || (p.specialismen||[]).includes('Ass DPL')) uit.push('BWD');
+  return uit;
+}
+
+function renderOefSubtabs(){
+  document.querySelectorAll('.oef-subtab-btn').forEach(b=>b.classList.toggle('active', b.dataset.oefsub===State.oefSubtab));
+  document.getElementById('oefSubRooster').classList.toggle('hidden', State.oefSubtab!=='rooster');
+  document.getElementById('oefSubDuik').classList.toggle('hidden', State.oefSubtab!=='duik');
+  if(State.oefSubtab==='duik') renderDuikSub();
+}
+
+async function renderDuikSub(){
+  const wrap = document.getElementById('duikInhoud');
+  if(!State.duikGeladen){
+    wrap.innerHTML = `<div class="empty-hint">Bezig met laden…</div>`;
+    const ok = await laadDuikData();
+    if(!ok){
+      wrap.innerHTML = `<div class="duik-hint" style="color:var(--red-text);">${esc(State.duikLaadFout)} <button class="btn small ghost" id="btnDuikOpnieuw">Opnieuw proberen</button></div>`;
+      document.getElementById('btnDuikOpnieuw').addEventListener('click', renderDuikSub);
+      return;
+    }
+  }
+  if(State.duikPersoonId) renderDuikPersoon(State.duikPersoonId); else renderDuikOverzicht();
+}
+
+function renderDuikOverzicht(){
+  const wrap = document.getElementById('duikInhoud');
+  const nu = new Date();
+  const leden = duikTeamLeden();
+  const magInvoeren = DUIK_INVOEREN_ROLLEN.includes(State.rol);
+  const magBeheren = DUIK_BEHEER_ROLLEN.includes(State.rol);
+  const rijen = [];
+  leden.forEach(p=>{
+    duikFunctiesVanPersoon(p).forEach(functie=>{
+      const reg = State.duikRegistraties.filter(r=>r.persoon_id===p.id && r.functie===functie).sort((a,b)=>b.start_datum.localeCompare(a.start_datum))[0];
+      if(!reg){ rijen.push({p, functie, geenRegistratie:true}); return; }
+      const stand = duikBerekenStand({registratie:reg, functie, instellingen:State.duikInstellingen, normen:State.duikNormen, logregels:State.duikLogregels, nu});
+      rijen.push({p, functie, reg, stand});
+    });
+  });
+  const volgorde = {rood:0, oranje:1, groen:2};
+  rijen.sort((a,b)=>{
+    const sa = a.geenRegistratie ? -1 : volgorde[a.stand.status];
+    const sb = b.geenRegistratie ? -1 : volgorde[b.stand.status];
+    if(sa!==sb) return sa-sb;
+    return a.p.naam.localeCompare(b.p.naam);
+  });
+
+  const pillHtml = (status,tekst)=>`<span class="duik-pill ${status}">${status==='rood'?'⛔':status==='oranje'?'⚠':status==='groen'?'✓':'ℹ'} ${esc(tekst)}</span>`;
+
+  wrap.innerHTML = `
+    <div class="duik-hint">Indicatief hulpmiddel. Het officiële duiklogboek en de registratie via werkenonderoverdruk.nl blijven leidend.</div>
+    <div class="filters-row" style="margin-bottom:10px;">
+      <span class="duik-pill groen">✓ Op schema of gereed</span>
+      <span class="duik-pill oranje">⚠ Aandacht nodig</span>
+      <span class="duik-pill rood">⛔ Risico op norm niet tijdig gehaald</span>
+      ${magBeheren?`<button class="btn ghost" id="btnDuikNormen" style="margin-left:auto;">Normen en drempels</button>`:''}
+      ${magInvoeren?`<button class="btn primary" id="btnDuikNieuweRegistratie">+ Registratieperiode</button>`:''}
+    </div>
+    <div class="duik-team-head" style="display:grid;grid-template-columns:minmax(0,1.6fr) 90px 90px 110px 130px;">
+      <span>Naam</span><span>Periode</span><span>Duiken</span><span>Onderwatertijd</span><span>Status</span>
+    </div>
+    ${rijen.length===0?'<div class="empty-hint">Nog geen duikteam-leden gevonden (specialisme Duiker, DPL of Ass DPL bij Personeel).</div>':rijen.map(r=>{
+      if(r.geenRegistratie){
+        return `<div class="duik-team-row" data-pid="${r.p.id}"><div><strong>${esc(r.p.naam)}</strong><div class="empty-hint" style="padding:0;">${DUIK_FUNCTIE_LABEL[r.functie]}</div></div><span>—</span><span>—</span><span>—</span>${pillHtml('oranje','Geen registratie')}</div>`;
+      }
+      const s = r.stand;
+      const duikenTekst = `${s.duiken.gedaan}/${s.duiken.norm}`;
+      const minutenTekst = s.minuten ? `${s.minuten.gedaan}/${s.minuten.norm} min` : '–';
+      const periodeTekst = s.verstreken ? 'verlopen' : (s.nogNietGestart ? 'nog te starten' : `nog ${duikMndTekst(s.maandenOver)} mnd`);
+      const top2 = s.redenen.slice(0,2).map(x=>x.tekst).join(' · ');
+      return `<div class="duik-team-row" data-pid="${r.p.id}" data-functie="${r.functie}">
+        <div><strong>${esc(r.p.naam)}</strong><div class="empty-hint" style="padding:0;">${DUIK_FUNCTIE_LABEL[r.functie]}</div></div>
+        <span>${periodeTekst}</span><span>${duikenTekst}</span><span>${minutenTekst}</span>
+        ${pillHtml(s.status, s.status==='groen'?'Op schema':s.status==='oranje'?'Aandacht':'Risico')}
+        ${top2?`<div class="duik-waarom">${esc(top2)}</div>`:''}
+      </div>`;
+    }).join('')}
+  `;
+  wrap.querySelectorAll('.duik-team-row').forEach(row=>row.addEventListener('click', ()=>{ State.duikPersoonId = row.dataset.pid; renderDuikPersoon(row.dataset.pid); }));
+  const btnNorm = document.getElementById('btnDuikNormen'); if(btnNorm) btnNorm.addEventListener('click', openDuikNormenModal);
+  const btnNieuw = document.getElementById('btnDuikNieuweRegistratie'); if(btnNieuw) btnNieuw.addEventListener('click', ()=>openDuikRegistratieModal(null));
+}
+
+function renderDuikPersoon(persoonId){
+  const wrap = document.getElementById('duikInhoud');
+  const p = State.personen.find(x=>x.id===persoonId);
+  if(!p){ State.duikPersoonId=null; renderDuikOverzicht(); return; }
+  const nu = new Date();
+  const magInvoeren = DUIK_INVOEREN_ROLLEN.includes(State.rol);
+  const functies = duikFunctiesVanPersoon(p);
+  const kaarten = functies.map(functie=>{
+    const reg = State.duikRegistraties.filter(r=>r.persoon_id===p.id && r.functie===functie).sort((a,b)=>b.start_datum.localeCompare(a.start_datum))[0];
+    if(!reg){
+      return `<div class="duik-card"><h3 style="margin:0 0 6px;">${DUIK_FUNCTIE_LABEL[functie]}</h3><div class="empty-hint">Nog geen registratieperiode ingevoerd.</div>${magInvoeren?`<button class="btn small primary" data-nieuwreg="${functie}" style="margin-top:8px;">+ Registratieperiode toevoegen</button>`:''}</div>`;
+    }
+    const s = duikBerekenStand({registratie:reg, functie, instellingen:State.duikInstellingen, normen:State.duikNormen, logregels:State.duikLogregels, nu});
+    const pillHtml = (status,tekst)=>`<span class="duik-pill ${status}">${status==='rood'?'⛔':status==='oranje'?'⚠':status==='groen'?'✓':'ℹ'} ${esc(tekst)}</span>`;
+    const perCat = {};
+    s.items.forEach(it=>{ (perCat[it.categorie]=perCat[it.categorie]||[]).push(it); });
+    const itemsHtml = DUIK_CAT_VOLGORDE.filter(c=>perCat[c]).map(c=>`
+      <div class="duik-cat-kop">${DUIK_CAT_LABEL[c]}</div>
+      ${perCat[c].map(it=>`
+        <div class="duik-item-row">
+          <div><span style="font-family:var(--font-mono);color:var(--text-faint);font-size:11px;">${esc(it.code)}</span> ${esc(it.omschrijving)}${it.teBevestigen?' <span title="Norm nog te bevestigen">🛈</span>':''}</div>
+          <div class="duik-bar"><i style="width:${Math.min(100,it.norm?100*it.gedaan/it.norm:0)}%;background:${it.status==='rood'?'var(--red-text)':it.status==='oranje'?'var(--amber)':'var(--green)'}"></i></div>
+          <div>${it.gedaan}/${it.norm}</div>
+          <div style="color:${it.status==='rood'?'var(--red-text)':it.status==='oranje'?'var(--amber)':it.status==='info'?'var(--text-faint)':'var(--green)'}">${it.status==='gereed'?'gereed':it.status==='info'?'informatief':'nog '+it.rest}</div>
+        </div>`).join('')}
+    `).join('');
+    const duikLabel = functie==='DPL' ? 'Geleide duiken' : 'Duiken';
+    return `<div class="duik-card">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap;">
+        <div><h3 style="margin:0;">${DUIK_FUNCTIE_LABEL[functie]}</h3><div class="empty-hint" style="padding:2px 0 0;">Registratieperiode ${parseKey(reg.start_datum).toLocaleDateString('nl-NL')} t/m ${parseKey(reg.eind_datum).toLocaleDateString('nl-NL')}</div></div>
+        <div style="display:flex;gap:6px;">${pillHtml(s.status, s.status==='groen'?'Op schema':s.status==='oranje'?'Aandacht':'Risico')}
+        ${magInvoeren?`<button class="btn small ghost" data-bewerkreg="${reg.id}">Bewerk registratie</button><button class="btn small ghost" data-nieuwlog="${functie}">+ Registreer duik/oefening</button>`:''}</div>
+      </div>
+      <div class="duik-kpi-grid">
+        <div class="duik-kpi"><div class="lbl">Registratieperiode</div><div class="val">${s.verstreken?'verlopen':(s.nogNietGestart?'nog te starten':'nog '+duikMndTekst(s.maandenOver)+' mnd')}</div></div>
+        <div class="duik-kpi"><div class="lbl">${duikLabel}</div><div class="val">${s.duiken.gedaan}/${s.duiken.norm}</div></div>
+        ${s.minuten?`<div class="duik-kpi"><div class="lbl">Onderwatertijd</div><div class="val">${s.minuten.gedaan}/${s.minuten.norm} min</div></div>`:''}
+        <div class="duik-kpi"><div class="lbl">Laatste ${functie==='DPL'?'geleide duik':'duik'}</div><div class="val">${s.laatste.datum?s.laatste.dagen+' dgn geleden':'onbekend'}</div></div>
+      </div>
+      ${itemsHtml}
+    </div>`;
+  }).join('');
+  wrap.innerHTML = `<button class="duik-back" id="btnDuikTerug">← Terug naar teamoverzicht</button><h2 style="margin:0 0 12px;">${esc(p.naam)}</h2>${kaarten}`;
+  document.getElementById('btnDuikTerug').addEventListener('click', ()=>{ State.duikPersoonId=null; renderDuikOverzicht(); });
+  wrap.querySelectorAll('[data-nieuwreg]').forEach(b=>b.addEventListener('click', ()=>openDuikRegistratieModal(null, p.id, b.dataset.nieuwreg)));
+  wrap.querySelectorAll('[data-bewerkreg]').forEach(b=>b.addEventListener('click', ()=>openDuikRegistratieModal(b.dataset.bewerkreg)));
+  wrap.querySelectorAll('[data-nieuwlog]').forEach(b=>b.addEventListener('click', ()=>openDuikLogModal(p.id, b.dataset.nieuwlog)));
+}
+
+function openDuikRegistratieModal(registratieId, voorpersoonId, voorfunctie){
+  const bestaand = registratieId ? State.duikRegistraties.find(r=>r.id===registratieId) : null;
+  const persoonId = bestaand ? bestaand.persoon_id : voorpersoonId;
+  const box = document.getElementById('modalBox');
+  const persoonOpties = persoonId ? '' : duikTeamLeden().map(p=>`<option value="${p.id}">${esc(p.naam)}</option>`).join('');
+  box.innerHTML = `<div class="modal-head"><h3>${bestaand?'Registratieperiode bewerken':'Registratieperiode toevoegen'}</h3><button class="modal-close" data-close="modal">✕</button></div>
+    <form id="duikRegForm">
+      ${persoonId?`<input type="hidden" name="persoonId" value="${persoonId}">`:`<div class="field"><label>Persoon</label><select name="persoonId" required><option value="">Kies...</option>${persoonOpties}</select></div>`}
+      <div class="field"><label>Functie</label><select name="functie" required ${bestaand?'disabled':''}>
+        <option value="BWD" ${(bestaand?bestaand.functie:voorfunctie)==='BWD'?'selected':''}>Brandweerduiker</option>
+        <option value="DPL" ${(bestaand?bestaand.functie:voorfunctie)==='DPL'?'selected':''}>Duikploegleider</option>
+      </select>${bestaand?`<input type="hidden" name="functie" value="${bestaand.functie}">`:''}</div>
+      <div class="field"><label>Registratie start</label><input type="date" name="start" value="${bestaand?bestaand.start_datum:''}" required></div>
+      <div class="field"><label>Registratie einde</label><input type="date" name="eind" value="${bestaand?bestaand.eind_datum:''}" required></div>
+      <div class="hint">Beginstand: vul dit in als iemand al middenin de periode zit (bijv. uit het officiële logboek). Nieuwe registraties of duiken na deze datum worden door Dagstaat er automatisch bovenop geteld.</div>
+      <div class="field"><label>Beginstand per datum</label><input type="date" name="standPer" value="${bestaand&&bestaand.stand_per?bestaand.stand_per:''}"></div>
+      <div class="field"><label>Aantal duiken (beginstand)</label><input type="number" min="0" name="standDuiken" value="${bestaand?bestaand.stand_duiken:0}"></div>
+      <div class="field"><label>Onderwatertijd in minuten (beginstand, alleen duiker)</label><input type="number" min="0" name="standMinuten" value="${bestaand?bestaand.stand_minuten:0}"></div>
+      <div class="field"><label>Laatste duik / geleide duik (beginstand)</label><input type="date" name="standLaatsteDuik" value="${bestaand&&bestaand.stand_laatste_duik?bestaand.stand_laatste_duik:''}"></div>
+      <div class="field"><label>Opmerking</label><input type="text" name="opmerking" value="${bestaand?esc(bestaand.opmerking||''):''}"></div>
+      <div class="modal-actions">
+        ${bestaand?`<button type="button" class="btn ghost" id="duikRegVerwijder" style="margin-right:auto;color:var(--red-text);">Verwijderen</button>`:''}
+        <button type="button" class="btn ghost" data-close="modal">Annuleren</button>
+        <button type="submit" class="btn primary">Opslaan</button>
+      </div>
+    </form>`;
+  document.getElementById('modalOverlay').classList.remove('hidden');
+  document.getElementById('duikRegForm').addEventListener('submit', async e=>{
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const rij = {
+      persoon_id: fd.get('persoonId'), functie: fd.get('functie'),
+      start_datum: fd.get('start'), eind_datum: fd.get('eind'),
+      stand_per: fd.get('standPer')||null, stand_duiken: Number(fd.get('standDuiken'))||0,
+      stand_minuten: Number(fd.get('standMinuten'))||0, stand_codes: bestaand?bestaand.stand_codes:{},
+      stand_laatste_duik: fd.get('standLaatsteDuik')||null, opmerking: fd.get('opmerking')||null, actief:true
+    };
+    try{
+      if(bestaand){
+        const {error} = await supa.from('duik_registraties').update(rij).eq('id', bestaand.id);
+        if(error) throw error;
+        Object.assign(bestaand, rij);
+      } else {
+        const {data, error} = await supa.from('duik_registraties').insert(rij).select().single();
+        if(error) throw error;
+        State.duikRegistraties.push(data);
+      }
+      await addLog(`Duik-registratieperiode (${DUIK_FUNCTIE_LABEL[rij.functie]}) opgeslagen voor ${getPersoonNaam(rij.persoon_id)}.`, null);
+      closeModal(); renderDuikSub();
+    }catch(err){ alert('Opslaan mislukt: '+(err.message||err)); }
+  });
+  if(bestaand){
+    document.getElementById('duikRegVerwijder').addEventListener('click', async ()=>{
+      if(!confirm('Deze registratieperiode verwijderen?')) return;
+      try{
+        const {error} = await supa.from('duik_registraties').delete().eq('id', bestaand.id);
+        if(error) throw error;
+        State.duikRegistraties = State.duikRegistraties.filter(r=>r.id!==bestaand.id);
+        await addLog(`Duik-registratieperiode verwijderd voor ${getPersoonNaam(bestaand.persoon_id)}.`, null);
+        closeModal(); renderDuikSub();
+      }catch(err){ alert('Verwijderen mislukt: '+(err.message||err)); }
+    });
+  }
+}
+
+function openDuikLogModal(persoonId, functie){
+  const box = document.getElementById('modalBox');
+  const codes = State.duikNormen.filter(n=>n.functie===functie && n.van_toepassing!==false).sort((a,b)=>(a.volgorde||0)-(b.volgorde||0));
+  box.innerHTML = `<div class="modal-head"><h3>Duik / oefening registreren</h3><button class="modal-close" data-close="modal">✕</button></div>
+    <form id="duikLogForm">
+      <div class="field"><label>Datum</label><input type="date" name="datum" value="${fmtKey(new Date())}" required></div>
+      <div class="field-checkbox"><input type="checkbox" name="isDuik" id="duikIsDuik" checked><label for="duikIsDuik">Dit was een duik (onderwatertijd/laatste-duik telt mee)</label></div>
+      ${functie==='DPL'?`<div class="field-checkbox"><input type="checkbox" name="geleid" id="duikGeleid" checked><label for="duikGeleid">Zelf geleid (telt mee voor de 30 geleide duiken)</label></div>`:''}
+      <div class="field"><label>Duur in minuten (indien duik)</label><input type="number" min="0" name="duur"></div>
+      <div class="field"><label>Betreft oefenkaart(en)</label>
+        <select name="codes" multiple size="6">${codes.map(c=>`<option value="${esc(c.code)}">${esc(c.code)} — ${esc(c.omschrijving)}</option>`).join('')}</select>
+        <div class="hint">Meerdere selecteren mag (ctrl/cmd-klik) -- een gecombineerde oefening mag op meerdere codes tellen, zoals de richtlijn toestaat.</div>
+      </div>
+      <div class="field"><label>Omschrijving</label><input type="text" name="omschrijving" placeholder="Korte omschrijving"></div>
+      <div class="modal-actions"><button type="button" class="btn ghost" data-close="modal">Annuleren</button><button type="submit" class="btn primary">Opslaan</button></div>
+    </form>`;
+  document.getElementById('modalOverlay').classList.remove('hidden');
+  document.getElementById('duikLogForm').addEventListener('submit', async e=>{
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const rij = {
+      persoon_id: persoonId, datum: fd.get('datum'), is_duik: fd.get('isDuik')==='on',
+      duur_minuten: fd.get('duur')?Number(fd.get('duur')):null, geleid: fd.get('geleid')==='on',
+      codes: fd.getAll('codes'), omschrijving: fd.get('omschrijving')||null, bron:'handmatig',
+      aangemaakt_door: (State.ingelogdPersoon&&State.ingelogdPersoon.naam)||null
+    };
+    try{
+      const {data, error} = await supa.from('duik_logregels').insert(rij).select().single();
+      if(error) throw error;
+      State.duikLogregels.push(data);
+      await addLog(`Duikregistratie toegevoegd voor ${getPersoonNaam(persoonId)} (${rij.datum}).`, null);
+      closeModal(); renderDuikSub();
+    }catch(err){ alert('Opslaan mislukt: '+(err.message||err)); }
+  });
+}
+
+function openDuikNormenModal(){
+  const box = document.getElementById('modalBox');
+  const inst = State.duikInstellingen;
+  box.classList.add('wide');
+  box.innerHTML = `<div class="modal-head"><h3>Normen en drempels — vakbekwaamheid duikteam</h3><button class="modal-close" data-close="modal">✕</button></div>
+    <div class="hint">Alle waarden zijn later weer aan te passen als de richtlijn wijzigt. Wijzigingen in de normen-tabel werken direct door in alle dashboards.</div>
+    <h4 style="margin:14px 0 6px;">Drempels voor de signaalkleuren</h4>
+    <form id="duikInstForm" style="display:grid;grid-template-columns:1fr 1fr;gap:0 16px;">
+      <div class="field"><label>Groen vanaf (maanden per resterende oefening)</label><input type="number" step="0.1" name="oranje_maanden_per_oefening" value="${inst.oranje_maanden_per_oefening}"></div>
+      <div class="field"><label>Rood onder (maanden per resterende oefening)</label><input type="number" step="0.1" name="rood_maanden_per_oefening" value="${inst.rood_maanden_per_oefening}"></div>
+      <div class="field"><label>Oranje vanaf tempo-factor (duiken/minuten)</label><input type="number" step="0.1" name="oranje_tempo" value="${inst.oranje_tempo}"></div>
+      <div class="field"><label>Rood vanaf tempo-factor (duiken/minuten)</label><input type="number" step="0.1" name="rood_tempo" value="${inst.rood_tempo}"></div>
+      <div class="field"><label>Oranje vanaf dagen zonder duik</label><input type="number" name="oranje_dagen_zonder_duik" value="${inst.oranje_dagen_zonder_duik}"></div>
+      <div class="field"><label>Rood vanaf dagen zonder duik (richtlijn: 3 mnd)</label><input type="number" name="rood_dagen_zonder_duik" value="${inst.rood_dagen_zonder_duik}"></div>
+      <div class="modal-actions" style="grid-column:1/-1;"><button type="submit" class="btn primary">Drempels opslaan</button></div>
+    </form>
+    <h4 style="margin:18px 0 6px;">Normen per oefenkaart</h4>
+    <div class="table-wrap-scroll" style="max-height:320px;">
+      <table class="pers-table"><thead><tr><th>Code</th><th>Functie</th><th>Omschrijving</th><th>Norm</th><th>Van toepassing</th></tr></thead>
+      <tbody>${State.duikNormen.sort((a,b)=>(a.volgorde-b.volgorde)||a.functie.localeCompare(b.functie)).map(n=>`
+        <tr data-code="${esc(n.code)}" data-functie="${n.functie}">
+          <td style="font-family:var(--font-mono);font-size:12px;">${esc(n.code)}${n.te_bevestigen?' 🛈':''}</td>
+          <td>${n.functie}</td><td>${esc(n.omschrijving)}</td>
+          <td><input type="number" min="0" class="norm-input" value="${n.norm==null?'':n.norm}" style="width:60px;"></td>
+          <td><input type="checkbox" class="vantoep-input" ${n.van_toepassing?'checked':''}></td>
+        </tr>`).join('')}</tbody></table>
+    </div>
+    <div class="modal-actions"><button type="button" class="btn ghost" data-close="modal">Sluiten</button><button type="button" class="btn primary" id="btnDuikNormenOpslaan">Normen opslaan</button></div>`;
+  document.getElementById('modalOverlay').classList.remove('hidden');
+  document.getElementById('duikInstForm').addEventListener('submit', async e=>{
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const rij = {}; for(const [k,v] of fd.entries()) rij[k]=Number(v);
+    try{
+      const {error} = await supa.from('duik_instellingen').update(rij).eq('id',1);
+      if(error) throw error;
+      Object.assign(State.duikInstellingen, rij);
+      await addLog('Drempels vakbekwaamheid duikteam aangepast.', null);
+      renderDuikSub();
+    }catch(err){ alert('Opslaan mislukt: '+(err.message||err)); }
+  });
+  document.getElementById('btnDuikNormenOpslaan').addEventListener('click', async ()=>{
+    const updates = [];
+    box.querySelectorAll('tbody tr').forEach(tr=>{
+      const norm = tr.querySelector('.norm-input').value;
+      const vantoep = tr.querySelector('.vantoep-input').checked;
+      updates.push({code:tr.dataset.code, functie:tr.dataset.functie, norm: norm===''?null:Number(norm), van_toepassing:vantoep});
+    });
+    try{
+      for(const u of updates){
+        const {error} = await supa.from('duik_normen').update({norm:u.norm, van_toepassing:u.vantoep}).eq('code',u.code).eq('functie',u.functie);
+        if(error) throw error;
+        const n = State.duikNormen.find(x=>x.code===u.code && x.functie===u.functie);
+        if(n){ n.norm=u.norm; n.van_toepassing=u.vantoep; }
+      }
+      await addLog('Normen per oefenkaart (vakbekwaamheid duikteam) bijgewerkt.', null);
+      closeModal(); renderDuikSub();
+    }catch(err){ alert('Opslaan mislukt: '+(err.message||err)); }
+  });
+}
 
 /* ---------- voertuigindeling ---------- */
 function functiesVoorPersoonDeel(dagData, postId, rowId, deel){
@@ -4452,6 +4906,9 @@ function wireEvents(){
   document.getElementById('filterSpec').addEventListener('change', renderPersoneel);
   document.getElementById('logAllDays').addEventListener('change', renderLog);
   document.getElementById('btnAddOefening').addEventListener('click', ()=>openOefeningModal(null));
+  document.querySelectorAll('.oef-subtab-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{ State.oefSubtab = btn.dataset.oefsub; renderOefSubtabs(); });
+  });
   document.getElementById('btnOefSjabloon').addEventListener('click', downloadOefSjabloon);
   document.getElementById('btnOefImport').addEventListener('click', ()=> document.getElementById('oefImportFile').click());
   document.getElementById('oefImportFile').addEventListener('change', async e=>{
