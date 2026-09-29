@@ -29,7 +29,7 @@
 
   .tegel-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
   .tegel{position:relative;}
-  .tegel-bolletje{position:absolute;top:-6px;right:-6px;background:var(--red);color:#fff;font-family:var(--font-body);font-weight:700;font-size:12px;min-width:22px;height:22px;border-radius:11px;display:flex;align-items:center;justify-content:center;padding:0 5px;box-shadow:0 0 0 2px var(--bg);pointer-events:none;}
+  .tegel-bolletje{position:absolute;top:-6px;right:-6px;background:var(--red);color:#fff;font-family:var(--font-body);font-weight:700;font-size:12px;min-width:22px;height:22px;border-radius:11px;display:flex;align-items:center;justify-content:center;padding:0 5px;box-shadow:0 0 0 2px var(--bg);}
   .tegel{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:22px 14px;text-align:center;text-decoration:none;color:var(--text);display:flex;flex-direction:column;align-items:center;gap:8px;transition:border-color 0.15s;}
   .tegel:active{border-color:var(--red);}
   .tegel-icoon{font-size:34px;}
@@ -92,11 +92,6 @@
       <div class="tegel-sub">Diensten &amp; reacties</div>
       <span id="ploegBolletje" class="tegel-bolletje hidden"></span>
     </a>
-    <a class="tegel" href="./voertuigcontrole-mobiel.html">
-      <div class="tegel-icoon">✅</div>
-      <div class="tegel-naam">Voertuigcontrole</div>
-      <div class="tegel-sub">Dagelijkse controle</div>
-    </a>
   </div>
 
   <div class="footer-note">Eén keer inloggen, alle onderdelen bereikbaar.</div>
@@ -123,10 +118,11 @@
 
   function escapeHtml(s){ return String(s==null?"":s).replace(/[&<>"']/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
 
+  var PLOEG_URL = "https://gqqflxctuikbygqnbrli.supabase.co";
   async function laadPloegBolletje(persoonId){
     if(!persoonId) return;
     try{
-      var res = await fetch(DAG_URL + "/functions/v1/tel-open-diensten?persoonId=" + encodeURIComponent(persoonId));
+      var res = await fetch(PLOEG_URL + "/functions/v1/tel-open-diensten?persoonId=" + encodeURIComponent(persoonId));
       var data = await res.json();
       var bolletje = document.getElementById("ploegBolletje");
       if(data && data.aantal > 0){
@@ -182,8 +178,8 @@
       var alreadyId = null;
       try{ alreadyId = localStorage.getItem(INGELOGD_KEY); }catch(e){}
 
-      var personenRes = await sbSelect("kv_store?key=eq.personen&select=value");
-      loginState.personen = ((personenRes[0] && personenRes[0].value) || []).slice().sort(function(a,b){ return a.naam.localeCompare(b.naam); });
+      var personenRes = await sbSelect("personen?select=id,naam");
+      loginState.personen = (personenRes||[]).slice().sort(function(a,b){ return a.naam.localeCompare(b.naam); });
 
       var gekozenPersoon = alreadyId && loginState.personen.filter(function(p){ return p.id===alreadyId; })[0];
       if(gekozenPersoon){
