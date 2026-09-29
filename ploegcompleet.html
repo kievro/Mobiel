@@ -430,9 +430,11 @@
 
   // ---------- data loading (Supabase) ----------
   async function loadAllData(){
-    var personenRes = await sbDag.from("kv_store").select("value").eq("key","personen").single();
+    var personenRes = await sbDag.from("personen").select("*");
     if(personenRes.error) throw personenRes.error;
-    var personen = personenRes.data.value || [];
+    var personen = (personenRes.data||[]).map(function(r){
+      return { id:r.id, naam:r.naam, persoonsnummer:r.persoonsnummer, ploegId:r.ploeg_id, postId:r.post_id, type:r.type, specialismen:r.specialismen||[], email:r.email, actief:r.actief };
+    });
 
     var configRes = await sbDag.from("kv_store").select("value").eq("key","config").single();
     var dagConfig = (configRes.data && configRes.data.value) || {};
