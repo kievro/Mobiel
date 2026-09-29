@@ -517,8 +517,8 @@
     var wrap = document.getElementById("datumDeadlineWrap");
     if(!wrap) return;
     wrap.classList.toggle("hidden", checked);
-    var d = wrap.querySelector('[name="datum"]'), dl = wrap.querySelector('[name="deadline"]');
-    if(d) d.required = !checked; if(dl) dl.required = !checked;
+    var d = wrap.querySelector('[name="datum"]'), dld = wrap.querySelector('[name="deadlineDatum"]'), dlt = wrap.querySelector('[name="deadlineTijd"]');
+    if(d) d.required = !checked; if(dld) dld.required = !checked; if(dlt) dlt.required = !checked;
   };
   App.openNewShiftForm = function(){ state.showForm = true; render(); };
   App.cancelForm = function(){ state.showForm = false; render(); };
@@ -538,8 +538,8 @@
       datumVal = toLocalDateStr(now); deadlineIso = new Date(now.getTime()+2*3600000).toISOString(); meldingMoment = "direct";
     } else {
       datumVal = f.datum.value;
-      if(!post || !datumVal || !f.deadline.value){ showToast("Vul post, datum en deadline in."); return false; }
-      deadlineIso = new Date(f.deadline.value).toISOString(); meldingMoment = "direct";
+      if(!post || !datumVal || !f.deadlineDatum.value || !f.deadlineTijd.value){ showToast("Vul post, datum en deadline in."); return false; }
+      deadlineIso = new Date(f.deadlineDatum.value+"T"+f.deadlineTijd.value+":00").toISOString(); meldingMoment = "direct";
     }
     var notitie = f.notitie.value.trim();
     if(isSpoed) notitie = notitie ? ("Spoed \u2013 " + notitie) : "Spoedmelding";
@@ -807,7 +807,15 @@
       + '<div class="field-checkbox"><input type="checkbox" name="spoed" id="spoedCheck" onchange="App.toggleSpoedFields(this.checked)" /><label for="spoedCheck">\uD83D\uDEA8 Spoedmelding \u2013 vandaag nodig, sluit automatisch over 2 uur</label></div>'
       + '<div id="datumDeadlineWrap">'
       + '<div class="field"><label>Datum</label><input type="date" name="datum" /></div>'
-      + '<div class="field"><label>Reageren mogelijk tot</label><input type="datetime-local" name="deadline" step="1800" /></div>'
+      + '<div class="field"><label>Reageren mogelijk tot</label>'
+        + '<div style="display:flex;gap:8px;">'
+        + '<input type="date" name="deadlineDatum" required style="flex:1;">'
+        + '<select name="deadlineTijd" required style="flex:1;">'+(function(){
+            var opties = [];
+            for(var th=0; th<24; th++){ ["00","30"].forEach(function(tm){ var t=(th<10?"0":"")+th+":"+tm; opties.push('<option value="'+t+'">'+t+'</option>'); }); }
+            return opties.join('');
+          })()+'</select>'
+        + '</div></div>'
       + '</div>'
       + '<div class="field"><label>Type</label><select name="type"><option value="heel">Hele 24-uursdienst</option><option value="split">Dag + avond/nacht apart</option><option value="dag">Alleen dag</option><option value="avond">Alleen avond/nacht</option></select>'
       + '<div style="font-size:12px;color:var(--text-muted);margin-top:4px;">Standaardtijden: '+esc(tijden.ochtend)+'\u2013'+esc(tijden.avond)+'</div></div>'
