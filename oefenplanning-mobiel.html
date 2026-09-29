@@ -117,7 +117,7 @@
   supa.auth.onAuthStateChange(function(_event, session){
     if(session && session.access_token) DAG_KEY_HEADERS.Authorization = "Bearer " + session.access_token;
   });
-  var POST_NAMEN = {post1:"Arnhem Noord", post2:"Arnhem Zuid", post3:"Ede Stad"};
+  var POST_NAMEN = {post1:"Arnhem Noord", post2:"Arnhem Zuid", post3:"Ede Stad", mtu7q5xoq5bb71:"Flexpool"};
 
   async function sbSelect(path){
     var res = await fetch(DAG_URL + "/rest/v1/" + path, {headers: DAG_KEY_HEADERS});
@@ -165,14 +165,23 @@
     inhoud.innerHTML = '<div class="empty">Bezig met laden…</div>';
     renderMaandLabel();
     try{
-      var [personenRes, configRes, oefRes] = await Promise.all([
-        sbSelect("kv_store?key=eq.personen&select=value"),
-        sbSelect("kv_store?key=eq.config&select=value"),
-        sbSelect("kv_store?key=eq.oefeningen&select=value")
+      var [postenRes, ploegenRes, werkblokkenRes, oefRes] = await Promise.all([
+        sbSelect("posten?select=*"),
+        sbSelect("ploegen?select=*"),
+        sbSelect("werkblokken?select=*&order=volgorde.asc"),
+        sbSelect("oefeningen?select=*&order=datum.asc")
       ]);
-      var config = (configRes[0] && configRes[0].value) || {};
+      var config = {
+        posten: (postenRes||[]).map(function(r){ return {id:r.id, naam:r.naam}; }),
+        ploegen: (ploegenRes||[]).map(function(r){ return {id:r.id, naam:r.naam, postId:r.post_id}; }),
+        werkblokken: (werkblokkenRes||[]).map(function(r){ return {id:r.id, naam:r.naam, start:r.start, eind:r.eind}; })
+      };
       laatsteConfig = config;
-      var alleOefeningen = (oefRes[0] && oefRes[0].value) || [];
+      var alleOefeningen = (oefRes||[]).map(function(r){
+        return { id:r.id, datum:r.datum, postId:r.post_id, ploegId:r.ploeg_id, thema:r.thema,
+          welkeOefening:r.welke_oefening, blokken:r.blokken||[], oefenleiders:r.oefenleiders||[],
+          bijzonderheden:r.bijzonderheden };
+      });
 
       if(document.getElementById("postFilter").dataset.built!=="1"){
         document.getElementById("postFilter").innerHTML = '<option value="">Alle posten</option>' + (config.posten||[]).map(function(p){
@@ -286,8 +295,8 @@
       var alreadyId = null;
       try{ alreadyId = localStorage.getItem(INGELOGD_KEY); }catch(e){}
 
-      var personenRes = await sbSelect("kv_store?key=eq.personen&select=value");
-      loginState.personen = ((personenRes[0] && personenRes[0].value) || []).slice().sort(function(a,b){ return a.naam.localeCompare(b.naam); });
+      var personenRes = await sbSelect("personen?select=id,naam");
+      loginState.personen = (personenRes||[]).slice().sort(function(a,b){ return a.naam.localeCompare(b.naam); });
 
       var gekozenPersoon = alreadyId && loginState.personen.filter(function(p){ return p.id===alreadyId; })[0];
       if(gekozenPersoon){
