@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Back-up hulpmiddel — Brandweer roostertools</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --bg:#1a1d23; --surface:#23272f; --border:#343a45; --text:#e8eaed; --text-dim:#9aa1ac;
+    --accent:#d6412f; --ok:#3fb87f; --amber:#e8a33d; --mono:'Consolas','Menlo',monospace;
+  }
+  *{box-sizing:border-box;}
+  body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;margin:0;padding:32px 20px;}
+  .wrap{max-width:720px;margin:0 auto;}
+  h1{font-size:22px;margin:0 0 6px;}
+  .sub{color:var(--text-dim);font-size:14px;margin:0 0 28px;}
+  .project{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:20px;margin-bottom:16px;}
+  .project h2{font-size:16px;margin:0 0 12px;display:flex;align-items:center;gap:8px;}
+  .status-dot{width:9px;height:9px;border-radius:50%;background:var(--text-dim);display:inline-block;flex-shrink:0;}
+  .status-dot.bezig{background:var(--amber);animation:pulse 1s infinite;}
+  .status-dot.klaar{background:var(--ok);}
+  .status-dot.fout{background:var(--accent);}
+  @keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.4;}}
+  .tabel-regel{display:flex;justify-content:space-between;padding:4px 0;font-size:13.5px;color:var(--text-dim);border-bottom:1px solid var(--border);}
+  .tabel-regel:last-child{border-bottom:none;}
+  .tabel-regel .naam{font-family:var(--mono);color:var(--text);}
+  .tabel-regel .aantal.fout{color:var(--accent);}
+  .tabel-regel .aantal.ok{color:var(--ok);}
+  button{background:var(--accent);color:#fff;border:none;border-radius:8px;padding:14px 22px;font-size:15px;font-weight:600;cursor:pointer;width:100%;margin-top:8px;}
+  button:disabled{opacity:0.5;cursor:not-allowed;}
+  button.secundair{background:var(--surface);border:1px solid var(--border);color:var(--text);width:auto;padding:10px 16px;font-size:13px;margin-top:0;}
+  .footer-note{color:var(--text-dim);font-size:12.5px;margin-top:24px;line-height:1.5;}
+  a.download-link{display:block;text-align:center;background:var(--ok);color:#fff;text-decoration:none;border-radius:8px;padding:14px;font-weight:600;margin-top:16px;}
+  .login-rij{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
+  select,input[type=password]{background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 10px;font-size:13.5px;}
+  .login-status{font-size:13px;margin-top:8px;}
+  .login-status.ok{color:var(--ok);}
+  .login-status.fout{color:var(--accent);}
+  .hint{color:var(--text-dim);font-size:12.5px;margin:0 0 10px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Back-up hulpmiddel</h1>
+  <p class="sub">Haalt alle belangrijke tabellen uit beide projecten op en bundelt ze in één downloadbaar bestand. Draait volledig in deze browser-pagina — er wordt niets geïnstalleerd en niets buiten Supabase verstuurd.</p>
+
+  <div class="project" id="inlog-dagstaat">
+    <h2><span class="status-dot" id="dot-login-dagstaat"></span> Inloggen — Dagstaat-project</h2>
+    <p class="hint">Nodig om ook de nieuwere, beveiligde tabellen (Voertuigcontrole, Materialen) mee te kunnen back-uppen.</p>
+    <div class="login-rij">
+      <select id="naam-dagstaat"><option>Bezig met laden…</option></select>
+      <input type="password" inputmode="numeric" id="pin-dagstaat" placeholder="Pincode" maxlength="6" style="width:100px;">
+      <button class="secundair" id="btnLoginDagstaat">Inloggen</button>
+    </div>
+    <div class="login-status" id="status-login-dagstaat"></div>
+  </div>
+
+  <div class="project" id="inlog-ploeg">
+    <h2><span class="status-dot" id="dot-login-ploeg"></span> Inloggen — PLOEG-project</h2>
+    <p class="hint">Nodig voor een deel van de PloegCompleet-tabellen.</p>
+    <div class="login-rij">
+      <select id="naam-ploeg"><option>Bezig met laden…</option></select>
+      <input type="password" inputmode="numeric" id="pin-ploeg" placeholder="Pincode" maxlength="6" style="width:100px;">
+      <button class="secundair" id="btnLoginPloeg">Inloggen</button>
+    </div>
+    <div class="login-status" id="status-login-ploeg"></div>
+  </div>
+
+  <div class="project" id="project-dagstaat">
+    <h2><span class="status-dot" id="dot-dagstaat"></span> Dagstaat-project</h2>
+    <div id="tabellen-dagstaat"></div>
+  </div>
+
+  <div class="project" id="project-ploeg">
+    <h2><span class="status-dot" id="dot-ploeg"></span> PLOEG-project (verlaten sinds september 2026 — alle tabellen zijn gemigreerd naar Dagstaat hierboven; deze sectie is alleen nog nuttig als er onverhoopt nog iets in dit oude project achterbleef)</h2>
+    <div id="tabellen-ploeg"></div>
+  </div>
+
+  <button id="startBtn">Back-up maken (ook zonder inloggen — dan ontbreken beveiligde tabellen)</button>
+  <div id="downloadZone"></div>
+
+  <p class="footer-note">
+    Inloggen hierboven is optioneel maar aanbevolen: zonder inloggen kunnen sommige tabellen (die specifiek voor ingelogde gebruikers zijn beveiligd) niet worden opgehaald, en komen ze met een foutmelding in de back-up te staan. Bewaar het gedownloade bestand op een veilige plek (bijv. een aparte schijf of cloudopslag) — het bevat persoonsgegevens van het personeel.
+  </p>
+</div>
+
+<script>
+const PROJECTEN = {
+  dagstaat: {
+    naam: "Dagstaat",
+    url: "https://iyquepqubfqrhybriqif.supabase.co",
+    key: "sb_publishable_Pb0fFfxZQggKnFCtJYMH9A_avw0GaPn",
+    tabellen: [
+      "kv_store", "personen", "posten", "ploegen", "activiteit_types", "werkblokken", "oefen_themas",
+      "oefeningen", "oefenkaarten",
+      "p2000_meldingen", "p2000_meldingstermen", "wegafsluitingen",
+      "kazerne_agenda", "agenda_sync_log", "knmi_waarschuwingen", "dienstrooster",
+      "voertuigcontrole_voertuigen", "voertuigcontrole_controlepunten",
+      "voertuigcontrole_uitvoeringen", "voertuigcontrole_resultaten", "voertuigcontrole_journaal",
+      "oefenmaterialen", "oefenmaterialen_inhoud",
+      // Onderstaande tabellen zijn de PloegCompleet-tabellen, inmiddels (sinds
+      // september 2026) allemaal in DIT (dagstaat-)project ondergebracht -- niet
+      // meer bij het losse, verlaten PLOEG-project hieronder.
+      "diensten", "dienst_slots", "reacties", "reacties_log", "toewijzingen",
+      "leden_extra", "instellingen", "meldingen",
+      "push_subscriptions", "verzonden_meldingen", "login_log",
+      "personeel_auth", "activatie_tokens",
+      // Vakbekwaamheid duikteam (nieuw, september 2026)
+      "duik_normen", "duik_instellingen", "duik_registraties", "duik_logregels", "duik_oefeningen"
+    ],
+    accessToken: null
+  },
+  ploeg: {
+    naam: "PLOEG",
+    url: "https://gqqflxctuikbygqnbrli.supabase.co",
+    key: "sb_publishable_8MFTS2ygpMxPwsl1-EH1aQ_GvmxQAtC",
+    tabellen: [
+      "diensten", "dienst_slots", "reacties", "reacties_log", "toewijzingen",
+      "leden_extra", "leden_publiek", "instellingen", "meldingen",
+      "push_subscriptions", "verzonden_meldingen", "login_log"
+    ],
+    accessToken: null
+  }
+};
+
+function renderTabelLijst(projectKey){
+  const container = document.getElementById("tabellen-"+projectKey);
+  container.innerHTML = PROJECTEN[projectKey].tabellen.map(t =>
+    `<div class="tabel-regel" id="rij-${projectKey}-${t}"><span class="naam">${t}</span><span class="aantal">—</span></div>`
+  ).join("");
+}
+renderTabelLijst("dagstaat");
+renderTabelLijst("ploeg");
+
+// ---------- Inloggen (optioneel, per project) ----------
+async function laadNamenVoorBeideLogins(){
+  const dagstaatSelect = document.getElementById("naam-dagstaat");
+  const ploegSelect = document.getElementById("naam-ploeg");
+  try{
+    const url = `${PROJECTEN.dagstaat.url}/rest/v1/personen?select=id,naam`;
+    const res = await fetch(url, { headers: { apikey: PROJECTEN.dagstaat.key, Authorization: "Bearer " + PROJECTEN.dagstaat.key } });
+    const data = await res.json();
+    const personen = (data||[]).slice().sort((a,b)=> (a.naam||"").localeCompare(b.naam||""));
+    const optiesHtml = personen.map(p=>`<option value="${p.id}">${p.naam}</option>`).join("");
+    // Dezelfde, complete Dagstaat-personeelslijst voor beide inlogschermen --
+    // 'leden_publiek' bij PLOEG is namelijk geen volledige namenlijst, maar een
+    // aanvullende tabel (rol/correcties) op dezelfde, gedeelde persoon-ID's.
+    dagstaatSelect.innerHTML = optiesHtml;
+    ploegSelect.innerHTML = optiesHtml;
+  }catch(e){
+    dagstaatSelect.innerHTML = ploegSelect.innerHTML = `<option value="">(kon namenlijst niet laden)</option>`;
+  }
+}
+laadNamenVoorBeideLogins();
+
+async function login(projectKey){
+  const project = PROJECTEN[projectKey];
+  const persoonId = document.getElementById("naam-"+projectKey).value;
+  const pin = document.getElementById("pin-"+projectKey).value.trim();
+  const statusEl = document.getElementById("status-login-"+projectKey);
+  const dotEl = document.getElementById("dot-login-"+projectKey);
+  if(!persoonId || !pin){ statusEl.textContent = "Kies een naam en vul een pincode in."; statusEl.className = "login-status fout"; return; }
+  dotEl.className = "status-dot bezig";
+  statusEl.textContent = "Bezig met inloggen…"; statusEl.className = "login-status";
+  try{
+    const res = await fetch(project.url + "/functions/v1/login-pin", {
+      method: "POST", headers: {"Content-Type":"application/json"},
+      body: JSON.stringify(projectKey==="ploeg" ? {id: persoonId, pin} : {persoonId, pin})
+    });
+    const json = await res.json();
+    if(json && json.ok && json.access_token){
+      project.accessToken = json.access_token;
+      dotEl.className = "status-dot klaar";
+      statusEl.textContent = "✓ Ingelogd — beveiligde tabellen kunnen nu ook worden opgehaald.";
+      statusEl.className = "login-status ok";
+    } else {
+      dotEl.className = "status-dot fout";
+      statusEl.textContent = "Inloggen mislukt — onjuiste pincode?";
+      statusEl.className = "login-status fout";
+    }
+  }catch(e){
+    dotEl.className = "status-dot fout";
+    statusEl.textContent = "Inloggen mislukt: " + (e.message||e);
+    statusEl.className = "login-status fout";
+  }
+}
+document.getElementById("btnLoginDagstaat").addEventListener("click", ()=>login("dagstaat"));
+document.getElementById("btnLoginPloeg").addEventListener("click", ()=>login("ploeg"));
+
+// ---------- Back-up zelf ----------
+async function haalTabelOp(project, tabelNaam){
+  const url = `${project.url}/rest/v1/${tabelNaam}?select=*`;
+  const headers = { apikey: project.key, Authorization: "Bearer " + (project.accessToken || project.key) };
+  const res = await fetch(url, { headers });
+  if(!res.ok){ throw new Error("HTTP " + res.status + (project.accessToken ? "" : " (niet ingelogd)")); }
+  return await res.json();
+}
+
+async function backupProject(projectKey){
+  const project = PROJECTEN[projectKey];
+  const dot = document.getElementById("dot-"+projectKey);
+  dot.className = "status-dot bezig";
+  const resultaat = {};
+  let foutOpgetreden = false;
+
+  for(const tabelNaam of project.tabellen){
+    const rij = document.getElementById(`rij-${projectKey}-${tabelNaam}`);
+    const aantalEl = rij.querySelector(".aantal");
+    try{
+      const data = await haalTabelOp(project, tabelNaam);
+      resultaat[tabelNaam] = data;
+      aantalEl.textContent = data.length + " rijen";
+      aantalEl.className = "aantal ok";
+    }catch(err){
+      resultaat[tabelNaam] = { fout: String(err.message || err) };
+      aantalEl.textContent = "mislukt";
+      aantalEl.className = "aantal fout";
+      foutOpgetreden = true;
+    }
+  }
+  dot.className = "status-dot " + (foutOpgetreden ? "fout" : "klaar");
+  return resultaat;
+}
+
+document.getElementById("startBtn").addEventListener("click", async () => {
+  const btn = document.getElementById("startBtn");
+  btn.disabled = true;
+  btn.textContent = "Bezig met ophalen…";
+  document.getElementById("downloadZone").innerHTML = "";
+
+  const geheel = {
+    gemaakt_op: new Date().toISOString(),
+    dagstaat: await backupProject("dagstaat"),
+    ploeg: await backupProject("ploeg")
+  };
+
+  const blob = new Blob([JSON.stringify(geheel, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const vandaag = new Date().toISOString().slice(0,10);
+  document.getElementById("downloadZone").innerHTML =
+    `<a class="download-link" href="${url}" download="brandweer-backup-${vandaag}.json">⬇ Download back-up-bestand (${vandaag})</a>`;
+
+  btn.disabled = false;
+  btn.textContent = "Nieuwe back-up maken";
+});
+</script>
+</body>
+</html>
