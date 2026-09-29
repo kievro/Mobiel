@@ -1034,9 +1034,11 @@
     if(!wrap) return;
     wrap.style.display = checked ? "none" : "";
     var datumInput = wrap.querySelector('[name="datum"]');
-    var deadlineInput = wrap.querySelector('[name="deadline"]');
+    var deadlineDatumInput = wrap.querySelector('[name="deadlineDatum"]');
+    var deadlineTijdInput = wrap.querySelector('[name="deadlineTijd"]');
     if(datumInput) datumInput.required = !checked;
-    if(deadlineInput) deadlineInput.required = !checked;
+    if(deadlineDatumInput) deadlineDatumInput.required = !checked;
+    if(deadlineTijdInput) deadlineTijdInput.required = !checked;
   };
   App.updateSlotPreview = function(type){
     var el = document.getElementById("slotPreview");
@@ -1073,8 +1075,8 @@
       meldingMoment = "direct";
     } else {
       datumVal = f.datum.value;
-      if(!post || !datumVal || !f.deadline.value){ showToast("Vul post, datum en deadline in."); return false; }
-      deadlineIso = new Date(f.deadline.value).toISOString();
+      if(!post || !datumVal || !f.deadlineDatum.value || !f.deadlineTijd.value){ showToast("Vul post, datum en deadline in."); return false; }
+      deadlineIso = new Date(f.deadlineDatum.value+"T"+f.deadlineTijd.value+":00").toISOString();
       meldingMoment = f.meldingMoment.value;
     }
     var notitie = f.notitie.value.trim();
@@ -1586,9 +1588,22 @@
         }).join("")
       + '<div style="font-size:12px;color:var(--text-muted);">Pas de tekst aan, bv. "Hele dienst (08:00–08:00)".</div></div>'
       : '';
+    var deadlineDatum = shift ? toLocalDateTimeStr(new Date(shift.deadline)).slice(0,10) : '';
+    var deadlineTijdHuidig = shift ? toLocalDateTimeStr(new Date(shift.deadline)).slice(11,16) : '';
+    var tijdOpties = [];
+    for(var th=0; th<24; th++){
+      ["00","30"].forEach(function(tm){
+        var t = (th<10?"0":"")+th+":"+tm;
+        tijdOpties.push('<option value="'+t+'"'+(t===deadlineTijdHuidig?' selected':'')+'>'+t+'</option>');
+      });
+    }
     var datumDeadline = '<div id="datumDeadlineWrap">'
       + '<div class="field"><label>Datum</label><input type="date" name="datum" value="'+(shift?shift.datum:'')+'" required /></div>'
-      + '<div class="field"><label>Reageren mogelijk tot</label><input type="datetime-local" name="deadline" step="1800" value="'+(shift?toLocalDateTimeStr(new Date(shift.deadline)):'')+'" required /></div>'
+      + '<div class="field"><label>Reageren mogelijk tot</label>'
+        + '<div style="display:flex;gap:8px;">'
+        + '<input type="date" name="deadlineDatum" value="'+deadlineDatum+'" required style="flex:1;">'
+        + '<select name="deadlineTijd" required style="flex:1;">'+tijdOpties.join('')+'</select>'
+        + '</div></div>'
       + '</div>';
     var meldingsontvangersField = editing ? '' : (function(){
       var kandidaten = state.data.members.filter(function(m){ return kanDienstenBeheren(m.rol); })
