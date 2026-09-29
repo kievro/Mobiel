@@ -496,7 +496,7 @@
         id:d.id, post:d.post_id, datum:d.datum, type:d.type, deadline:d.deadline, notitie:d.notitie||"",
         meldingMoment:d.melding_moment, isSpoed: !!d.is_spoed, isConcept: !!d.is_concept, isVerwijderd: !!d.is_verwijderd, autoToewijzen: !!d.auto_toewijzen,
         doelgroep:{specialisme:d.doelgroep_specialisme||"alle", aanstelling:d.doelgroep_aanstelling||"iedereen"},
-        aangemaaktDoor:d.aangemaakt_door||"", aangemaaktOp:d.aangemaakt_op,
+        aangemaaktDoor:d.aangemaakt_door||"", aangemaaktDoorId:d.aangemaakt_door_id||null, aangemaaktOp:d.aangemaakt_op,
         meldingsontvangers:d.meldingsontvangers||[],
         slots: (slotsByDienst[d.id] || []).slice()
       };
@@ -516,6 +516,21 @@
       meldingen:meldingen, instellingen:instellingen, specialismenOpties:specialismenOpties, dagConfig:dagConfig};
   }
 
+  // Wie een melding over een dienst hoort te krijgen: de bij het aanmaken
+  // gekozen ontvangers, plus altijd de roosterplanner(s), de aanmaker zelf,
+  // en iedereen die inmiddels op een slot van deze dienst is toegewezen
+  // (een "vinkje" heeft gekregen) -- ongeacht wat er bij het aanmaken is
+  // aangevinkt, want toewijzingen ontstaan vaak pas ná het aanmaken.
+  function berekenMeldingOntvangers(shift, data){
+    var ontvangers = {};
+    (shift.meldingsontvangers||[]).forEach(function(id){ ontvangers[id]=true; });
+    if(shift.aangemaaktDoorId) ontvangers[shift.aangemaaktDoorId] = true;
+    data.members.filter(function(m){ return m.rol==='roosterplanning'; }).forEach(function(m){ ontvangers[m.id]=true; });
+    var slotIds = shift.slots.map(function(sl){ return sl.slotId; });
+    data.toewijzingen.filter(function(t){ return slotIds.indexOf(t.slotId)>-1; }).forEach(function(t){ ontvangers[t.lidId]=true; });
+    return Object.keys(ontvangers);
+  }
+
   async function syncMeldingenRemote(data){
     var known = {}; data.meldingen.forEach(function(m){ known[m.bron]=true; });
     var toInsert = [];
@@ -528,7 +543,7 @@
         if(shift.meldingMoment==="direct" || (shift.meldingMoment==="na_sluiting" && isPast)){
           var slot = shift.slots.filter(function(sl){return sl.slotId===r.slotId;})[0];
           var tekst = getMemberName(r.lidId,data) + ' reageerde "' + ANTWOORD_LABEL[r.antwoord] + '" op ' + postNaam(shift.post) + ' – ' + formatDateShort(shift.datum) + (slot ? " (" + slot.label + ")" : "");
-          toInsert.push({id:uid("n"), tekst:tekst, tijdstip:new Date().toISOString(), gelezen:false, bron:key, relevant_voor: shift.meldingsontvangers||[]});
+          toInsert.push({id:uid("n"), tekst:tekst, tijdstip:new Date().toISOString(), gelezen:false, bron:key, relevant_voor: berekenMeldingOntvangers(shift, data)});
           known[key]=true;
         }
       });
@@ -537,11 +552,60 @@
       var res = await sbDag.from("meldingen").insert(toInsert);
       if(!res.error){ data.meldingen = data.meldingen.concat(toInsert); }
     }
+    // Voor de aanroeper: welke van de zojuist toegevoegde meldingen zijn
+    // relevant voor de nu ingelogde persoon -- dat bepaalt of er een
+    // pop-up + geluid moet komen, in plaats van alleen een stille badge.
+    return toInsert.filter(function(m){ return !state.currentUserId || (m.relevant_voor||[]).indexOf(state.currentUserId) > -1; });
+  }
+
+  // Kort, duidelijk geluidssignaal (geen los geluidsbestand nodig) via de Web
+  // Audio API -- twee korte tonen, herkenbaar maar niet storend.
+  function speelMeldingGeluid(){
+    try{
+      var ctx = new (window.AudioContext || window.webkitAudioContext)();
+      [660, 880].forEach(function(freq, i){
+        var osc = ctx.createOscillator(), gain = ctx.createGain();
+        osc.type = "sine"; osc.frequency.value = freq;
+        osc.connect(gain); gain.connect(ctx.destination);
+        var start = ctx.currentTime + i*0.16;
+        gain.gain.setValueAtTime(0, start);
+        gain.gain.linearRampToValueAtTime(0.25, start+0.02);
+        gain.gain.exponentialRampToValueAtTime(0.001, start+0.15);
+        osc.start(start); osc.stop(start+0.16);
+      });
+    }catch(e){ /* geluid is een bonus, geen vereiste */ }
+  }
+
+  function toonMeldingPopup(meldingen){
+    if(!meldingen.length) return;
+    var wrap = document.getElementById("meldingPopupWrap");
+    if(!wrap){
+      wrap = document.createElement("div");
+      wrap.id = "meldingPopupWrap";
+      wrap.style.cssText = "position:fixed;top:16px;right:16px;z-index:10000;display:flex;flex-direction:column;gap:8px;max-width:360px;";
+      document.body.appendChild(wrap);
+    }
+    meldingen.forEach(function(m){
+      var el = document.createElement("div");
+      el.style.cssText = "background:var(--surface);border:1px solid var(--lime);border-left:4px solid var(--lime);border-radius:10px;padding:14px 16px;box-shadow:0 6px 20px rgba(0,0,0,.35);font-size:14px;cursor:pointer;animation:meldingPopupIn .2s ease-out;";
+      el.innerHTML = '<div style="font-weight:700;color:var(--lime);margin-bottom:4px;font-size:12px;text-transform:uppercase;letter-spacing:.03em;">Nieuwe reactie</div><div>'+escapeHtml(m.tekst)+'</div>';
+      el.addEventListener("click", function(){ el.remove(); });
+      wrap.appendChild(el);
+      setTimeout(function(){ if(el.parentNode) el.remove(); }, 12000);
+    });
+    speelMeldingGeluid();
+  }
+  if(!document.getElementById("meldingPopupStyle")){
+    var st = document.createElement("style");
+    st.id = "meldingPopupStyle";
+    st.textContent = "@keyframes meldingPopupIn{from{opacity:0;transform:translateX(20px);}to{opacity:1;transform:translateX(0);}}";
+    document.head.appendChild(st);
   }
 
   async function refreshAllData(){
     state.data = await loadAllData();
-    await syncMeldingenRemote(state.data);
+    var nieuweRelevant = await syncMeldingenRemote(state.data);
+    toonMeldingPopup(nieuweRelevant);
   }
 
   async function runAction(fn, toastMsg){
@@ -1105,7 +1169,7 @@
           melding_moment:meldingMoment, doelgroep_specialisme:doelgroep.specialisme, doelgroep_aanstelling:doelgroep.aanstelling,
           is_spoed:isSpoed, meldingsontvangers:meldingsontvangers, auto_toewijzen:autoToewijzen,
           is_concept: isBatch, batch_id: isBatch ? state.batchId : null,
-          aangemaakt_door:getMemberName(state.currentUserId, state.data), aangemaakt_op:new Date().toISOString()
+          aangemaakt_door:getMemberName(state.currentUserId, state.data), aangemaakt_door_id:state.currentUserId, aangemaakt_op:new Date().toISOString()
         });
         if(r1.error) throw r1.error;
         var r2 = await sbDag.from("dienst_slots").insert(slots);
@@ -1873,6 +1937,21 @@
   }
 
   loadInitial();
+
+  // Realtime: direct reageren op nieuwe reacties, in plaats van te wachten op
+  // de 30-seconden-ververs hieronder -- dat is waar de pop-up + het geluid
+  // hun snelheid vandaan halen.
+  sbDag.channel("ploegcompleet-reacties")
+    .on("postgres_changes", { event: "INSERT", schema: "public", table: "reacties" }, async function(){
+      if(state.loading || state.loadError || !state.currentUserId) return;
+      try{
+        state.data = await loadAllData();
+        var nieuweRelevant = await syncMeldingenRemote(state.data);
+        toonMeldingPopup(nieuweRelevant);
+        if(!state.showForm) render();
+      }catch(e){ /* volgende reguliere ververs vangt dit alsnog op */ }
+    })
+    .subscribe();
 })();
 </script>
 </body>
