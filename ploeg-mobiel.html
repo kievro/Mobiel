@@ -247,7 +247,7 @@
     var shifts = (dienstenRes.data||[]).map(function(d){
       return { id:d.id, post:d.post_id, datum:d.datum, type:d.type, deadline:d.deadline, notitie:d.notitie||"",
         isSpoed: !!d.is_spoed, doelgroep:{specialisme:d.doelgroep_specialisme||"alle", aanstelling:d.doelgroep_aanstelling||"iedereen"},
-        aangemaaktDoor:d.aangemaakt_door||"", meldingsontvangers:d.meldingsontvangers||[], meldingMoment:d.melding_moment,
+        aangemaaktDoor:d.aangemaakt_door||"", aangemaaktDoorId:d.aangemaakt_door_id||null, meldingsontvangers:d.meldingsontvangers||[], meldingMoment:d.melding_moment,
         slots: (slotsByDienst[d.id] || []).slice() };
     });
     var reacties = (reactiesRes.data||[]).map(function(r){ return {slotId:r.slot_id, lidId:r.lid_id, antwoord:r.antwoord, tijdstip:r.tijdstip, uitkomst:r.uitkomst}; });
@@ -259,6 +259,16 @@
     return {members:members, shifts:shifts, reacties:reacties, toewijzingen:toewijzingen, meldingen:meldingen, instellingen:instellingen};
   }
   function bronKey(r){ return r.slotId + "_" + r.lidId + "_" + r.tijdstip; }
+
+  function berekenMeldingOntvangers(shift, data){
+    var ontvangers = {};
+    (shift.meldingsontvangers||[]).forEach(function(id){ ontvangers[id]=true; });
+    if(shift.aangemaaktDoorId) ontvangers[shift.aangemaaktDoorId] = true;
+    data.members.filter(function(m){ return m.rol==='roosterplanning'; }).forEach(function(m){ ontvangers[m.id]=true; });
+    var slotIds = shift.slots.map(function(sl){ return sl.slotId; });
+    data.toewijzingen.filter(function(t){ return slotIds.indexOf(t.slotId)>-1; }).forEach(function(t){ ontvangers[t.lidId]=true; });
+    return Object.keys(ontvangers);
+  }
 
   async function syncMeldingenRemote(data){
     var known = {}; data.meldingen.forEach(function(m){ known[m.bron]=true; });
@@ -272,7 +282,7 @@
         if(shift.meldingMoment==="direct" || (shift.meldingMoment==="na_sluiting" && isPast)){
           var slot = shift.slots.filter(function(sl){return sl.slotId===r.slotId;})[0];
           var tekst = getMemberName(r.lidId,data) + ' reageerde "' + ANTWOORD_LABEL[r.antwoord] + '" op ' + postNaam(shift.post) + ' \u2013 ' + formatDateShort(shift.datum) + (slot ? " (" + slot.label + ")" : "");
-          toInsert.push({id:uid("n"), tekst:tekst, tijdstip:new Date().toISOString(), gelezen:false, bron:key, relevant_voor: shift.meldingsontvangers||[]});
+          toInsert.push({id:uid("n"), tekst:tekst, tijdstip:new Date().toISOString(), gelezen:false, bron:key, relevant_voor: berekenMeldingOntvangers(shift, data)});
           known[key]=true;
         }
       });
@@ -281,9 +291,50 @@
       var res = await sbDag.from("meldingen").insert(toInsert);
       if(!res.error){ data.meldingen = data.meldingen.concat(toInsert); }
     }
+    return toInsert.filter(function(m){ return !state.currentUserId || (m.relevant_voor||[]).indexOf(state.currentUserId) > -1; });
   }
 
-  async function refreshAllData(){ state.data = await loadAllData(); await syncMeldingenRemote(state.data); }
+  function speelMeldingGeluid(){
+    try{
+      var ctx = new (window.AudioContext || window.webkitAudioContext)();
+      [660, 880].forEach(function(freq, i){
+        var osc = ctx.createOscillator(), gain = ctx.createGain();
+        osc.type = "sine"; osc.frequency.value = freq;
+        osc.connect(gain); gain.connect(ctx.destination);
+        var start = ctx.currentTime + i*0.16;
+        gain.gain.setValueAtTime(0, start);
+        gain.gain.linearRampToValueAtTime(0.25, start+0.02);
+        gain.gain.exponentialRampToValueAtTime(0.001, start+0.15);
+        osc.start(start); osc.stop(start+0.16);
+      });
+    }catch(e){}
+  }
+
+  function toonMeldingPopup(meldingen){
+    if(!meldingen.length) return;
+    var wrap = document.getElementById("meldingPopupWrap");
+    if(!wrap){
+      wrap = document.createElement("div");
+      wrap.id = "meldingPopupWrap";
+      wrap.style.cssText = "position:fixed;top:16px;right:16px;left:16px;z-index:10000;display:flex;flex-direction:column;gap:8px;";
+      document.body.appendChild(wrap);
+    }
+    meldingen.forEach(function(m){
+      var el = document.createElement("div");
+      el.style.cssText = "background:var(--surface);border:1px solid var(--lime);border-left:4px solid var(--lime);border-radius:10px;padding:14px 16px;box-shadow:0 6px 20px rgba(0,0,0,.35);font-size:14px;cursor:pointer;";
+      el.innerHTML = '<div style="font-weight:700;color:var(--lime);margin-bottom:4px;font-size:12px;text-transform:uppercase;letter-spacing:.03em;">Nieuwe reactie</div><div>'+escapeHtml(m.tekst)+'</div>';
+      el.addEventListener("click", function(){ el.remove(); });
+      wrap.appendChild(el);
+      setTimeout(function(){ if(el.parentNode) el.remove(); }, 12000);
+    });
+    speelMeldingGeluid();
+  }
+
+  async function refreshAllData(){
+    state.data = await loadAllData();
+    var nieuweRelevant = await syncMeldingenRemote(state.data);
+    toonMeldingPopup(nieuweRelevant);
+  }
   async function runAction(fn, toastMsg){
     try{ await fn(); await refreshAllData(); if(toastMsg) showToast(toastMsg); else render(); }
     catch(e){ showToast("Actie mislukt \u2013 " + (e && e.message ? e.message : "controleer de verbinding.")); }
@@ -560,7 +611,7 @@
         id:newId, post_id:post, datum:datumVal, type:type, deadline:deadlineIso, notitie:notitie,
         melding_moment:meldingMoment, doelgroep_specialisme:"alle", doelgroep_aanstelling:"iedereen", is_spoed:isSpoed,
         meldingsontvangers:meldingsontvangers, auto_toewijzen:autoToewijzen,
-        aangemaakt_door:getMemberName(state.currentUserId, state.data), aangemaakt_op:new Date().toISOString()
+        aangemaakt_door:getMemberName(state.currentUserId, state.data), aangemaakt_door_id:state.currentUserId, aangemaakt_op:new Date().toISOString()
       });
       if(r1.error) throw r1.error;
       var r2 = await sbDag.from("dienst_slots").insert(slots);
@@ -900,6 +951,18 @@
     });
   }
   loadInitial();
+
+  sbDag.channel("ploeg-mobiel-reacties")
+    .on("postgres_changes", { event: "INSERT", schema: "public", table: "reacties" }, async function(){
+      if(state.loading || state.loadError || !state.currentUserId) return;
+      try{
+        state.data = await loadAllData();
+        var nieuweRelevant = await syncMeldingenRemote(state.data);
+        toonMeldingPopup(nieuweRelevant);
+        if(!state.showForm) render();
+      }catch(e){}
+    })
+    .subscribe();
 })();
 </script>
 </body>
