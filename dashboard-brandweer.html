@@ -1342,6 +1342,9 @@
 
       var personenP = sbSelect(DAG_URL, DAG_KEY_HEADERS, "personen?select=*");
       var configP = sbSelect(DAG_URL, DAG_KEY_HEADERS, "kv_store?key=eq.config&select=value");
+      var postenP = sbSelect(DAG_URL, DAG_KEY_HEADERS, "posten?select=*&id=eq."+POST_ID);
+      var werkblokkenP = sbSelect(DAG_URL, DAG_KEY_HEADERS, "werkblokken?select=*&order=volgorde.asc");
+      var activiteitTypesP = sbSelect(DAG_URL, DAG_KEY_HEADERS, "activiteit_types?select=*");
       var dagP = sbSelect(DAG_URL, DAG_KEY_HEADERS, "kv_store?key=eq.dag:"+POST_ID+":"+vandaag+"&select=value");
       var dienstenP = sbSelect(DAG_URL, DAG_KEY_HEADERS, "dashboard_open_diensten?select=*&order=datum.asc");
       var eenMaandGeleden = new Date(Date.now() - 30*24*60*60*1000);
@@ -1356,19 +1359,25 @@
       var duikoefeningenP = POST_ID==='post2' ? sbSelect(DAG_URL, DAG_KEY_HEADERS, "dashboard_duikoefeningen?select=*") : Promise.resolve([]);
       var weerP = fetch("https://api.open-meteo.com/v1/forecast?latitude="+coords.lat+"&longitude="+coords.lon+"&current=temperature_2m,weather_code&hourly=temperature_2m,weather_code,precipitation_probability&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=Europe%2FAmsterdam&forecast_days=1").then(function(r){ return r.json(); }).catch(function(){ return null; });
 
-      var results = await Promise.all([personenP, configP, dagP, dienstenP, weerP, wegP, knmiP, agendaP, vcVoertuigenP, duikoefeningenP]);
+      var results = await Promise.all([personenP, configP, postenP, werkblokkenP, activiteitTypesP, dagP, dienstenP, weerP, wegP, knmiP, agendaP, vcVoertuigenP, duikoefeningenP]);
       var personen = (results[0]||[]).map(function(r){
         return { id:r.id, naam:r.naam, persoonsnummer:r.persoonsnummer, ploegId:r.ploeg_id, postId:r.post_id, type:r.type, specialismen:r.specialismen||[], email:r.email, actief:r.actief };
       });
       var config = (results[1][0] && results[1][0].value) || {};
-      var dag = (results[2][0] && results[2][0].value) || null;
-      var diensten = results[3] || [];
-      var weer = results[4];
-      var wegafsluitingen = results[5] || [];
-      var knmiWaarschuwingen = results[6] || [];
-      var agenda = results[7] || [];
-      var vcVoertuigen = results[8] || [];
-      var duikoefeningen = results[9] || [];
+      // Posten, werkblokken en activiteittypen staan sinds 28 september 2026 niet
+      // meer in dit config-blok, maar in eigen tabellen -- hier toevoegen zodat de
+      // rest van de code (postConfig, renderDagstaat) ongewijzigd kan blijven werken.
+      config.werkblokken = (results[3]||[]).map(function(r){ return { id:r.id, naam:r.naam, start:r.start, eind:r.eind }; });
+      config.activiteitTypes = (results[4]||[]).map(function(r){ return { id:r.id, naam:r.naam, kleur:r.kleur }; });
+      var postConfig = (results[2]||[])[0] ? { id:results[2][0].id, naam:results[2][0].naam, voertuigFuncties: results[2][0].voertuig_functies||[] } : null;
+      var dag = (results[5][0] && results[5][0].value) || null;
+      var diensten = results[6] || [];
+      var weer = results[7];
+      var wegafsluitingen = results[8] || [];
+      var knmiWaarschuwingen = results[9] || [];
+      var agenda = results[10] || [];
+      var vcVoertuigen = results[11] || [];
+      var duikoefeningen = results[12] || [];
       var vcUitvoeringenMap = {};
       if(vcVoertuigen.length){
         var vcIds = vcVoertuigen.map(function(v){ return v.id; });
@@ -1382,7 +1391,6 @@
       if(dag && dag.extraPersonen){
         dag.extraPersonen.forEach(function(ep){ personenById[ep.personId] = { id: ep.personId, naam: ep.naam }; });
       }
-      var postConfig = (config.posten||[]).filter(function(p){ return p.id===POST_ID; })[0];
 
       laatsteData = { dag:dag, personenById:personenById, postConfig:postConfig, config:config, diensten:diensten, weer:weer, wegafsluitingen:wegafsluitingen, knmiWaarschuwingen:knmiWaarschuwingen, agenda:agenda, vcVoertuigen:vcVoertuigen, vcUitvoeringenMap:vcUitvoeringenMap, duikoefeningen:duikoefeningen };
       renderHuidigePagina();
