@@ -3417,6 +3417,7 @@ function renderDuikOverzicht(){
       const {error} = await supa.from('duik_oefeningen').delete().eq('id', b.dataset.verwijderoef);
       if(error) throw error;
       State.duikOefeningen = State.duikOefeningen.filter(o=>o.id!==b.dataset.verwijderoef);
+      await verwijderGekoppeldeOefeningRij(b.dataset.verwijderoef);
       renderDuikSub();
     }catch(err){ alert('Verwijderen mislukt: '+(err.message||err)); }
   }));
@@ -3643,12 +3644,20 @@ function openDuikOefeningPlanModal(bestaandId){
         const {error} = await supa.from('duik_oefeningen').delete().eq('id', bestaand.id);
         if(error) throw error;
         State.duikOefeningen = State.duikOefeningen.filter(o=>o.id!==bestaand.id);
+        await verwijderGekoppeldeOefeningRij(bestaand.id);
         closeModal(); box.classList.remove('wide'); renderDuikSub();
       }catch(err){ alert('Verwijderen mislukt: '+(err.message||err)); }
     });
     const btnKoppel = document.getElementById('duikOefPlanKoppel');
     if(btnKoppel) btnKoppel.addEventListener('click', async ()=>{ await koppelDuikOefeningNaarPlanning(bestaand); closeModal(); box.classList.remove('wide'); });
   }
+}
+
+async function verwijderGekoppeldeOefeningRij(duikOefeningId){
+  const oefeningId = 'duik-'+duikOefeningId;
+  if(!State.oefeningen.some(o=>o.id===oefeningId)) return; // was nooit gekoppeld, niets te doen
+  State.oefeningen = State.oefeningen.filter(o=>o.id!==oefeningId);
+  await saveOefeningen();
 }
 
 async function koppelDuikOefeningNaarPlanning(duikOefening){
@@ -3686,6 +3695,23 @@ async function koppelDuikOefeningNaarPlanning(duikOefening){
   await sSet('dag:'+sleutel, dagData, true);
   State.dagUpdatedAt[sleutel] = new Date().toISOString();
   if(isHuidige) State.dag = dagData; else State.pinCache[sleutel] = dagData;
+
+  // Ook een rij in de gewone Oefenrooster-tabel aanmaken/bijwerken, zodat de
+  // duikoefening daar net als elke andere oefening terug te vinden is. Een
+  // vaste, van de duikoefening afgeleide id zorgt dat opnieuw koppelen
+  // dezelfde rij bijwerkt in plaats van een dubbele aan te maken.
+  const oefeningId = 'duik-'+duikOefening.id;
+  const oefeningRij = {
+    id: oefeningId, datum: datumStr, postId, ploegId: null, thema: 'Duiken',
+    welkeOefening: duikOefening.omschrijving || 'Duikoefening', oefenkaartNummer: duikOefening.codes.join(', '),
+    vorm: 'praktijk', ruimteGereserveerd: false, oefenleidingType: 'intern', oefenleiders: [],
+    blokken: duikOefening.blokken, bijzonderheden: 'Automatisch gekoppeld vanuit Vakbekwaamheid duikteam. Deelnemers: '+duikOefening.deelnemer_ids.map(getPersoonNaam).join(', '),
+    materialen: [], bijlagen: []
+  };
+  const bestaandeIdx = State.oefeningen.findIndex(o=>o.id===oefeningId);
+  if(bestaandeIdx>=0) State.oefeningen[bestaandeIdx] = oefeningRij; else State.oefeningen.push(oefeningRij);
+  await saveOefeningen();
+
   await addLog(`Duikoefening van ${datumStr} in de planning gezet (${duikOefening.deelnemer_ids.length} perso(o)n(en), ${duikOefening.blokken.length} blok(ken))${toegevoegdAlsExtra?`, ${toegevoegdAlsExtra} als extra persoon toegevoegd`:''}.`, postId);
   if(isHuidige) render();
 }
