@@ -282,16 +282,21 @@
         if(shift.meldingMoment==="direct" || (shift.meldingMoment==="na_sluiting" && isPast)){
           var slot = shift.slots.filter(function(sl){return sl.slotId===r.slotId;})[0];
           var tekst = getMemberName(r.lidId,data) + ' reageerde "' + ANTWOORD_LABEL[r.antwoord] + '" op ' + postNaam(shift.post) + ' \u2013 ' + formatDateShort(shift.datum) + (slot ? " (" + slot.label + ")" : "");
-          toInsert.push({id:uid("n"), tekst:tekst, tijdstip:new Date().toISOString(), gelezen:false, bron:key, relevant_voor: berekenMeldingOntvangers(shift, data)});
+          toInsert.push({id:uid("n"), tekst:tekst, tijdstip:new Date().toISOString(), gelezen:false, bron:key, relevant_voor: berekenMeldingOntvangers(shift, data), reactieTijdstip:r.tijdstip});
           known[key]=true;
         }
       });
     });
     if(toInsert.length){
-      var res = await sbDag.from("meldingen").insert(toInsert);
+      var res = await sbDag.from("meldingen").insert(toInsert.map(function(m){ var k={}; for(var p in m) if(p!=="reactieTijdstip") k[p]=m[p]; return k; }));
       if(!res.error){ data.meldingen = data.meldingen.concat(toInsert); }
     }
-    return toInsert.filter(function(m){ return !state.currentUserId || (m.relevant_voor||[]).indexOf(state.currentUserId) > -1; });
+    var vijfMinGeleden = Date.now() - 5*60*1000;
+    return toInsert.filter(function(m){
+      var relevant = !state.currentUserId || (m.relevant_voor||[]).indexOf(state.currentUserId) > -1;
+      var recent = new Date(m.reactieTijdstip).getTime() > vijfMinGeleden;
+      return relevant && recent;
+    });
   }
 
   function speelMeldingGeluid(){
