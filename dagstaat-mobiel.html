@@ -133,7 +133,7 @@
   supa.auth.onAuthStateChange(function(_event, session){
     if(session && session.access_token) DAG_KEY_HEADERS.Authorization = "Bearer " + session.access_token;
   });
-  var POST_NAMEN = {post1:"Arnhem Noord", post2:"Arnhem Zuid", post3:"Ede Stad"};
+  var POST_NAMEN = {post1:"Arnhem Noord", post2:"Arnhem Zuid", post3:"Ede Stad", mtu7q5xoq5bb71:"Flexpool"};
 
   async function sbSelect(path){
     var res = await fetch(DAG_URL + "/rest/v1/" + path, {headers: DAG_KEY_HEADERS});
@@ -320,14 +320,19 @@
     try{
       var postId = huidigePost();
       var datumKey = toDatumKey(huidigeDatum);
-      var [personenRes, configRes, dagRes, vcVoertuigenRes] = await Promise.all([
-        sbSelect("kv_store?key=eq.personen&select=value"),
-        sbSelect("kv_store?key=eq.config&select=value"),
+      var [personenRes, postenRes, werkblokkenRes, activiteitTypesRes, dagRes, vcVoertuigenRes] = await Promise.all([
+        sbSelect("personen?select=*"),
+        sbSelect("posten?select=*&id=eq."+postId),
+        sbSelect("werkblokken?select=*&order=volgorde.asc"),
+        sbSelect("activiteit_types?select=*"),
         sbSelect("kv_store?key=eq.dag:"+postId+":"+datumKey+"&select=value"),
         sbSelect("voertuigcontrole_voertuigen?post_id=eq."+postId+"&actief=eq.true&order=volgorde")
       ]);
-      var personen = (personenRes[0] && personenRes[0].value) || [];
-      var config = (configRes[0] && configRes[0].value) || {};
+      var personen = (personenRes||[]).map(function(r){
+        return { id:r.id, naam:r.naam, persoonsnummer:r.persoonsnummer, ploegId:r.ploeg_id, postId:r.post_id, type:r.type, specialismen:r.specialismen||[], email:r.email, actief:r.actief };
+      });
+      var werkblokken = (werkblokkenRes||[]).map(function(r){ return {id:r.id, naam:r.naam, start:r.start, eind:r.eind}; });
+      var activiteitTypes = (activiteitTypesRes||[]).map(function(r){ return {id:r.id, naam:r.naam, kleur:r.kleur}; });
       var dag = (dagRes[0] && dagRes[0].value) || null;
       var vcVoertuigen = vcVoertuigenRes || [];
       var vcUitvoeringenMap = {};
@@ -338,10 +343,10 @@
       }
       var personenById = {}; personen.forEach(function(p){ personenById[p.id]=p; });
       if(dag && dag.extraPersonen){ dag.extraPersonen.forEach(function(ep){ personenById[ep.personId] = {id:ep.personId, naam:ep.naam}; }); }
-      var postConfig = (config.posten||[]).filter(function(p){ return p.id===postId; })[0];
+      var postConfig = (postenRes||[])[0] ? { id:postenRes[0].id, naam:postenRes[0].naam, voertuigFuncties: postenRes[0].voertuig_functies||[] } : null;
       var datumLabel = huidigeDatum.toLocaleDateString("nl-NL",{day:"numeric",month:"long"});
 
-      inhoud.innerHTML = renderDagstaat(dag, personenById, postConfig, config.werkblokken, config.activiteitTypes, POST_NAMEN[postId], datumLabel, vcVoertuigen, vcUitvoeringenMap);
+      inhoud.innerHTML = renderDagstaat(dag, personenById, postConfig, werkblokken, activiteitTypes, POST_NAMEN[postId], datumLabel, vcVoertuigen, vcUitvoeringenMap);
       document.getElementById("footerNote").textContent = "Bijgewerkt " + new Date().toLocaleTimeString("nl-NL",{hour:"2-digit",minute:"2-digit"});
     }catch(e){
       inhoud.innerHTML = '<div class="card"><div class="empty">Kon niet laden: '+escapeHtml(e.message||"onbekende fout")+'</div></div>';
@@ -401,8 +406,8 @@
       var alreadyId = null;
       try{ alreadyId = localStorage.getItem(INGELOGD_KEY); }catch(e){}
 
-      var personenRes = await sbSelect("kv_store?key=eq.personen&select=value");
-      loginState.personen = ((personenRes[0] && personenRes[0].value) || []).slice().sort(function(a,b){ return a.naam.localeCompare(b.naam); });
+      var personenRes = await sbSelect("personen?select=id,naam");
+      loginState.personen = (personenRes||[]).slice().sort(function(a,b){ return a.naam.localeCompare(b.naam); });
 
       var gekozenPersoon = alreadyId && loginState.personen.filter(function(p){ return p.id===alreadyId; })[0];
       if(gekozenPersoon){
