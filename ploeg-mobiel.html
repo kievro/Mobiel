@@ -299,9 +299,21 @@
     });
   }
 
+  var _meldingAudioCtx = null;
+  function _ontgrendelMeldingGeluid(){
+    if(!_meldingAudioCtx){
+      try{ _meldingAudioCtx = new (window.AudioContext || window.webkitAudioContext)(); }catch(e){ return; }
+    }
+    if(_meldingAudioCtx.state === "suspended") _meldingAudioCtx.resume().catch(function(){});
+  }
+  document.addEventListener("click", _ontgrendelMeldingGeluid);
+  document.addEventListener("touchstart", _ontgrendelMeldingGeluid);
+
   function speelMeldingGeluid(){
     try{
-      var ctx = new (window.AudioContext || window.webkitAudioContext)();
+      if(!_meldingAudioCtx) _meldingAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      var ctx = _meldingAudioCtx;
+      if(ctx.state === "suspended") ctx.resume().catch(function(){});
       [660, 880].forEach(function(freq, i){
         var osc = ctx.createOscillator(), gain = ctx.createGain();
         osc.type = "sine"; osc.frequency.value = freq;
@@ -495,6 +507,13 @@
           var r2 = await sbDag.from("toewijzingen").upsert({slot_id:slotId, lid_id:state.currentUserId, toegewezen_op:new Date().toISOString(), methode:"auto"}, {onConflict:"slot_id"});
           if(r2.error) throw r2.error;
         }
+        try{
+          await fetch(DAG_URL + "/functions/v1/verstuur-reactie-melding", {
+            method:"POST",
+            headers:{"Content-Type":"application/json", "apikey":DAG_KEY, "Authorization":"Bearer "+DAG_KEY},
+            body: JSON.stringify({record:{slot_id:slotId, lid_id:state.currentUserId, antwoord:antwoord, tijdstip:new Date().toISOString()}})
+          });
+        }catch(e){}
       }
     }, "Reactie opgeslagen").then(function(){
       // Bij een gedeelde dienst (meerdere tijdvakken): bevestigingspopup tonen
