@@ -612,15 +612,23 @@
     if(!meldingsontvangers.length) meldingsontvangers = [state.currentUserId];
     var autoToewijzen = !!(f.autoToewijzen && f.autoToewijzen.checked);
     runAction(async function(){
-      var r1 = await sbDag.from("diensten").insert({
+      var dienstData = {
         id:newId, post_id:post, datum:datumVal, type:type, deadline:deadlineIso, notitie:notitie,
         melding_moment:meldingMoment, doelgroep_specialisme:"alle", doelgroep_aanstelling:"iedereen", is_spoed:isSpoed,
         meldingsontvangers:meldingsontvangers, auto_toewijzen:autoToewijzen,
         aangemaakt_door:getMemberName(state.currentUserId, state.data), aangemaakt_door_id:state.currentUserId, aangemaakt_op:new Date().toISOString()
-      });
+      };
+      var r1 = await sbDag.from("diensten").insert(dienstData);
       if(r1.error) throw r1.error;
       var r2 = await sbDag.from("dienst_slots").insert(slots);
       if(r2.error) throw r2.error;
+      try{
+        await fetch(DAG_URL + "/functions/v1/verstuur-nieuwe-dienst-melding", {
+          method:"POST",
+          headers:{"Content-Type":"application/json", "apikey":DAG_KEY, "Authorization":"Bearer "+DAG_KEY},
+          body: JSON.stringify({record: dienstData})
+        });
+      }catch(e){ /* de dienst staat sowieso goed klaar; de melding is een bonus */ }
     }, "Dienst aangemaakt");
     state.showForm = false;
     return false;
