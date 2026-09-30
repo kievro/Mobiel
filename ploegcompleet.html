@@ -569,9 +569,26 @@
 
   // Kort, duidelijk geluidssignaal (geen los geluidsbestand nodig) via de Web
   // Audio API -- twee korte tonen, herkenbaar maar niet storend.
+  // Eén gedeelde geluidscontext, die bij de allereerste klik/tik ergens op de
+  // pagina wordt "ontgrendeld" -- browsers staan geluid bij een later, vanzelf
+  // verschijnende pop-up (via realtime) alleen toe als de pagina al een keer
+  // een echte gebruikersactie heeft gezien. Zonder deze ontgrendeling blijft
+  // geluid stil, zonder foutmelding.
+  var _meldingAudioCtx = null;
+  function _ontgrendelMeldingGeluid(){
+    if(!_meldingAudioCtx){
+      try{ _meldingAudioCtx = new (window.AudioContext || window.webkitAudioContext)(); }catch(e){ return; }
+    }
+    if(_meldingAudioCtx.state === "suspended") _meldingAudioCtx.resume().catch(function(){});
+  }
+  document.addEventListener("click", _ontgrendelMeldingGeluid);
+  document.addEventListener("touchstart", _ontgrendelMeldingGeluid);
+
   function speelMeldingGeluid(){
     try{
-      var ctx = new (window.AudioContext || window.webkitAudioContext)();
+      if(!_meldingAudioCtx) _meldingAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      var ctx = _meldingAudioCtx;
+      if(ctx.state === "suspended") ctx.resume().catch(function(){});
       [660, 880].forEach(function(freq, i){
         var osc = ctx.createOscillator(), gain = ctx.createGain();
         osc.type = "sine"; osc.frequency.value = freq;
@@ -773,6 +790,15 @@
           );
           if(r2.error) throw r2.error;
         }
+        // Geen database-webhook ingesteld die dit automatisch triggert (zelfde
+        // situatie als bij het aanmaken van een dienst) -- dus zelf aanroepen.
+        try{
+          await fetch(DAG_URL + "/functions/v1/verstuur-reactie-melding", {
+            method:"POST",
+            headers:{"Content-Type":"application/json", "apikey":DAG_KEY, "Authorization":"Bearer "+DAG_KEY},
+            body: JSON.stringify({record:{slot_id:slotId, lid_id:state.currentUserId, antwoord:antwoord, tijdstip:new Date().toISOString()}})
+          });
+        }catch(e){ /* de reactie staat sowieso goed opgeslagen; de pushmelding is een bonus */ }
       }
     }, "Reactie opgeslagen").then(function(){
       // Bij een gedeelde dienst (meerdere tijdvakken): pas de bevestigingspopup
