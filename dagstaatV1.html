@@ -196,6 +196,14 @@ select.add-select{background:var(--surface-2);border:1px dashed var(--border);co
 .activiteit-titel{font-size:13px;font-weight:600;line-height:1.3;}
 .activiteit-meta{font-size:11px;color:var(--text-dim);margin-top:3px;font-family:var(--font-mono);}
 .empty-hint{color:var(--text-faint);font-size:12px;font-style:italic;padding:6px 0;}
+.mededelingen-paneel{background:var(--surface-2);border:1px solid var(--border-soft);border-radius:var(--radius);padding:12px 16px;margin-bottom:14px;}
+.mededelingen-kop{font-family:var(--font-display);font-size:13px;color:var(--text-dim);}
+.mededeling-item{padding:8px 0;border-top:1px solid var(--border-soft);}
+.mededeling-item:first-of-type{border-top:none;}
+.mededeling-item.belangrijk{background:var(--red-glow);margin:0 -16px;padding:8px 16px;border-top:none;border-left:3px solid var(--red-text);}
+.mededeling-tekst{font-size:14px;white-space:pre-wrap;}
+.mededeling-meta{font-size:11px;color:var(--text-faint);margin-top:3px;}
+.mededeling-meta a{color:var(--text-dim);}
 .oef-subtabs{display:flex;gap:6px;margin-bottom:16px;border-bottom:1px solid var(--border);}
 .oef-subtab-btn{background:none;border:none;color:var(--text-dim);padding:9px 14px;font-family:var(--font-display);font-size:14px;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;}
 .oef-subtab-btn.active{color:var(--text);border-bottom-color:var(--red);}
@@ -712,6 +720,7 @@ const State = {
   dagUpdatedAt:{}, // per 'postId:datum' de laatst-bekende opslagtijd op de server, om botsende gelijktijdige wijzigingen te kunnen signaleren
   oefenmaterialen:[], vcVoertuigen:[], oefenkaarten:[],
   duikGeladen:false, duikLaadFout:null, duikNormen:[], duikRegistraties:[], duikLogregels:[], duikInstellingen:null, duikOefeningen:[],
+  mededelingen:[],
   oefSubtab:'rooster', duikPersoonId:null
 };
 
@@ -797,7 +806,7 @@ async function supaSelectMetRetry(query, omschrijving){
 }
 async function loadAll(overslaanDag){
   State.laadFouten = [];
-  const [config, personenResultaat, postenResultaat, ploegenResultaat, activiteitResultaat, werkblokResultaat, themasResultaat, log, oefeningenResultaat, werkzaamhedenRuw, agendaResultaat, materialenResultaat, materialenInhoudResultaat, vcVoertuigenResultaat, oefenkaartenResultaat] = await Promise.all([
+  const [config, personenResultaat, postenResultaat, ploegenResultaat, activiteitResultaat, werkblokResultaat, themasResultaat, log, oefeningenResultaat, werkzaamhedenRuw, agendaResultaat, materialenResultaat, materialenInhoudResultaat, vcVoertuigenResultaat, oefenkaartenResultaat, mededelingenResultaat] = await Promise.all([
     sGet('config', defaultConfig(), true),
     supaSelectMetRetry(()=>supa.from('personen').select('*').then(r=>r, e=>({error:e})), 'personen'),
     supaSelectMetRetry(()=>supa.from('posten').select('*').then(r=>r, e=>({error:e})), 'posten'),
@@ -812,7 +821,8 @@ async function loadAll(overslaanDag){
     supaSelectMetRetry(()=>supa.from('oefenmaterialen').select('*').eq('actief', true).order('categorie').order('naam').then(r=>r, e=>({error:e})), 'oefenmaterialen'),
     supaSelectMetRetry(()=>supa.from('oefenmaterialen_inhoud').select('*').order('volgorde').then(r=>r, e=>({error:e})), 'oefenmaterialen_inhoud'),
     supaSelectMetRetry(()=>supa.from('voertuigcontrole_voertuigen').select('*').order('volgorde').then(r=>r, e=>({error:e})), 'voertuigcontrole_voertuigen'),
-    supaSelectMetRetry(()=>supa.from('oefenkaarten').select('*').eq('actief',true).order('nummer').then(r=>r, e=>({error:e})), 'oefenkaarten')
+    supaSelectMetRetry(()=>supa.from('oefenkaarten').select('*').eq('actief',true).order('nummer').then(r=>r, e=>({error:e})), 'oefenkaarten'),
+    supaSelectMetRetry(()=>supa.from('mededelingen').select('*').order('start_datum',{ascending:false}).then(r=>r, e=>({error:e})), 'mededelingen')
   ]);
   State.config = config;
   State.config.posten = ((postenResultaat && !postenResultaat.error) ? (postenResultaat.data||[]) : []).map(r=>({
@@ -851,6 +861,7 @@ async function loadAll(overslaanDag){
   }));
   if(oefeningenResultaat && oefeningenResultaat.error){ if(!State.laadFouten) State.laadFouten=[]; State.laadFouten.push('oefeningen'); }
   State.oefenkaarten = (oefenkaartenResultaat && !oefenkaartenResultaat.error) ? (oefenkaartenResultaat.data||[]) : [];
+  State.mededelingen = (mededelingenResultaat && !mededelingenResultaat.error) ? (mededelingenResultaat.data||[]) : [];
   State.werkzaamhedenHistorie = werkzaamhedenRuw.map(h=> typeof h==='string' ? {tekst:h, typeId:''} : h);
   State.kazerneAgenda = (agendaResultaat && !agendaResultaat.error) ? (agendaResultaat.data||[]) : [];
   const materialenRuw = (materialenResultaat && !materialenResultaat.error) ? (materialenResultaat.data||[]) : [];
@@ -2545,8 +2556,116 @@ function renderOefeningDetails(postId, datumStr){
   }).join('');
   return `<div class="oef-details-block"><div class="section-label">Oefening(en) op deze dag</div>${items}</div>`;
 }
+/* ================= Mededelingen ================= */
+const MEDEDELING_BEHEER_ROLLEN = ['bevelvoerder','pco','beheer'];
+function actieveMededelingen(postId, datumStr){
+  return State.mededelingen.filter(m=>{
+    const geldigVoorPost = !m.post_ids || m.post_ids.length===0 || m.post_ids.includes(postId);
+    const geldigOpDatum = datumStr >= m.start_datum && datumStr <= m.eind_datum;
+    return geldigVoorPost && geldigOpDatum;
+  }).sort((a,b)=>(b.belangrijk-a.belangrijk) || a.start_datum.localeCompare(b.start_datum));
+}
+function mededelingenPaneelHTML(postId, datumStr){
+  const magBeheren = MEDEDELING_BEHEER_ROLLEN.includes(State.rol);
+  const items = actieveMededelingen(postId, datumStr);
+  if(!items.length && !magBeheren) return '';
+  return `<div class="mededelingen-paneel">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:${items.length?'8px':'0'};">
+      <span class="mededelingen-kop">📣 Mededelingen</span>
+      ${magBeheren?`<button class="btn small ghost" id="btnMededelingToevoegen">+ Mededeling</button>`:''}
+    </div>
+    ${items.map(m=>`
+      <div class="mededeling-item ${m.belangrijk?'belangrijk':''}">
+        <div class="mededeling-tekst">${esc(m.tekst)}</div>
+        <div class="mededeling-meta">
+          ${!m.post_ids||!m.post_ids.length?'Alle posten':m.post_ids.map(pid=>{const p=State.config.posten.find(x=>x.id===pid);return p?esc(p.naam):pid;}).join(', ')}
+          · t/m ${parseKey(m.eind_datum).toLocaleDateString('nl-NL')}
+          ${magBeheren?` · <a href="#" data-bewerkmed="${m.id}">bewerken</a> · <a href="#" data-verwijdermed="${m.id}">verwijderen</a>`:''}
+        </div>
+      </div>`).join('')}
+  </div>`;
+}
+function wireMededelingenPaneel(){
+  const btn = document.getElementById('btnMededelingToevoegen');
+  if(btn) btn.addEventListener('click', ()=>openMededelingModal(null));
+  document.querySelectorAll('[data-bewerkmed]').forEach(a=>a.addEventListener('click', e=>{ e.preventDefault(); openMededelingModal(a.dataset.bewerkmed); }));
+  document.querySelectorAll('[data-verwijdermed]').forEach(a=>a.addEventListener('click', async e=>{
+    e.preventDefault();
+    if(!confirm('Deze mededeling verwijderen?')) return;
+    try{
+      const {error} = await supa.from('mededelingen').delete().eq('id', a.dataset.verwijdermed);
+      if(error) throw error;
+      State.mededelingen = State.mededelingen.filter(m=>m.id!==a.dataset.verwijdermed);
+      renderPlanning();
+    }catch(err){ alert('Verwijderen mislukt: '+(err.message||err)); }
+  }));
+}
+function openMededelingModal(bestaandId){
+  const bestaand = bestaandId ? State.mededelingen.find(m=>m.id===bestaandId) : null;
+  const box = document.getElementById('modalBox');
+  box.innerHTML = `<div class="modal-head"><h3>${bestaand?'Mededeling bewerken':'Mededeling plaatsen'}</h3><button class="modal-close" data-close="modal">✕</button></div>
+    <form id="mededelingForm">
+      <div class="field"><label>Tekst</label><textarea name="tekst" rows="3" required>${bestaand?esc(bestaand.tekst):''}</textarea></div>
+      <div class="field-checkbox"><input type="checkbox" name="belangrijk" id="medBelangrijk" ${bestaand&&bestaand.belangrijk?'checked':''}><label for="medBelangrijk">Als belangrijk markeren (extra opvallend)</label></div>
+      <div class="field"><label>Geldig vanaf</label><input type="date" name="startDatum" value="${bestaand?bestaand.start_datum:fmtKey(new Date())}" required></div>
+      <div class="field"><label>Geldig tot en met</label><input type="date" name="eindDatum" value="${bestaand?bestaand.eind_datum:fmtKey(new Date())}" required></div>
+      <div class="field"><label>Van toepassing op</label>
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <label style="display:flex;gap:6px;align-items:center;"><input type="checkbox" name="postAlle" id="medPostAlle" ${!bestaand||!bestaand.post_ids||!bestaand.post_ids.length?'checked':''}> Alle posten</label>
+          ${State.config.posten.map(p=>`<label style="display:flex;gap:6px;align-items:center;padding-left:18px;"><input type="checkbox" name="post" value="${p.id}" class="medPostKeuze" ${bestaand&&bestaand.post_ids&&bestaand.post_ids.includes(p.id)?'checked':''}> ${esc(p.naam)}</label>`).join('')}
+        </div>
+      </div>
+      <div class="modal-actions">
+        ${bestaand?`<button type="button" class="btn ghost" id="medVerwijder" style="margin-right:auto;color:var(--red-text);">Verwijderen</button>`:''}
+        <button type="button" class="btn ghost" data-close="modal">Annuleren</button>
+        <button type="submit" class="btn primary">Opslaan</button>
+      </div>
+    </form>`;
+  document.getElementById('modalOverlay').classList.remove('hidden');
+  const alleCheck = document.getElementById('medPostAlle');
+  const postChecks = box.querySelectorAll('.medPostKeuze');
+  alleCheck.addEventListener('change', ()=>{ if(alleCheck.checked) postChecks.forEach(c=>c.checked=false); });
+  postChecks.forEach(c=>c.addEventListener('change', ()=>{ if(c.checked) alleCheck.checked=false; }));
+  document.getElementById('mededelingForm').addEventListener('submit', async e=>{
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const postIds = alleCheck.checked ? [] : fd.getAll('post');
+    const rij = {
+      tekst: fd.get('tekst').trim(), belangrijk: fd.get('belangrijk')==='on',
+      post_ids: postIds, start_datum: fd.get('startDatum'), eind_datum: fd.get('eindDatum'),
+      aangemaakt_door: (State.ingelogdPersoon&&State.ingelogdPersoon.naam)||null,
+      aangemaakt_door_id: (State.ingelogdPersoon&&State.ingelogdPersoon.id)||null
+    };
+    try{
+      if(bestaand){
+        const {error} = await supa.from('mededelingen').update(rij).eq('id', bestaand.id);
+        if(error) throw error;
+        Object.assign(bestaand, rij);
+      } else {
+        rij.id = uid();
+        const {data, error} = await supa.from('mededelingen').insert(rij).select().single();
+        if(error) throw error;
+        State.mededelingen.push(data);
+      }
+      closeModal(); renderPlanning();
+    }catch(err){ alert('Opslaan mislukt: '+(err.message||err)); }
+  });
+  if(bestaand){
+    document.getElementById('medVerwijder').addEventListener('click', async ()=>{
+      if(!confirm('Deze mededeling verwijderen?')) return;
+      try{
+        const {error} = await supa.from('mededelingen').delete().eq('id', bestaand.id);
+        if(error) throw error;
+        State.mededelingen = State.mededelingen.filter(m=>m.id!==bestaand.id);
+        closeModal(); renderPlanning();
+      }catch(err){ alert('Verwijderen mislukt: '+(err.message||err)); }
+    });
+  }
+}
+
 function renderPlanning(){
-  document.getElementById('planningGrid').innerHTML = buildPlanningPanelHTML(State.currentPost, State.dag);
+  document.getElementById('planningGrid').innerHTML = mededelingenPaneelHTML(State.currentPost, fmtKey(State.currentDate)) + buildPlanningPanelHTML(State.currentPost, State.dag);
+  wireMededelingenPaneel();
 }
 
 /* ---------- personeel tab ---------- */
@@ -5140,7 +5259,7 @@ function wireEvents(){
     'personeel': ['personen','posten','ploegen'],
     'voertuigcontrole': ['voertuigcontrole_voertuigen','posten'],
     'dashboard': ['kazerne_agenda','posten','ploegen'],
-    'planning': ['posten','ploegen','activiteit_types','werkblokken'],
+    'planning': ['posten','ploegen','activiteit_types','werkblokken','mededelingen'],
     'voertuigindeling': ['posten','ploegen'],
   };
   document.querySelectorAll('nav.tabs button').forEach(btn=>{
