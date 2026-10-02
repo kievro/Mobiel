@@ -112,6 +112,9 @@
   .card-spoed{border-color:var(--red);box-shadow:0 0 0 1px var(--red);}
   @keyframes spoed-puls{0%,100%{opacity:1;}50%{opacity:.55;}}
   .duik-tag{font-family:var(--font-body);font-weight:600;font-size:12px;color:var(--lime);border:1px dashed var(--lime);padding:2px 7px;border-radius:4px;}
+  .mededelingen-banner{margin-bottom:10px;}
+  .mededeling-banner-item{background:#232b34;border-left:4px solid var(--lime);padding:8px 16px;font-size:16px;font-weight:600;border-radius:6px;margin-bottom:6px;}
+  .mededeling-banner-item.belangrijk{background:#3a1613;border-left-color:#e33629;color:#ffb3a8;}
   .dienst-chevron{display:none;}
   .dienst-detail{margin-top:6px;padding-top:6px;border-top:1px dashed var(--border);}
   .notitie{font-size:13.5px;font-weight:400;color:var(--text-muted);margin-top:0;font-style:italic;}
@@ -126,7 +129,7 @@
   .ticker-track{display:flex;width:max-content;animation:ticker-scroll 40s linear infinite;}
   .ticker-track:hover{animation-play-state:paused;}
   .ticker-row-ambulance .ticker-track{animation-duration:60s;} /* rustiger, want gele tekst op geel is minder rustig leesbaar */
-  .ticker-item{white-space:nowrap;padding:5px 40px;font-family:var(--font-body);font-size:17px;text-transform:uppercase;letter-spacing:0.01em;display:flex;align-items:center;gap:10px;font-weight:700;}
+  .ticker-item{white-space:nowrap;padding:5px 40px;font-family:var(--font-body);font-size:14px;text-transform:uppercase;letter-spacing:0.01em;display:flex;align-items:center;gap:10px;font-weight:700;}
   .ticker-item .ticker-time{opacity:0.75;font-weight:400;font-variant-numeric:tabular-nums;}
   .ticker-row-brandweer{background:#C81E1E;color:#FFFFFF;}
   .ticker-row-ambulance{background:#F4D03F;color:#1B2129;}
@@ -607,6 +610,13 @@
     return '<div class="card'+(heeftSpoed?' card-spoed':'')+'"><h2>'+(heeftSpoed?'\uD83D\uDEA8 ':'')+'Openstaande diensten <span class="eyebrow" style="margin:0;">alle posten</span></h2>'+items+'</div>';
   }
 
+  function renderMededelingenBanner(list){
+    if(!list || !list.length) return '';
+    return '<div class="mededelingen-banner">' + list.map(function(m){
+      return '<div class="mededeling-banner-item' + (m.belangrijk?' belangrijk':'') + '">📣 ' + escapeHtml(m.tekst) + '</div>';
+    }).join('') + '</div>';
+  }
+
   function renderDuikoefeningen(list){
     if(!list || !list.length) return '';
     var items = list.map(function(o){
@@ -924,15 +934,6 @@
     // onderdeel van het adres zelf -- die halen we er overal uit.
     tekst = tekst.replace(/\([^)]*\)/g, " ").replace(/\s+/g, " ").trim();
 
-    if(plaats){
-      // De plaatsnaam staat standaard nog een keer herhaald aan het eind van de
-      // tekst -- alles daarvóór is het eigenlijke adres, of dat nu een straat,
-      // een gebouwnaam, een kruising van 2 straten, of een snelweg (A12, N224) is.
-      var regexPlaats = new RegExp("(.*)\\b" + escapeRegex(plaats) + "\\b\\s*$", "i");
-      var match = regexPlaats.exec(tekst);
-      if(match && match[1].trim()) tekst = match[1].trim();
-    }
-
     // Bekende meldingsclassificaties (type melding) er nog uit filteren, waar
     // ze ook staan -- als hele frase, niet los per woord, want termen als
     // "Autom. brand OMS" horen bij elkaar.
@@ -944,6 +945,24 @@
     });
     tekst = tekst.replace(/\s+/g, " ").trim();
     if(!tekst) tekst = String(melding.tekst||"").trim(); // val terug als alles per ongeluk was weggefilterd
+
+    // De meldingtekst eindigt vrijwel altijd op de WERKELIJKE plaatsnaam van het
+    // incident -- en dat is niet altijd dezelfde plaats als de vaste 'plaats'-
+    // kolom van de melding (die eerder de regio/opschaling aangeeft dan de
+    // exacte incidentlocatie, bv. bij een uitruk net buiten de eigen regio).
+    // Wijkt het laatste woord van de meldingsplaats af, dan vertrouwen we de
+    // plaats die al in de tekst zelf staat -- anders zoeken we op een adres
+    // met de verkeerde plaats erachter geplakt, en vindt Nominatim niets.
+    var woorden = tekst.split(/\s+/);
+    var laatsteWoord = woorden[woorden.length-1] || "";
+    if(laatsteWoord && laatsteWoord.toLowerCase() !== plaats.toLowerCase() && /^[a-zA-Zéèëïöüïé'-]+$/.test(laatsteWoord) && laatsteWoord.length > 2){
+      plaats = laatsteWoord;
+      tekst = woorden.slice(0, -1).join(" ").trim();
+    } else if(plaats){
+      var regexPlaats = new RegExp("(.*)\\b" + escapeRegex(plaats) + "\\b\\s*$", "i");
+      var match = regexPlaats.exec(tekst);
+      if(match && match[1].trim()) tekst = match[1].trim();
+    }
 
     // Kruising van 2 straten (bv. "Galvanistraat Marconistraat", of "Kramersgildeplein
     // Lange Wal" met een tweewoordige straatnaam) herkennen: geef beide straatnamen
@@ -1357,9 +1376,10 @@
       var agendaP = sbSelect(DAG_URL, DAG_KEY_HEADERS, "kazerne_agenda?select=*&post_id=eq."+POST_ID+"&order=start_tijd.asc");
       var vcVoertuigenP = sbSelect(DAG_URL, DAG_KEY_HEADERS, "voertuigcontrole_voertuigen?select=*&post_id=eq."+POST_ID+"&actief=eq.true&order=volgorde.asc");
       var duikoefeningenP = POST_ID==='post2' ? sbSelect(DAG_URL, DAG_KEY_HEADERS, "dashboard_duikoefeningen?select=*") : Promise.resolve([]);
+      var mededelingenP = sbSelect(DAG_URL, DAG_KEY_HEADERS, "dashboard_mededelingen?select=*");
       var weerP = fetch("https://api.open-meteo.com/v1/forecast?latitude="+coords.lat+"&longitude="+coords.lon+"&current=temperature_2m,weather_code&hourly=temperature_2m,weather_code,precipitation_probability&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=Europe%2FAmsterdam&forecast_days=1").then(function(r){ return r.json(); }).catch(function(){ return null; });
 
-      var results = await Promise.all([personenP, configP, postenP, werkblokkenP, activiteitTypesP, dagP, dienstenP, weerP, wegP, knmiP, agendaP, vcVoertuigenP, duikoefeningenP]);
+      var results = await Promise.all([personenP, configP, postenP, werkblokkenP, activiteitTypesP, dagP, dienstenP, weerP, wegP, knmiP, agendaP, vcVoertuigenP, duikoefeningenP, mededelingenP]);
       var personen = (results[0]||[]).map(function(r){
         return { id:r.id, naam:r.naam, persoonsnummer:r.persoonsnummer, ploegId:r.ploeg_id, postId:r.post_id, type:r.type, specialismen:r.specialismen||[], email:r.email, actief:r.actief };
       });
@@ -1378,6 +1398,7 @@
       var agenda = results[10] || [];
       var vcVoertuigen = results[11] || [];
       var duikoefeningen = results[12] || [];
+      var mededelingen = (results[13] || []).filter(function(m){ return !m.post_ids || !m.post_ids.length || m.post_ids.indexOf(POST_ID)!==-1; });
       var vcUitvoeringenMap = {};
       if(vcVoertuigen.length){
         var vcIds = vcVoertuigen.map(function(v){ return v.id; });
@@ -1392,7 +1413,7 @@
         dag.extraPersonen.forEach(function(ep){ personenById[ep.personId] = { id: ep.personId, naam: ep.naam }; });
       }
 
-      laatsteData = { dag:dag, personenById:personenById, postConfig:postConfig, config:config, diensten:diensten, weer:weer, wegafsluitingen:wegafsluitingen, knmiWaarschuwingen:knmiWaarschuwingen, agenda:agenda, vcVoertuigen:vcVoertuigen, vcUitvoeringenMap:vcUitvoeringenMap, duikoefeningen:duikoefeningen };
+      laatsteData = { dag:dag, personenById:personenById, postConfig:postConfig, config:config, diensten:diensten, weer:weer, wegafsluitingen:wegafsluitingen, knmiWaarschuwingen:knmiWaarschuwingen, agenda:agenda, vcVoertuigen:vcVoertuigen, vcUitvoeringenMap:vcUitvoeringenMap, duikoefeningen:duikoefeningen, mededelingen:mededelingen };
       renderHuidigePagina();
 
       document.getElementById("footerNote").textContent = "Bijgewerkt " + new Date().toLocaleTimeString("nl-NL",{hour:"2-digit",minute:"2-digit"}) + " \u00b7 ververst elke minuut \u00b7 versie " + APP_VERSIE_DATUM;
@@ -1406,7 +1427,7 @@
     var grid = document.getElementById("grid");
     var d = laatsteData;
     if(HUIDIGE_PAGINA === 1){
-      grid.innerHTML = '<div style="grid-column:1/-1;">' + renderDagstaat(d.dag, d.personenById, d.postConfig, d.config.werkblokken, d.config.activiteitTypes, d.vcVoertuigen, d.vcUitvoeringenMap) + '</div>';
+      grid.innerHTML = '<div style="grid-column:1/-1;">' + renderMededelingenBanner(d.mededelingen) + renderDagstaat(d.dag, d.personenById, d.postConfig, d.config.werkblokken, d.config.activiteitTypes, d.vcVoertuigen, d.vcUitvoeringenMap) + '</div>';
     } else if(HUIDIGE_PAGINA === 2){
       grid.innerHTML = '<div style="grid-column:1/-1;" class="onderrij onderrij-alleen">'
         + renderAgenda(d.agenda)
