@@ -4,6 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>Brandweer Mobiel</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🚒</text></svg>">
 <link rel="manifest" href="start-mobiel-manifest.json">
 <meta name="theme-color" content="#12161B">
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
@@ -25,11 +26,13 @@
   .topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;}
   .brand{font-family:var(--font-display);font-weight:700;font-size:18px;text-transform:uppercase;}
   .brand small{display:block;font-family:var(--font-body);font-weight:400;font-size:10.5px;color:var(--text-muted);text-transform:none;}
-  .btn-wissel{background:var(--surface-2);border:1px solid var(--border);color:var(--text-muted);font-size:11px;padding:6px 10px;border-radius:6px;cursor:pointer;}
+
 
   .tegel-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  .mededeling-item{background:#232b34;border-left:4px solid #D7E100;padding:10px 14px;font-size:14px;font-weight:600;border-radius:8px;margin-bottom:10px;}
+  .mededeling-item.belangrijk{background:#3a1613;border-left-color:#e33629;color:#ffb3a8;}
   .tegel{position:relative;}
-  .tegel-bolletje{position:absolute;top:-6px;right:-6px;background:var(--red);color:#fff;font-family:var(--font-body);font-weight:700;font-size:12px;min-width:22px;height:22px;border-radius:11px;display:flex;align-items:center;justify-content:center;padding:0 5px;box-shadow:0 0 0 2px var(--bg);}
+  .tegel-bolletje{position:absolute;top:-6px;right:-6px;background:var(--red);color:#fff;font-family:var(--font-body);font-weight:700;font-size:12px;min-width:22px;height:22px;border-radius:11px;display:flex;align-items:center;justify-content:center;padding:0 5px;box-shadow:0 0 0 2px var(--bg);pointer-events:none;}
   .tegel{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:22px 14px;text-align:center;text-decoration:none;color:var(--text);display:flex;flex-direction:column;align-items:center;gap:8px;transition:border-color 0.15s;}
   .tegel:active{border-color:var(--red);}
   .tegel-icoon{font-size:34px;}
@@ -72,8 +75,10 @@
 <div id="app" class="hidden">
   <div class="topbar">
     <div class="brand">WELKOM<small id="ingelogdAls"></small></div>
-    <button class="btn-wissel" id="btnAndereGebruiker">wissel</button>
+
   </div>
+
+  <div id="mededelingenWrap"></div>
 
   <div class="tegel-grid">
     <a class="tegel" href="./dagstaat-mobiel.html">
@@ -91,6 +96,12 @@
       <div class="tegel-naam">PloegCompleet</div>
       <div class="tegel-sub">Diensten &amp; reacties</div>
       <span id="ploegBolletje" class="tegel-bolletje hidden"></span>
+    </a>
+    <a class="tegel" href="./voertuigcontrole-mobiel.html" id="tegelVoertuigcontrole">
+      <div class="tegel-icoon">✅</div>
+      <div class="tegel-naam">Voertuigcontrole</div>
+      <div class="tegel-sub">Dagelijkse controle</div>
+      <span id="vcBolletje" class="tegel-bolletje hidden"></span>
     </a>
   </div>
 
@@ -118,11 +129,10 @@
 
   function escapeHtml(s){ return String(s==null?"":s).replace(/[&<>"']/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
 
-  var PLOEG_URL = "https://gqqflxctuikbygqnbrli.supabase.co";
   async function laadPloegBolletje(persoonId){
     if(!persoonId) return;
     try{
-      var res = await fetch(PLOEG_URL + "/functions/v1/tel-open-diensten?persoonId=" + encodeURIComponent(persoonId));
+      var res = await fetch(DAG_URL + "/functions/v1/tel-open-diensten?persoonId=" + encodeURIComponent(persoonId));
       var data = await res.json();
       var bolletje = document.getElementById("ploegBolletje");
       if(data && data.aantal > 0){
@@ -134,14 +144,65 @@
     }catch(e){ /* geen bolletje tonen bij een fout -- geen probleem, gewoon stil laten */ }
   }
 
+  async function laadVoertuigcontroleBolletje(persoonId){
+    if(!persoonId) return;
+    var bolletje = document.getElementById("vcBolletje");
+    try{
+      var vandaag = new Date().toISOString().slice(0,10);
+      var posten = ["post1","post2","post3"];
+      var teTonenAantal = 0;
+      for(var i=0;i<posten.length;i++){
+        var postId = posten[i];
+        // Welke functie(s) heeft deze persoon vandaag, overdag, op deze post?
+        // Voertuigcontrole wordt bewust alleen door de dagbezetting gedaan.
+        var dagRows = await sbSelect("kv_store?key=eq." + encodeURIComponent("dag:"+postId+":"+vandaag) + "&select=value");
+        var dagData = dagRows[0] && dagRows[0].value;
+        var vi = dagData && dagData.voertuigIndeling && dagData.voertuigIndeling.dag;
+        if(!vi) continue;
+        var mijnFuncties = Object.keys(vi).filter(function(fid){ return vi[fid]===persoonId; });
+        if(!mijnFuncties.length) continue;
+        // Welke voertuigen van deze post horen bij die functie(s)?
+        var voertuigen = await sbSelect("voertuigcontrole_voertuigen?post_id=eq."+postId+"&actief=eq.true&select=id,dagstaat_positie");
+        var slugify = function(s){ return String(s||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,""); };
+        var mijnFunctieSlugs = mijnFuncties.map(slugify);
+        var mijnVoertuigIds = voertuigen.filter(function(v){ return mijnFunctieSlugs.indexOf(slugify(v.dagstaat_positie))!==-1; }).map(function(v){ return v.id; });
+        if(!mijnVoertuigIds.length) continue;
+        // Van die voertuigen: hoeveel zijn vandaag nog niet afgerond?
+        var uitvoeringen = await sbSelect("voertuigcontrole_uitvoeringen?datum=eq."+vandaag+"&voertuig_id=in.("+mijnVoertuigIds.join(",")+")&select=voertuig_id,afgerond");
+        var afgerondPerVoertuig = {};
+        uitvoeringen.forEach(function(u){ if(u.afgerond) afgerondPerVoertuig[u.voertuig_id] = true; });
+        mijnVoertuigIds.forEach(function(vid){ if(!afgerondPerVoertuig[vid]) teTonenAantal++; });
+      }
+      if(teTonenAantal > 0){
+        bolletje.textContent = teTonenAantal > 99 ? "99+" : teTonenAantal;
+        bolletje.classList.remove("hidden");
+      } else {
+        bolletje.classList.add("hidden");
+      }
+    }catch(e){ /* geen bolletje tonen bij een fout -- geen probleem, gewoon stil laten */ }
+  }
+
+  async function toonMededelingen(persoonId){
+    try{
+      var persoonRes = await sbSelect("personen?id=eq."+persoonId+"&select=post_id");
+      var postId = persoonRes[0] && persoonRes[0].post_id;
+      var vandaag = new Date().toISOString().slice(0,10);
+      var mededelingen = await sbSelect("dashboard_mededelingen?select=*&start_datum=lte."+vandaag+"&eind_datum=gte."+vandaag);
+      var relevant = (mededelingen||[]).filter(function(m){ return !m.post_ids || !m.post_ids.length || m.post_ids.indexOf(postId)!==-1; });
+      var wrap = document.getElementById("mededelingenWrap");
+      if(!relevant.length){ wrap.innerHTML = ""; return; }
+      wrap.innerHTML = relevant.map(function(m){
+        return '<div class="mededeling-item'+(m.belangrijk?' belangrijk':'')+'">📣 '+escapeHtml(m.tekst)+'</div>';
+      }).join("");
+    }catch(e){ /* geen mededelingen tonen bij een fout -- geen probleem, gewoon stil laten */ }
+  }
+
   function startApp(){
     document.getElementById("toegangsScherm").classList.add("hidden");
     document.getElementById("app").classList.remove("hidden");
-    document.getElementById("btnAndereGebruiker").addEventListener("click", function(){
-      try{ localStorage.removeItem(INGELOGD_KEY); }catch(e){}
-      location.reload();
-    });
     laadPloegBolletje(loginState.gekozenId);
+    laadVoertuigcontroleBolletje(loginState.gekozenId);
+    toonMededelingen(loginState.gekozenId);
   }
 
   // ---------- Persoonlijke pincode-login (zelfde systeem als Dagstaat/Dashboard/Bezetting) ----------
