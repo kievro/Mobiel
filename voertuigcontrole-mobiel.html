@@ -77,6 +77,44 @@
   .btn-afronden:disabled{opacity:0.4;cursor:not-allowed;}
   .afgerond-badge{background:rgba(76,175,125,0.15);border:1px solid #4CAF7D;color:#4CAF7D;border-radius:8px;padding:14px;text-align:center;font-family:var(--font-display);font-weight:700;text-transform:uppercase;margin-top:10px;}
 </style>
+<!-- SESSIE-BEWAKING begin (identiek in alle mobiele pagina's; wijzig overal tegelijk) -->
+<script>
+/* Na 14 dagen niet gebruikt wordt opnieuw de pincode gevraagd. Draait vóór de rest van
+   de pagina en haalt bij verlopen de onthouden persoon én de Supabase-sessie uit de
+   opslag van dit toestel. Dit is een zachte, app-kant-beperking (tegen een kwijtgeraakte
+   of uitgeleende telefoon), geen vervanging van een sessieduur aan de serverkant. */
+(function(){
+  var KEY = "brw-mobiel-laatst-actief", PERSOON = "brw-mobiel-ingelogd-persoon";
+  var MAX = 14 * 24 * 60 * 60 * 1000;
+  function verlopen(){
+    try{ var l = parseInt(localStorage.getItem(KEY) || "0", 10); return !!l && Date.now() - l > MAX; }
+    catch(e){ return false; }
+  }
+  function wis(){
+    try{
+      localStorage.removeItem(PERSOON);
+      for(var i = localStorage.length - 1; i >= 0; i--){
+        var k = localStorage.key(i);
+        if(k && k.indexOf("sb-") === 0 && k.indexOf("-auth-token") > 0) localStorage.removeItem(k);
+      }
+    }catch(e){}
+  }
+  function nu(){ try{ localStorage.setItem(KEY, String(Date.now())); }catch(e){} }
+
+  if(verlopen()) wis();
+  nu();
+
+  var laatsteSchrijf = Date.now();
+  function actief(){ var t = Date.now(); if(t - laatsteSchrijf > 60000){ laatsteSchrijf = t; nu(); } }
+  ["click","touchstart","keydown"].forEach(function(ev){ document.addEventListener(ev, actief, true); });
+  // Een app die op de achtergrond is blijven staan: bij terugkomen opnieuw controleren.
+  document.addEventListener("visibilitychange", function(){
+    if(document.hidden) return;
+    if(verlopen()){ wis(); nu(); location.reload(); } else { actief(); }
+  });
+})();
+</script>
+<!-- SESSIE-BEWAKING einde -->
 </head>
 <body>
 
