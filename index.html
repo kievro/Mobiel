@@ -103,6 +103,12 @@
       <div class="tegel-sub">Dagelijkse controle</div>
       <span id="vcBolletje" class="tegel-bolletje hidden"></span>
     </a>
+    <a class="tegel hidden" href="./overdracht-mobiel.html" id="tegelOverdracht">
+      <div class="tegel-icoon">📝</div>
+      <div class="tegel-naam">Overdracht</div>
+      <div class="tegel-sub">Dagjournaal bevelvoerders</div>
+      <span id="overdrachtBolletje" class="tegel-bolletje hidden"></span>
+    </a>
   </div>
 
   <div class="footer-note">Eén keer inloggen, alle onderdelen bereikbaar.</div>
@@ -197,12 +203,29 @@
     }catch(e){ /* geen mededelingen tonen bij een fout -- geen probleem, gewoon stil laten */ }
   }
 
+  // De Overdracht-tegel is alleen voor bevelvoerders, ploegcommandanten (pco) en
+  // beheer. Rol en teller komen uit tabellen die alleen voor ingelogde
+  // gebruikers leesbaar zijn; mislukt dat, dan blijft de tegel gewoon verborgen.
+  async function toonOverdrachtTegel(persoonId){
+    try{
+      var rolRes = await supa.from("personeel_auth").select("rol").eq("persoon_id", persoonId).maybeSingle();
+      var rol = rolRes.data && rolRes.data.rol;
+      if(["bevelvoerder","pco","beheer"].indexOf(rol) === -1) return;
+      document.getElementById("tegelOverdracht").classList.remove("hidden");
+      var telRes = await supa.from("overdrachten").select("id", { count: "exact", head: true }).eq("is_open", true);
+      var aantal = telRes.count || 0;
+      var b = document.getElementById("overdrachtBolletje");
+      if(aantal > 0){ b.textContent = aantal > 99 ? "99+" : aantal; b.classList.remove("hidden"); }
+    }catch(e){ /* tegel blijft verborgen -- geen probleem */ }
+  }
+
   function startApp(){
     document.getElementById("toegangsScherm").classList.add("hidden");
     document.getElementById("app").classList.remove("hidden");
     laadPloegBolletje(loginState.gekozenId);
     laadVoertuigcontroleBolletje(loginState.gekozenId);
     toonMededelingen(loginState.gekozenId);
+    toonOverdrachtTegel(loginState.gekozenId);
   }
 
   // ---------- Persoonlijke pincode-login (zelfde systeem als Dagstaat/Dashboard/Bezetting) ----------
