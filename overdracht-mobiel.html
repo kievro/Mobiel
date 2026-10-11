@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#12161B" />
+<title>Overdracht — Brandweer Gelderland Midden</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📝</text></svg>">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Overdracht">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#12161B; --surface:#1B2129; --surface-2:#232B34; --border:#2E3843;
+    --text:#EDEFF1; --text-muted:#8A96A3;
+    --red:#E33629; --red-dim:#3A1613; --lime:#D7E100; --amber:#F0A93A; --green:#4CAF7D;
+    --font-display:'Barlow Condensed',Arial,sans-serif; --font-body:'Open Sans',Arial,sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:var(--font-body);}
+  h1,h2{font-family:var(--font-display);margin:0;}
+  .hidden{display:none !important;}
+  #app{max-width:520px;margin:0 auto;padding:calc(14px + env(safe-area-inset-top)) 14px calc(110px + env(safe-area-inset-bottom));}
+
+  .topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;}
+  .brand{font-family:var(--font-display);font-weight:700;font-size:20px;text-transform:uppercase;}
+  .brand small{display:block;font-family:var(--font-body);font-weight:400;font-size:10.5px;color:var(--text-muted);text-transform:none;}
+  .icon-btn{background:var(--surface-2);border:1px solid var(--border);color:var(--text);width:44px;height:44px;border-radius:10px;font-size:19px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;text-decoration:none;}
+
+  .filter-row{margin-bottom:14px;}
+  .filter-row select{width:100%;background:var(--surface-2);border:1px solid var(--border);color:var(--text);padding:12px;border-radius:10px;font-size:15px;font-family:inherit;}
+
+  .sectie-kop{font-family:var(--font-display);font-weight:700;font-size:14px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);margin:18px 2px 8px;display:flex;align-items:center;gap:8px;}
+  .teller{background:var(--amber);color:#12161B;border-radius:10px;padding:0 8px;font-size:12px;font-family:var(--font-body);font-weight:700;}
+  .kaart{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:8px;}
+  .kaart.open{border-left:4px solid var(--amber);}
+  .kaart.klaar{opacity:.78;}
+  .tekst{font-size:15px;line-height:1.4;white-space:pre-wrap;word-wrap:break-word;}
+  .meta{font-size:11.5px;color:var(--text-muted);margin-top:6px;}
+  .acties{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;}
+  .btn{border:1px solid var(--border);background:var(--surface-2);color:var(--text);border-radius:8px;padding:10px 14px;font-size:14px;font-family:inherit;cursor:pointer;min-height:44px;}
+  .btn.primair{background:var(--lime);color:#12161B;border-color:var(--lime);font-weight:700;}
+  .btn.klein{padding:8px 12px;min-height:38px;font-size:13px;}
+  .btn.gevaar{color:#FF8A80;}
+  .dag-kop{font-family:var(--font-display);font-weight:700;font-size:14px;text-transform:uppercase;color:var(--text-muted);margin:16px 2px 6px;}
+  .pill{display:inline-block;font-size:10.5px;font-weight:700;border-radius:10px;padding:2px 8px;margin-right:6px;}
+  .pill.klaar{background:rgba(76,175,125,.18);color:var(--green);}
+  .leeg{color:var(--text-muted);font-size:13px;font-style:italic;padding:6px 2px;}
+  .melding{background:var(--red-dim);border:1px solid var(--red);border-radius:10px;padding:12px 14px;font-size:14px;margin-bottom:12px;}
+
+  .fab{position:fixed;right:16px;bottom:calc(16px + env(safe-area-inset-bottom));background:var(--lime);color:#12161B;border:none;border-radius:30px;padding:15px 22px;font-family:var(--font-display);font-weight:700;font-size:17px;text-transform:uppercase;letter-spacing:.03em;box-shadow:0 6px 18px rgba(0,0,0,.5);cursor:pointer;z-index:50;}
+
+  .sheet-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:100;display:flex;align-items:flex-end;justify-content:center;}
+  .sheet{background:var(--surface);border:1px solid var(--border);border-radius:16px 16px 0 0;width:100%;max-width:520px;padding:16px 16px calc(16px + env(safe-area-inset-bottom));}
+  .sheet h2{font-size:18px;text-transform:uppercase;margin-bottom:10px;}
+  .sheet textarea{width:100%;min-height:150px;background:var(--surface-2);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:12px;font-size:16px;font-family:inherit;resize:vertical;}
+  .sheet label.vink{display:flex;gap:10px;align-items:flex-start;margin:12px 0;font-size:14px;line-height:1.35;cursor:pointer;}
+  .sheet label.vink input{width:22px;height:22px;flex-shrink:0;margin-top:1px;}
+  .sheet .rij{display:flex;gap:10px;margin-top:6px;}
+  .sheet .rij .btn{flex:1;}
+  .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(86px + env(safe-area-inset-bottom));background:var(--surface-2);border:1px solid var(--lime);color:var(--text);padding:10px 16px;border-radius:10px;font-size:13.5px;z-index:200;max-width:90%;text-align:center;box-shadow:0 6px 18px rgba(0,0,0,.5);}
+  .laden{color:var(--text-muted);text-align:center;padding:40px 0;font-size:14px;}
+</style>
+</head>
+<body>
+<div id="app"><div class="laden">Bezig met laden…</div></div>
+<div id="toast" class="toast hidden"></div>
+<div id="sheetOverlay" class="sheet-overlay hidden"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+(function(){
+  "use strict";
+
+  var DAG_URL = "https://iyquepqubfqrhybriqif.supabase.co";
+  var DAG_KEY = "sb_publishable_Pb0fFfxZQggKnFCtJYMH9A_avw0GaPn";
+  var sb = window.supabase.createClient(DAG_URL, DAG_KEY);
+
+  var INGELOGD_KEY = "brw-mobiel-ingelogd-persoon"; // gedeeld met de hub en de andere mobiele apps
+  var POST_KEY = "brw-overdracht-post";
+  var TOEGESTAAN = ["bevelvoerder","pco","beheer"];      // pco = ploegcommandant
+  var POSTEN_TERUGVAL = [{id:"post1",naam:"Arnhem Noord"},{id:"post2",naam:"Arnhem Zuid"},{id:"post3",naam:"Ede Stad"},{id:"mtu7q5xoq5bb71",naam:"Flexpool"}];
+
+  var state = { ik:null, ikNaam:"", rol:null, posten:[], post:null, dagen:7,
+                notities:[], openAlle:[], laden:true, fout:null, toegang:true };
+
+  // ---------- hulpjes ----------
+  function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]; }); }
+  function uid(){ return "o_" + Date.now().toString(36) + Math.random().toString(36).slice(2,8); }
+  function pad(n){ return (n<10?"0":"") + n; }
+  function datumKey(d){ return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate()); }
+  function parseKey(k){ var p=k.split("-"); return new Date(+p[0], +p[1]-1, +p[2]); }
+  function dagLabel(key){
+    var vandaag = datumKey(new Date()), gisteren = datumKey(new Date(Date.now()-86400000));
+    if(key===vandaag) return "Vandaag";
+    if(key===gisteren) return "Gisteren";
+    return parseKey(key).toLocaleDateString("nl-NL",{weekday:"short",day:"numeric",month:"short"});
+  }
+  function tijdLabel(iso){ return new Date(iso).toLocaleTimeString("nl-NL",{hour:"2-digit",minute:"2-digit"}); }
+  function datumTijdLabel(iso){ var d=new Date(iso); return d.toLocaleDateString("nl-NL",{weekday:"short",day:"numeric",month:"short"})+" "+tijdLabel(iso); }
+  function postNaam(id){ var p = state.posten.filter(function(x){return x.id===id;})[0]; return p ? p.naam : id; }
+  function mijnNotitie(n){ return n.aangemaakt_door_id===state.ik || state.rol==="beheer"; }
+
+  var toastTimer = null;
+  function toast(tekst){
+    var el = document.getElementById("toast");
+    el.textContent = tekst; el.classList.remove("hidden");
+    clearTimeout(toastTimer); toastTimer = setTimeout(function(){ el.classList.add("hidden"); }, 3500);
+  }
+
+  // Een tijdelijke netwerkhapering mag nooit leiden tot een stil lege lijst:
+  // eerst een paar keer opnieuw proberen, daarna een duidelijke fout tonen.
+  async function metRetry(maakQuery){
+    var laatste = null;
+    for(var i=0;i<3;i++){
+      var res = await maakQuery();
+      if(!res.error) return res.data || [];
+      laatste = res.error;
+      await new Promise(function(r){ setTimeout(r, 300*(i+1)); });
+    }
+    throw laatste;
+  }
+
+  // ---------- data ----------
+  async function laad(){
+    try{
+      var sinds = datumKey(new Date(Date.now() - state.dagen*86400000));
+      var res = await Promise.all([
+        metRetry(function(){ return sb.from("overdrachten").select("*").eq("post_id", state.post).eq("is_open", false).gte("datum", sinds).order("datum",{ascending:false}).order("aangemaakt_op",{ascending:false}); }),
+        metRetry(function(){ return sb.from("overdrachten").select("*").eq("is_open", true).order("datum",{ascending:true}).order("aangemaakt_op",{ascending:true}); })
+      ]);
+      state.notities = res[0];
+      state.openAlle = res[1];
+      state.fout = null;
+    }catch(e){
+      state.fout = "Kon de notities niet (volledig) ophalen" + (e && e.message ? " (" + e.message + ")" : "") + ".";
+    }
+    state.laden = false;
+    render();
+  }
+
+  // ---------- weergave ----------
+  function kaartHtml(n, soort){
+    var wie = esc(n.aangemaakt_door || "Onbekend");
+    var meta = wie + " · " + (soort==="open" ? dagLabel(n.datum)+" "+tijdLabel(n.aangemaakt_op) : tijdLabel(n.aangemaakt_op));
+    var klaar = n.afgehandeld_op ? '<div class="meta"><span class="pill klaar">✓ Afgehandeld</span>' + esc(n.afgehandeld_door||"") + " · " + datumTijdLabel(n.afgehandeld_op) + "</div>" : "";
+    var acties = "";
+    if(soort==="open") acties += '<button class="btn klein primair" data-actie="afhandelen" data-id="'+esc(n.id)+'">✓ Afhandelen</button>';
+    if(mijnNotitie(n)){
+      acties += '<button class="btn klein" data-actie="bewerken" data-id="'+esc(n.id)+'">Bewerken</button>';
+      acties += '<button class="btn klein gevaar" data-actie="verwijderen" data-id="'+esc(n.id)+'">Verwijderen</button>';
+    }
+    return '<div class="kaart '+(soort==="open"?"open":(n.afgehandeld_op?"klaar":""))+'">'
+      + '<div class="tekst">'+esc(n.tekst)+'</div>'
+      + '<div class="meta">'+meta+'</div>' + klaar
+      + (acties ? '<div class="acties">'+acties+'</div>' : "")
+      + '</div>';
+  }
+
+  function render(){
+    var app = document.getElementById("app");
+    if(state.laden){ app.innerHTML = '<div class="laden">Bezig met laden…</div>'; return; }
+    if(!state.toegang){
+      app.innerHTML = '<div class="topbar"><div class="brand">Overdracht</div><a class="icon-btn" href="./index.html" title="Terug">🏠</a></div>'
+        + '<div class="melding">Deze pagina is voor bevelvoerders, ploegcommandanten en beheer.</div>';
+      return;
+    }
+    var openHier = state.openAlle.filter(function(n){ return n.post_id===state.post; });
+    var openPerPost = {};
+    state.openAlle.forEach(function(n){ openPerPost[n.post_id] = (openPerPost[n.post_id]||0)+1; });
+
+    var opties = state.posten.map(function(p){
+      var c = openPerPost[p.id] ? " ("+openPerPost[p.id]+" open)" : "";
+      return '<option value="'+esc(p.id)+'"'+(p.id===state.post?" selected":"")+'>'+esc(p.naam)+c+'</option>';
+    }).join("");
+
+    var html = '<div class="topbar"><div class="brand">Overdracht<small>Dagjournaal · '+esc(postNaam(state.post))+'</small></div>'
+      + '<div style="display:flex;gap:8px;"><button class="icon-btn" data-actie="ververs" title="Verversen">↻</button><a class="icon-btn" href="./index.html" title="Terug naar overzicht">🏠</a></div></div>';
+    if(state.fout) html += '<div class="melding">'+esc(state.fout)+' <button class="btn klein" data-actie="ververs" style="margin-left:6px;">Opnieuw proberen</button></div>';
+    html += '<div class="filter-row"><select id="postSelect">'+opties+'</select></div>';
+
+    html += '<div class="sectie-kop">Open punten'+(openHier.length?' <span class="teller">'+openHier.length+'</span>':'')+'</div>';
+    html += openHier.length ? openHier.map(function(n){ return kaartHtml(n,"open"); }).join("")
+                            : '<div class="leeg">Geen openstaande punten voor deze post.</div>';
+
+    html += '<div class="sectie-kop">Journaal</div>';
+    if(!state.notities.length){
+      html += '<div class="leeg">Nog geen notities in deze periode.</div>';
+    } else {
+      var perDag = {}, volgorde = [];
+      state.notities.forEach(function(n){ if(!perDag[n.datum]){ perDag[n.datum]=[]; volgorde.push(n.datum); } perDag[n.datum].push(n); });
+      volgorde.forEach(function(d){
+        html += '<div class="dag-kop">'+esc(dagLabel(d))+'</div>' + perDag[d].map(function(n){ return kaartHtml(n,"journaal"); }).join("");
+      });
+    }
+    html += '<div style="text-align:center;margin-top:14px;"><button class="btn" data-actie="meer">Oudere notities tonen</button></div>';
+    html += '<button class="fab" data-actie="nieuw">+ Notitie</button>';
+    app.innerHTML = html;
+  }
+
+  // ---------- invoerscherm (onderaan) ----------
+  function openSheet(bestaand){
+    var ov = document.getElementById("sheetOverlay");
+    var magOpenVink = !bestaand || !bestaand.afgehandeld_op;
+    ov.innerHTML = '<div class="sheet">'
+      + '<h2>'+(bestaand?"Notitie bewerken":"Nieuwe notitie")+' <span style="font-family:var(--font-body);font-size:12px;color:var(--text-muted);text-transform:none;">· '+esc(postNaam(bestaand?bestaand.post_id:state.post))+'</span></h2>'
+      + '<textarea id="sheetTekst" maxlength="2000" placeholder="Wat moet de volgende bevelvoerder weten?">'+esc(bestaand?bestaand.tekst:"")+'</textarea>'
+      + (magOpenVink ? '<label class="vink"><input type="checkbox" id="sheetOpen" '+(bestaand&&bestaand.is_open?"checked":"")+'><span><strong>Open punt</strong> — blijft bovenaan staan tot iemand het afvinkt</span></label>' : '')
+      + '<div class="meta" style="margin:0 0 8px;">Geen persoons- of medische gegevens in een notitie zetten.</div>'
+      + '<div class="rij"><button class="btn" data-actie="sluit">Annuleren</button><button class="btn primair" data-actie="opslaan">Opslaan</button></div>'
+      + '</div>';
+    ov.classList.remove("hidden");
+    ov.dataset.bewerkId = bestaand ? bestaand.id : "";
+    setTimeout(function(){ var t=document.getElementById("sheetTekst"); if(t) t.focus(); }, 50);
+  }
+  function sluitSheet(){ var ov=document.getElementById("sheetOverlay"); ov.classList.add("hidden"); ov.innerHTML=""; ov.dataset.bewerkId=""; }
+
+  function zoekNotitie(id){
+    return state.notities.concat(state.openAlle).filter(function(n){ return n.id===id; })[0];
+  }
+
+  async function opslaan(){
+    var ov = document.getElementById("sheetOverlay");
+    var tekst = (document.getElementById("sheetTekst").value || "").trim();
+    var vink = document.getElementById("sheetOpen");
+    var isOpen = vink ? vink.checked : false;
+    if(!tekst){ toast("Vul eerst een tekst in."); return; }
+    var knop = ov.querySelector('[data-actie="opslaan"]'); knop.disabled = true; knop.textContent = "Bezig…";
+    try{
+      var bewerkId = ov.dataset.bewerkId;
+      if(bewerkId){
+        var bestaand = zoekNotitie(bewerkId);
+        var wijz = { tekst: tekst };
+        if(vink){ wijz.is_open = isOpen; }
+        var r1 = await sb.from("overdrachten").update(wijz).eq("id", bewerkId);
+        if(r1.error) throw r1.error;
+      } else {
+        var r2 = await sb.from("overdrachten").insert({
+          id: uid(), post_id: state.post, datum: datumKey(new Date()), tekst: tekst, is_open: isOpen,
+          aangemaakt_door: state.ikNaam, aangemaakt_door_id: state.ik
+        });
+        if(r2.error) throw r2.error;
+      }
+      sluitSheet(); toast("Opgeslagen"); await laad();
+    }catch(e){
+      knop.disabled = false; knop.textContent = "Opslaan";
+      toast("Opslaan mislukt" + (e && e.message ? ": " + e.message : "") + ". Probeer het opnieuw.");
+    }
+  }
+
+  async function afhandelen(id){
+    try{
+      var r = await sb.from("overdrachten").update({ is_open:false, afgehandeld_door:state.ikNaam, afgehandeld_door_id:state.ik, afgehandeld_op:new Date().toISOString() }).eq("id", id);
+      if(r.error) throw r.error;
+      toast("Afgevinkt"); await laad();
+    }catch(e){ toast("Afvinken mislukt" + (e && e.message ? ": " + e.message : "") + "."); }
+  }
+  async function verwijderen(id){
+    if(!confirm("Deze notitie verwijderen?")) return;
+    try{
+      var r = await sb.from("overdrachten").delete().eq("id", id);
+      if(r.error) throw r.error;
+      toast("Verwijderd"); await laad();
+    }catch(e){ toast("Verwijderen mislukt" + (e && e.message ? ": " + e.message : "") + "."); }
+  }
+
+  // ---------- gebeurtenissen ----------
+  document.addEventListener("click", function(e){
+    var el = e.target.closest("[data-actie]");
+    if(!el) return;
+    var a = el.dataset.actie, id = el.dataset.id;
+    if(a==="nieuw") openSheet(null);
+    else if(a==="sluit") sluitSheet();
+    else if(a==="opslaan") opslaan();
+    else if(a==="bewerken"){ var n = zoekNotitie(id); if(n) openSheet(n); }
+    else if(a==="afhandelen") afhandelen(id);
+    else if(a==="verwijderen") verwijderen(id);
+    else if(a==="ververs"){ state.laden = false; laad(); toast("Verversen…"); }
+    else if(a==="meer"){ state.dagen += 14; laad(); }
+  });
+  document.addEventListener("change", function(e){
+    if(e.target && e.target.id==="postSelect"){
+      state.post = e.target.value;
+      try{ localStorage.setItem(POST_KEY, state.post); }catch(x){}
+      state.dagen = 7; laad();
+    }
+  });
+  document.getElementById("sheetOverlay").addEventListener("click", function(e){ if(e.target===this) sluitSheet(); });
+  document.addEventListener("visibilitychange", function(){ if(!document.hidden && state.toegang && !state.laden) laad(); });
+
+  var herlaadTimer = null;
+  function planHerlaad(){ clearTimeout(herlaadTimer); herlaadTimer = setTimeout(laad, 400); }
+  function startRealtime(){
+    sb.channel("overdracht-journaal")
+      .on("postgres_changes", { event:"*", schema:"public", table:"overdrachten" }, function(payload){
+        var n = payload.new || {};
+        if(payload.eventType==="INSERT" && n.aangemaakt_door_id && n.aangemaakt_door_id!==state.ik){
+          toast((n.aangemaakt_door||"Iemand") + " plaatste een notitie (" + postNaam(n.post_id) + ")");
+        }
+        planHerlaad();
+      }).subscribe();
+  }
+
+  // ---------- start ----------
+  async function start(){
+    // Centrale login hergebruiken: zonder geldige sessie én bekende persoon terug naar de hub.
+    var id = null;
+    try{ id = localStorage.getItem(INGELOGD_KEY); }catch(e){}
+    var sessieOk = false;
+    try{ var s = await sb.auth.getSession(); sessieOk = !!(s.data && s.data.session); }catch(e){}
+    if(!id || !sessieOk){ location.href = "./index.html"; return; }
+    state.ik = id;
+
+    try{
+      var res = await Promise.all([
+        sb.from("personeel_auth").select("rol").eq("persoon_id", id).maybeSingle(),
+        sb.from("personen").select("naam,post_id").eq("id", id).maybeSingle(),
+        sb.from("posten").select("id,naam")
+      ]);
+      if(res[0].error) throw res[0].error;
+      state.rol = res[0].data ? res[0].data.rol : null;
+      state.ikNaam = res[1].data ? res[1].data.naam : "";
+      state.posten = (res[2].data && res[2].data.length) ? res[2].data : POSTEN_TERUGVAL;
+      var eigenPost = res[1].data ? res[1].data.post_id : null;
+      var bewaard = null; try{ bewaard = localStorage.getItem(POST_KEY); }catch(e){}
+      var geldig = function(p){ return p && state.posten.some(function(x){ return x.id===p; }); };
+      state.post = geldig(bewaard) ? bewaard : (geldig(eigenPost) ? eigenPost : state.posten[0].id);
+    }catch(e){
+      state.laden = false; state.fout = "Kon je gegevens niet ophalen" + (e && e.message ? " (" + e.message + ")" : "") + ".";
+      state.toegang = false;
+      document.getElementById("app").innerHTML = '<div class="melding">'+esc(state.fout)+' <a href="./overdracht-mobiel.html" style="color:var(--lime)">Opnieuw proberen</a></div>';
+      return;
+    }
+
+    if(TOEGESTAAN.indexOf(state.rol) === -1){ state.toegang = false; state.laden = false; render(); return; }
+    await laad();
+    startRealtime();
+  }
+  start();
+})();
+</script>
+</body>
+</html>
