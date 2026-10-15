@@ -157,7 +157,7 @@
       var res = await maakQuery();
       if(!res.error) return res.data || [];
       laatste = res.error;
-      await new Promise(function(r){ setTimeout(r, 300*(i+1)); });
+      if(i < 2) await new Promise(function(r){ setTimeout(r, 300*(i+1)); });
     }
     throw laatste;
   }
