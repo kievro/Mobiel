@@ -196,6 +196,22 @@ select.add-select{background:var(--surface-2);border:1px dashed var(--border);co
 .activiteit-titel{font-size:13px;font-weight:600;line-height:1.3;}
 .activiteit-meta{font-size:11px;color:var(--text-dim);margin-top:3px;font-family:var(--font-mono);}
 .empty-hint{color:var(--text-faint);font-size:12px;font-style:italic;padding:6px 0;}
+.ovd-wrap{max-width:900px;margin:0 auto;}
+.ovd-kop{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:14px;}
+.ovd-kop h2{font-family:var(--font-display);font-size:18px;margin:0 auto 0 0;}
+.ovd-kop select{background:var(--surface-2);border:1px solid var(--border-soft);color:var(--text);border-radius:8px;padding:8px 10px;font-size:13px;}
+.ovd-sectie{font-family:var(--font-display);font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-dim);margin:18px 0 8px;display:flex;gap:8px;align-items:center;}
+.ovd-teller{background:var(--amber,#F0A93A);color:#12161B;border-radius:10px;padding:0 8px;font-size:12px;font-weight:700;font-family:var(--font-body);}
+.ovd-kaart{background:var(--surface-2);border:1px solid var(--border-soft);border-radius:var(--radius);padding:10px 14px;margin-bottom:8px;}
+.ovd-kaart.open{border-left:4px solid var(--amber,#F0A93A);}
+.ovd-kaart.klaar{opacity:.82;}
+.ovd-tekst{font-size:14px;white-space:pre-wrap;word-wrap:break-word;}
+.ovd-meta{font-size:11.5px;color:var(--text-faint);margin-top:4px;}
+.ovd-acties{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;}
+.ovd-dag{font-family:var(--font-display);font-size:13px;text-transform:uppercase;color:var(--text-dim);margin:14px 0 6px;}
+.ovd-leeg{color:var(--text-faint);font-size:13px;font-style:italic;padding:4px 2px;}
+.ovd-melding{background:var(--surface-2);border:1px solid var(--border-soft);border-radius:var(--radius);padding:12px 16px;font-size:14px;margin-bottom:12px;}
+.ovd-melding.fout{border-color:var(--red-text);}
 .mededelingen-paneel{background:var(--surface-2);border:1px solid var(--border-soft);border-radius:var(--radius);padding:12px 16px;margin-bottom:14px;}
 .mededelingen-kop{font-family:var(--font-display);font-size:13px;color:var(--text-dim);}
 .mededeling-item{padding:8px 0;border-top:1px solid var(--border-soft);}
@@ -364,6 +380,10 @@ footer.pagefoot{margin-top:40px;text-align:center;color:var(--text-faint);font-s
   .p-oef-block h2{font-size:12px;font-family:var(--font-display);margin-bottom:4px;}
   .p-oef-item{font-size:10px;margin-bottom:5px;line-height:1.4;}
   .p-foot{margin-top:10px;font-size:9px;color:#777;font-family:var(--font-mono);}
+  .p-ovd-dag{font-size:12px;font-weight:700;margin:10px 0 4px;}
+  .p-ovd-item{font-size:11.5px;line-height:1.4;margin:0 0 6px;padding-left:8px;border-left:3px solid #999;break-inside:avoid;white-space:pre-wrap;}
+  .p-ovd-item.open{border-left-color:#c77700;}
+  .p-ovd-meta{font-size:9.5px;color:#555;}
 }
 </style>
 </head>
@@ -413,6 +433,7 @@ footer.pagefoot{margin-top:40px;text-align:center;color:var(--text-faint);font-s
     <button data-tab="voertuigindeling">Voertuigindeling</button>
     <button data-tab="voertuigcontrole">Voertuigcontrole</button>
     <button data-tab="planning" class="active">Planning</button>
+    <button data-tab="overdracht">Overdracht</button>
     <button data-tab="oefenrooster">Oefenrooster</button>
     <button data-tab="diensten">Diensten</button>
     <button data-tab="personeel">Personeel</button>
@@ -425,6 +446,8 @@ footer.pagefoot{margin-top:40px;text-align:center;color:var(--text-faint);font-s
   <section id="tab-voertuigcontrole" class="hidden"><div id="voertuigcontroleOverzicht"></div></section>
 
   <section id="tab-planning"><div class="planning-wrap" id="planningGrid"></div></section>
+
+  <section id="tab-overdracht" class="hidden"><div class="ovd-wrap" id="overdrachtPaneel"></div></section>
 
   <section id="tab-diensten" class="hidden">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
@@ -592,13 +615,13 @@ const PLOEGCOMPLEET_URL = './ploegcompleet.html';
 const ROL_TOEGANG = {
   manschap:     {label:'Manschap',     tabs:['dashboard'], instellingen:false, gebruikersbeheer:false},
   instructeur:  {label:'Instructeur',  tabs:['dashboard','planning','oefenrooster'], instellingen:false, gebruikersbeheer:false},
-  bevelvoerder: {label:'Bevelvoerder', tabs:['dashboard','voertuigindeling','voertuigcontrole','planning','oefenrooster','diensten'], instellingen:false, gebruikersbeheer:false},
-  pco:          {label:'PCO',          tabs:['dashboard','voertuigindeling','voertuigcontrole','planning','oefenrooster','diensten','personeel'], instellingen:false, gebruikersbeheer:false},
+  bevelvoerder: {label:'Bevelvoerder', tabs:['dashboard','voertuigindeling','voertuigcontrole','planning','overdracht','oefenrooster','diensten'], instellingen:false, gebruikersbeheer:false},
+  pco:          {label:'PCO',          tabs:['dashboard','voertuigindeling','voertuigcontrole','planning','overdracht','oefenrooster','diensten','personeel'], instellingen:false, gebruikersbeheer:false},
   // Roosterplanning: rol die specifiek de verhoogde rechten binnen PloegCompleet
   // geeft (diensten aanmaken/toewijzen, extra accounts beheren). Binnen Dagstaat
   // zelf geen extra tabbladen -- die verhoogde rechten gelden alleen in PloegCompleet.
   roosterplanning: {label:'Roosterplanning', tabs:['dashboard'], instellingen:false, gebruikersbeheer:false},
-  beheer:       {label:'Beheer',       tabs:['dashboard','voertuigindeling','voertuigcontrole','planning','oefenrooster','diensten','personeel','log'], instellingen:true, gebruikersbeheer:true}
+  beheer:       {label:'Beheer',       tabs:['dashboard','voertuigindeling','voertuigcontrole','planning','overdracht','oefenrooster','diensten','personeel','log'], instellingen:true, gebruikersbeheer:true}
 };
 
 async function sGet(key,fallback,shared){
@@ -721,6 +744,8 @@ const State = {
   oefenmaterialen:[], vcVoertuigen:[], oefenkaarten:[],
   duikGeladen:false, duikLaadFout:null, duikNormen:[], duikRegistraties:[], duikLogregels:[], duikInstellingen:null, duikOefeningen:[],
   mededelingen:[],
+  overdrachten:[], overdrachtOpen:[], overdrachtGeladen:false, overdrachtLaden:false, overdrachtFout:null,
+  overdrachtPost:null, overdrachtDagen:7, overdrachtKanaal:null,
   oefSubtab:'rooster', duikPersoonId:null
 };
 
@@ -1872,6 +1897,7 @@ function render(){
   if(State.activeTab==='voertuigindeling') renderVoertuigTab();
   if(State.activeTab==='voertuigcontrole') renderVoertuigcontroleOverzicht();
   if(State.activeTab==='planning') renderPlanning();
+  if(State.activeTab==='overdracht') renderOverdracht();
   if(State.activeTab==='oefenrooster') renderOefenrooster();
   if(State.activeTab==='personeel') renderPersoneel();
   if(State.activeTab==='log') renderLog();
@@ -1956,7 +1982,7 @@ function pasRolToe(){
   if(!toegang.tabs.includes(State.activeTab)){
     State.activeTab = toegang.tabs[0];
     document.querySelectorAll('nav.tabs button').forEach(b=>b.classList.toggle('active', b.dataset.tab===State.activeTab));
-    ['dashboard','voertuigindeling','planning','oefenrooster','diensten','personeel','log'].forEach(t=>{
+    ['dashboard','voertuigindeling','planning','overdracht','oefenrooster','diensten','personeel','log'].forEach(t=>{
       const el = document.getElementById('tab-'+t);
       if(el) el.classList.toggle('hidden', t!==State.activeTab);
     });
@@ -2556,6 +2582,217 @@ function renderOefeningDetails(postId, datumStr){
   }).join('');
   return `<div class="oef-details-block"><div class="section-label">Oefening(en) op deze dag</div>${items}</div>`;
 }
+/* OVERDRACHT-MODULE begin */
+/* ================= Overdracht (dagjournaal bevelvoerders) =================
+   Zelfde gegevens als de mobiele pagina overdracht-mobiel.html (tabel
+   'overdrachten'). Alleen voor bevelvoerder, pco (ploegcommandant) en beheer. */
+const OVERDRACHT_ROLLEN = ['bevelvoerder','pco','beheer'];
+
+// Een tijdelijke netwerkhapering mag nooit leiden tot een stil lege lijst:
+// eerst een paar keer opnieuw proberen, daarna een duidelijke fout tonen.
+async function overdrachtMetRetry(maakQuery){
+  let laatste = null;
+  for(let i=0; i<3; i++){
+    const res = await maakQuery().then(r=>r, e=>({error:e}));
+    if(!res.error) return res.data || [];
+    laatste = res.error;
+    if(i<2) await new Promise(r=>setTimeout(r, 300*(i+1)));
+  }
+  throw laatste;
+}
+async function laadOverdrachten(){
+  if(State.overdrachtLaden) return;
+  State.overdrachtLaden = true;
+  try{
+    if(!State.overdrachtPost) State.overdrachtPost = State.currentPost;
+    const sinds = fmtKey(new Date(Date.now() - State.overdrachtDagen*86400000));
+    const [journaal, open] = await Promise.all([
+      overdrachtMetRetry(()=>supa.from('overdrachten').select('*').eq('post_id', State.overdrachtPost).eq('is_open', false).gte('datum', sinds).order('datum',{ascending:false}).order('aangemaakt_op',{ascending:false})),
+      overdrachtMetRetry(()=>supa.from('overdrachten').select('*').eq('is_open', true).order('datum',{ascending:true}).order('aangemaakt_op',{ascending:true}))
+    ]);
+    State.overdrachten = journaal; State.overdrachtOpen = open; State.overdrachtFout = null;
+  }catch(e){
+    State.overdrachtFout = 'Kon de notities niet (volledig) ophalen' + (e && e.message ? ' ('+e.message+')' : '') + '.';
+  }
+  State.overdrachtLaden = false; State.overdrachtGeladen = true;
+  if(State.activeTab==='overdracht') render();
+}
+function startOverdrachtRealtime(){
+  if(State.overdrachtKanaal) return;
+  State.overdrachtKanaal = supa.channel('overdracht-dagstaat')
+    .on('postgres_changes', {event:'*', schema:'public', table:'overdrachten'}, ()=>{
+      clearTimeout(State._ovdTimer);
+      State._ovdTimer = setTimeout(()=>{ if(State.activeTab==='overdracht') laadOverdrachten(); else State.overdrachtGeladen = false; }, 400);
+    }).subscribe();
+}
+function ovdDagLabel(key){
+  const vandaag = fmtKey(new Date()), gisteren = fmtKey(new Date(Date.now()-86400000));
+  if(key===vandaag) return 'Vandaag';
+  if(key===gisteren) return 'Gisteren';
+  return parseKey(key).toLocaleDateString('nl-NL',{weekday:'long',day:'numeric',month:'long'});
+}
+function ovdTijd(iso){ return new Date(iso).toLocaleTimeString('nl-NL',{hour:'2-digit',minute:'2-digit'}); }
+function ovdDatumTijd(iso){ return new Date(iso).toLocaleDateString('nl-NL',{weekday:'short',day:'numeric',month:'short'}) + ' ' + ovdTijd(iso); }
+function ovdMagWijzigen(n){
+  return State.rol==='beheer' || (State.ingelogdPersoon && n.aangemaakt_door_id===State.ingelogdPersoon.id);
+}
+function ovdKaartHtml(n, soort){
+  const wie = esc(n.aangemaakt_door || 'Onbekend');
+  const meta = wie + ' · ' + (soort==='open' ? ovdDatumTijd(n.aangemaakt_op) : ovdTijd(n.aangemaakt_op));
+  const klaar = n.afgehandeld_op ? `<div class="ovd-meta">✓ Afgehandeld door ${esc(n.afgehandeld_door||'')} · ${esc(ovdDatumTijd(n.afgehandeld_op))}</div>` : '';
+  let acties = '';
+  if(soort==='open') acties += `<button class="btn small primary" data-ovd="afhandelen" data-id="${esc(n.id)}">✓ Afhandelen</button>`;
+  if(ovdMagWijzigen(n)){
+    acties += `<button class="btn small ghost" data-ovd="bewerken" data-id="${esc(n.id)}">Bewerken</button>`;
+    acties += `<button class="btn small ghost" data-ovd="verwijderen" data-id="${esc(n.id)}" style="color:var(--red-text);">Verwijderen</button>`;
+  }
+  return `<div class="ovd-kaart ${soort==='open'?'open':(n.afgehandeld_op?'klaar':'')}">
+    <div class="ovd-tekst">${esc(n.tekst)}</div>
+    <div class="ovd-meta">${meta}</div>${klaar}
+    ${acties?`<div class="ovd-acties">${acties}</div>`:''}
+  </div>`;
+}
+function renderOverdracht(){
+  const el = document.getElementById('overdrachtPaneel');
+  if(!el) return;
+  if(!OVERDRACHT_ROLLEN.includes(State.rol)){
+    el.innerHTML = '<div class="ovd-melding">Dit tabblad is voor bevelvoerders, ploegcommandanten en beheer.</div>';
+    return;
+  }
+  if(!State.overdrachtPost) State.overdrachtPost = State.currentPost;
+  startOverdrachtRealtime();
+  if(!el.dataset.gebonden){
+    el.dataset.gebonden = '1';
+    el.addEventListener('click', ovdKlik);
+    el.addEventListener('change', ovdWijzig);
+  }
+  if(!State.overdrachtGeladen && !State.overdrachtLaden) laadOverdrachten();
+  if(!State.overdrachtGeladen){ el.innerHTML = '<div class="ovd-melding">Bezig met laden…</div>'; return; }
+
+  const post = State.overdrachtPost;
+  const openHier = State.overdrachtOpen.filter(n=>n.post_id===post);
+  const openPerPost = {};
+  State.overdrachtOpen.forEach(n=>{ openPerPost[n.post_id] = (openPerPost[n.post_id]||0)+1; });
+  const postOpties = State.config.posten.map(p=>`<option value="${esc(p.id)}" ${p.id===post?'selected':''}>${esc(p.naam)}${openPerPost[p.id]?' ('+openPerPost[p.id]+' open)':''}</option>`).join('');
+  const dagOpties = [[2,'Vandaag en gisteren'],[7,'Laatste 7 dagen'],[14,'Laatste 14 dagen'],[30,'Laatste 30 dagen']]
+    .map(([d,l])=>`<option value="${d}" ${d===State.overdrachtDagen?'selected':''}>${l}</option>`).join('');
+
+  let html = `<div class="ovd-kop">
+      <h2>Overdracht — dagjournaal</h2>
+      <select id="ovdPost" title="Post">${postOpties}</select>
+      <select id="ovdDagen" title="Periode">${dagOpties}</select>
+      <button class="btn ghost" data-ovd="ververs" title="Verversen">↻</button>
+      <button class="btn ghost" data-ovd="print">🖨 Afdrukken / pdf</button>
+      <button class="btn primary" data-ovd="nieuw">+ Notitie</button>
+    </div>`;
+  if(State.overdrachtFout) html += `<div class="ovd-melding fout">${esc(State.overdrachtFout)} <button class="btn small ghost" data-ovd="ververs">Opnieuw proberen</button></div>`;
+
+  html += `<div class="ovd-sectie">Open punten${openHier.length?` <span class="ovd-teller">${openHier.length}</span>`:''}</div>`;
+  html += openHier.length ? openHier.map(n=>ovdKaartHtml(n,'open')).join('') : '<div class="ovd-leeg">Geen openstaande punten voor deze post.</div>';
+
+  html += '<div class="ovd-sectie">Journaal</div>';
+  if(!State.overdrachten.length){
+    html += '<div class="ovd-leeg">Nog geen notities in deze periode.</div>';
+  } else {
+    const perDag = {}, volgorde = [];
+    State.overdrachten.forEach(n=>{ if(!perDag[n.datum]){ perDag[n.datum]=[]; volgorde.push(n.datum); } perDag[n.datum].push(n); });
+    volgorde.forEach(d=>{ html += `<div class="ovd-dag">${esc(ovdDagLabel(d))}</div>` + perDag[d].map(n=>ovdKaartHtml(n,'journaal')).join(''); });
+  }
+  el.innerHTML = html;
+}
+
+function ovdZoek(id){ return State.overdrachten.concat(State.overdrachtOpen).find(n=>n.id===id); }
+async function ovdKlik(e){
+  const knop = e.target.closest('[data-ovd]');
+  if(!knop) return;
+  const actie = knop.dataset.ovd, id = knop.dataset.id;
+  if(actie==='nieuw') openOverdrachtModal(null);
+  else if(actie==='bewerken'){ const n = ovdZoek(id); if(n) openOverdrachtModal(n); }
+  else if(actie==='ververs') laadOverdrachten();
+  else if(actie==='print'){ renderPrintView(); window.print(); }
+  else if(actie==='afhandelen'){
+    try{
+      const r = await supa.from('overdrachten').update({is_open:false, afgehandeld_door:State.ingelogdPersoon.naam, afgehandeld_door_id:State.ingelogdPersoon.id, afgehandeld_op:new Date().toISOString()}).eq('id', id);
+      if(r.error) throw r.error;
+      await laadOverdrachten();
+    }catch(err){ alert('Afvinken mislukt: '+(err.message||err)); }
+  }
+  else if(actie==='verwijderen'){
+    if(!confirm('Deze notitie verwijderen?')) return;
+    try{
+      const r = await supa.from('overdrachten').delete().eq('id', id);
+      if(r.error) throw r.error;
+      await laadOverdrachten();
+    }catch(err){ alert('Verwijderen mislukt: '+(err.message||err)); }
+  }
+}
+function ovdWijzig(e){
+  if(e.target.id==='ovdPost'){ State.overdrachtPost = e.target.value; State.overdrachtGeladen = false; render(); }
+  else if(e.target.id==='ovdDagen'){ State.overdrachtDagen = parseInt(e.target.value,10)||7; State.overdrachtGeladen = false; render(); }
+}
+function openOverdrachtModal(bestaand){
+  const box = document.getElementById('modalBox');
+  const magOpenVink = !bestaand || !bestaand.afgehandeld_op;
+  const post = bestaand ? bestaand.post_id : State.overdrachtPost;
+  box.innerHTML = `<div class="modal-head"><h3>${bestaand?'Notitie bewerken':'Nieuwe notitie'} · ${esc(postNaam(post))}</h3><button class="modal-close" data-close="modal">✕</button></div>
+    <form id="overdrachtForm">
+      <div class="field"><label>Wat moet de volgende bevelvoerder weten?</label><textarea name="tekst" rows="6" maxlength="2000" required>${bestaand?esc(bestaand.tekst):''}</textarea></div>
+      ${magOpenVink?`<div class="field-checkbox"><input type="checkbox" name="open" id="ovdOpen" ${bestaand&&bestaand.is_open?'checked':''}><label for="ovdOpen"><strong>Open punt</strong> — blijft bovenaan staan tot iemand het afvinkt</label></div>`:''}
+      <p style="font-size:12px;color:var(--text-faint);margin:6px 0 0;">Geen persoons- of medische gegevens in een notitie zetten.</p>
+      <div class="modal-actions">
+        <button type="button" class="btn ghost" data-close="modal">Annuleren</button>
+        <button type="submit" class="btn primary">Opslaan</button>
+      </div>
+    </form>`;
+  document.getElementById('modalOverlay').classList.remove('hidden');
+  document.getElementById('overdrachtForm').addEventListener('submit', async ev=>{
+    ev.preventDefault();
+    const fd = new FormData(ev.target);
+    const tekst = String(fd.get('tekst')||'').trim();
+    if(!tekst) return;
+    const isOpen = magOpenVink ? fd.get('open')==='on' : false;
+    const knop = ev.target.querySelector('button[type=submit]'); knop.disabled = true;
+    try{
+      if(bestaand){
+        const wijz = {tekst};
+        if(magOpenVink) wijz.is_open = isOpen;
+        const r = await supa.from('overdrachten').update(wijz).eq('id', bestaand.id);
+        if(r.error) throw r.error;
+      } else {
+        const r = await supa.from('overdrachten').insert({
+          id: 'o_'+uid(), post_id: State.overdrachtPost, datum: fmtKey(new Date()), tekst, is_open: isOpen,
+          aangemaakt_door: State.ingelogdPersoon.naam, aangemaakt_door_id: State.ingelogdPersoon.id
+        });
+        if(r.error) throw r.error;
+      }
+      closeModal(); await laadOverdrachten();
+    }catch(err){ knop.disabled = false; alert('Opslaan mislukt: '+(err.message||err)); }
+  });
+}
+
+// Afdrukweergave voor de briefing: gebruikt dezelfde verborgen afdrukpagina als de
+// dagplanning, dus de knop Afdrukken bovenin en in dit tabblad doen hetzelfde.
+function renderOverdrachtPrint(){
+  const post = State.overdrachtPost || State.currentPost;
+  const open = State.overdrachtOpen.filter(n=>n.post_id===post);
+  let inhoud;
+  if(!State.overdrachtGeladen){
+    inhoud = '<div class="p-row">De notities zijn nog niet geladen. Open het tabblad Overdracht en probeer opnieuw.</div>';
+  } else {
+    const perDag = {}, volgorde = [];
+    State.overdrachten.forEach(n=>{ if(!perDag[n.datum]){ perDag[n.datum]=[]; volgorde.push(n.datum); } perDag[n.datum].push(n); });
+    const item = (n,soort)=>`<div class="p-ovd-item ${soort==='open'?'open':''}">${esc(n.tekst)}<div class="p-ovd-meta">${esc(n.aangemaakt_door||'Onbekend')} · ${esc(soort==='open'?ovdDatumTijd(n.aangemaakt_op):ovdTijd(n.aangemaakt_op))}${n.afgehandeld_op?' · ✓ afgehandeld door '+esc(n.afgehandeld_door||'')+' ('+esc(ovdDatumTijd(n.afgehandeld_op))+')':''}</div></div>`;
+    inhoud = `<div class="p-blok"><h2>Open punten (${open.length})</h2>${open.length?open.map(n=>item(n,'open')).join(''):'<div class="p-row">Geen openstaande punten.</div>'}</div>
+      <div class="p-blok"><h2>Journaal — ${State.overdrachtDagen===2?'vandaag en gisteren':'laatste '+State.overdrachtDagen+' dagen'}</h2>${volgorde.length?volgorde.map(d=>`<div class="p-ovd-dag">${esc(ovdDagLabel(d))}</div>`+perDag[d].map(n=>item(n,'journaal')).join('')).join(''):'<div class="p-row">Geen notities in deze periode.</div>'}</div>`;
+  }
+  const wie = State.ingelogdPersoon ? State.ingelogdPersoon.naam : '';
+  document.getElementById('printView').innerHTML = `<style>@page{size:A4 portrait;margin:0}</style>
+    <div class="p-head"><div><h1>${esc(State.config.kazerneNaam)}</h1><div class="p-sub">Overdracht — ${esc(postNaam(post))}</div></div><div class="p-date">${esc(new Date().toLocaleDateString('nl-NL',{weekday:'long',day:'numeric',month:'long',year:'numeric'}))}</div></div>
+    ${inhoud}
+    <div class="p-foot">Afgedrukt op ${esc(new Date().toLocaleString('nl-NL'))}${wie?' door '+esc(wie):''} · alleen voor intern gebruik</div>`;
+}
+/* OVERDRACHT-MODULE einde */
+
 /* ================= Mededelingen ================= */
 const MEDEDELING_BEHEER_ROLLEN = ['bevelvoerder','pco','beheer'];
 function actieveMededelingen(postId, datumStr){
@@ -3176,6 +3413,7 @@ function openOefeningModal(existingId){
 
 /* ---------- print view ---------- */
 function renderPrintView(){
+  if(State.activeTab==='overdracht'){ renderOverdrachtPrint(); return; }
   const cfg = State.config;
   const ploegenPost = ploegenVanPost(State.currentPost);
   const dateLabel = State.currentDate.toLocaleDateString('nl-NL',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
@@ -5285,6 +5523,7 @@ function wireEvents(){
       document.getElementById('tab-voertuigindeling').classList.toggle('hidden', State.activeTab!=='voertuigindeling');
       document.getElementById('tab-voertuigcontrole').classList.toggle('hidden', State.activeTab!=='voertuigcontrole');
       document.getElementById('tab-planning').classList.toggle('hidden', State.activeTab!=='planning');
+      document.getElementById('tab-overdracht').classList.toggle('hidden', State.activeTab!=='overdracht');
       document.getElementById('tab-oefenrooster').classList.toggle('hidden', State.activeTab!=='oefenrooster');
       document.getElementById('tab-diensten').classList.toggle('hidden', State.activeTab!=='diensten');
       document.getElementById('tab-personeel').classList.toggle('hidden', State.activeTab!=='personeel');
@@ -5523,6 +5762,7 @@ function wireEvents(){
       document.getElementById('tab-voertuigindeling').classList.add('hidden');
       document.getElementById('tab-voertuigcontrole').classList.add('hidden');
       document.getElementById('tab-planning').classList.remove('hidden');
+      document.getElementById('tab-overdracht').classList.add('hidden');
       document.getElementById('tab-diensten').classList.add('hidden');
       document.getElementById('tab-personeel').classList.add('hidden');
       document.getElementById('tab-log').classList.add('hidden');
