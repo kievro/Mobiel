@@ -176,6 +176,20 @@
   var VAPID_PUBLIC_KEY = "BJDM2BEeX8JJmVQIWLMrrcgoQJJp7KYWYj-5SfeTKvr_nX1DyEhTouCnDvfd6gzXneV6JB80wzovhJIl4F3qZGo";
 
   var INGELOGD_KEY = "brw-mobiel-ingelogd-persoon"; // gedeeld met de hoofdpagina en Dagstaat Mobiel
+  // Specialismen volgen de namen uit C-Quential (oktober 2026). De oude Dagstaat-namen worden bij
+  // het inlezen omgezet, zodat gegevens die nog onder de oude naam staan gewoon blijven werken.
+  var SPECIALISME_ALIAS = {
+  'Bevelvoerder':'Ploegbevelvoerder',
+  'Manschap':'Manschap A',
+  'DPL':'Duikploegleider',
+  'Ass DPL':'Ass. duikploegleider',
+  'Hoogwerker chauffeur':'Chauffeur HW',
+  'Hoogwerkerbediener':'Voertuigbedienaar HW',
+  'HV bediener':'Voertuigbedienaar HV',
+  'FRB CH':'Chauffeur FRB'
+  };
+  function normSpec(s){ return SPECIALISME_ALIAS.hasOwnProperty(s) ? SPECIALISME_ALIAS[s] : s; }
+  function normSpecLijst(lijst){ var uit = []; (lijst || []).forEach(function(s){ var n = normSpec(s); if(uit.indexOf(n) === -1) uit.push(n); }); return uit; }
   var ANTWOORD_LABEL = {ja:"Ja, ik kan", kan_wel:"Kan wel, liever niet", nee:"Nee, ik kan niet"};
   var POST_NAMEN = {post1:"Arnhem Noord", post2:"Arnhem Zuid", post3:"Ede Stad", mtu7q5xoq5bb71:"Flexpool", onbekend:"Post onbekend"};
   var POST_ORDER = ["post1","post2","post3","mtu7q5xoq5bb71","onbekend"];
@@ -273,18 +287,18 @@
     var members = personen.map(function(p){
       dagIds[p.id] = true;
       var extra = extraById[p.id] || {};
-      return { id:p.id, naam:p.naam, specialismen:p.specialismen||[], dienstverband:p.type||"onbekend",
+      return { id:p.id, naam:p.naam, specialismen:normSpecLijst(p.specialismen), dienstverband:p.type||"onbekend",
         rol: extra.rol || "personeel", correctie: extra.punten_correctie || 0, isExtra:false };
     });
     (ledenPubRes.data||[]).forEach(function(e){
-      if(!dagIds[e.id]) members.push({id:e.id, naam:e.naam_override||"(naamloos account)", specialismen:e.specialismen||[], dienstverband:"onbekend", rol:e.rol, correctie:e.punten_correctie||0, isExtra:true});
+      if(!dagIds[e.id]) members.push({id:e.id, naam:e.naam_override||"(naamloos account)", specialismen:normSpecLijst(e.specialismen), dienstverband:"onbekend", rol:e.rol, correctie:e.punten_correctie||0, isExtra:true});
     });
 
     var slotsByDienst = {};
     (slotsRes.data||[]).forEach(function(sl){ (slotsByDienst[sl.dienst_id] = slotsByDienst[sl.dienst_id]||[]).push({slotId:sl.id, label:sl.label}); });
     var shifts = (dienstenRes.data||[]).map(function(d){
       return { id:d.id, post:d.post_id, datum:d.datum, type:d.type, deadline:d.deadline, notitie:d.notitie||"",
-        isSpoed: !!d.is_spoed, doelgroep:{specialisme:d.doelgroep_specialisme||"alle", aanstelling:d.doelgroep_aanstelling||"iedereen"},
+        isSpoed: !!d.is_spoed, doelgroep:{specialisme:normSpec(d.doelgroep_specialisme||"alle"), aanstelling:d.doelgroep_aanstelling||"iedereen"},
         aangemaaktDoor:d.aangemaakt_door||"", aangemaaktDoorId:d.aangemaakt_door_id||null, meldingsontvangers:d.meldingsontvangers||[], meldingMoment:d.melding_moment,
         slots: (slotsByDienst[d.id] || []).slice() };
     });
