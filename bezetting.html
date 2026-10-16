@@ -288,8 +288,8 @@
       var alreadyId = null;
       try{ alreadyId = localStorage.getItem(INGELOGD_KEY); }catch(e){}
 
-      var { data } = await supa.from('kv_store').select('value').eq('key','personen').single();
-      loginState.personen = ((data && data.value) || []).slice().sort(function(a,b){ return a.naam.localeCompare(b.naam); });
+      var { data } = await supa.from('personen').select('id,naam');
+      loginState.personen = (data || []).slice().sort(function(a,b){ return a.naam.localeCompare(b.naam); });
 
       if(alreadyId && loginState.personen.some(function(p){ return p.id===alreadyId; })){
         var { data: sessieData } = await supa.auth.getSession();
@@ -605,19 +605,21 @@
 
       var [rooster, personenRes] = await Promise.all([
         haalAlleRoosterRegels(toDatumKey(vanaf), toDatumKey(tot)),
-        supa.from('kv_store').select('value').eq('key','personen').single()
+        supa.from('personen').select('naam,persoonsnummer,specialismen')
       ]);
-      var personen = (personenRes.data && personenRes.data.value) || [];
+      var personen = personenRes.data || [];
 
       var bevelvoerderNummers = {}, bevelvoerderNamen = {}, dplNummers = {}, dplNamen = {}, assDplNummers = {}, assDplNamen = {};
       personen.forEach(function(p){
         var specialismen = p.specialismen || [];
         var pn = p.persoonsnummer ? String(p.persoonsnummer).split(';')[0].trim() : null;
         var naamKey = p.naam ? String(p.naam).trim().toLowerCase() : null;
-        if(specialismen.indexOf('Bevelvoerder') !== -1){ if(pn) bevelvoerderNummers[pn]=true; if(naamKey) bevelvoerderNamen[naamKey]=true; }
-        if(specialismen.indexOf('DPL') !== -1){ if(pn) dplNummers[pn]=true; if(naamKey) dplNamen[naamKey]=true; }
-        if(specialismen.indexOf('Ass DPL') !== -1){ if(pn) assDplNummers[pn]=true; if(naamKey) assDplNamen[naamKey]=true; }
+        if(heeftSpec(specialismen, 'Ploegbevelvoerder', 'Bevelvoerder')){ if(pn) bevelvoerderNummers[pn]=true; if(naamKey) bevelvoerderNamen[naamKey]=true; }
+        if(heeftSpec(specialismen, 'Duikploegleider', 'DPL')){ if(pn) dplNummers[pn]=true; if(naamKey) dplNamen[naamKey]=true; }
+        if(heeftSpec(specialismen, 'Ass. duikploegleider', 'Ass DPL')){ if(pn) assDplNummers[pn]=true; if(naamKey) assDplNamen[naamKey]=true; }
       });
+  // Namen volgens C-Quential; de oude Dagstaat-namen blijven tijdelijk herkend (tot de database is bijgewerkt).
+  function heeftSpec(specialismen, nieuw, oud){ return specialismen.indexOf(nieuw) !== -1 || specialismen.indexOf(oud) !== -1; }
 
       var POSTEN_MET_DPL_NORM = ['post2'];
       var dagen = [];
@@ -680,9 +682,9 @@
 
       var [rooster, personenRes] = await Promise.all([
         haalAlleRoosterRegels(toDatumKey(vanaf), toDatumKey(totDatum)),
-        supa.from('kv_store').select('value').eq('key','personen').single()
+        supa.from('personen').select('naam,persoonsnummer,specialismen')
       ]);
-      var personen = (personenRes.data && personenRes.data.value) || [];
+      var personen = personenRes.data || [];
 
       var bevelvoerderNummers = {};
       var bevelvoerderNamen = {};
@@ -691,15 +693,15 @@
         var specialismen = p.specialismen || [];
         var pn = p.persoonsnummer ? String(p.persoonsnummer).split(';')[0].trim() : null;
         var naamKey = p.naam ? String(p.naam).trim().toLowerCase() : null;
-        if(specialismen.indexOf('Bevelvoerder') !== -1){
+        if(heeftSpec(specialismen, 'Ploegbevelvoerder', 'Bevelvoerder')){
           if(pn) bevelvoerderNummers[pn] = true;
           if(naamKey) bevelvoerderNamen[naamKey] = true;
         }
-        if(specialismen.indexOf('DPL') !== -1){
+        if(heeftSpec(specialismen, 'Duikploegleider', 'DPL')){
           if(pn) dplNummers[pn] = true;
           if(naamKey) dplNamen[naamKey] = true;
         }
-        if(specialismen.indexOf('Ass DPL') !== -1){
+        if(heeftSpec(specialismen, 'Ass. duikploegleider', 'Ass DPL')){
           if(pn) assDplNummers[pn] = true;
           if(naamKey) assDplNamen[naamKey] = true;
         }
