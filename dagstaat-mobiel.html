@@ -267,7 +267,7 @@
     var kaartenHtml = pids.map(function(pid){
       var persoon = personenById[pid];
       var naam = (persoon && persoon.naam) || pid;
-      var isBevelvoerder = persoon && persoon.specialismen && persoon.specialismen.indexOf("Bevelvoerder") !== -1;
+      var isBevelvoerder = persoon && persoon.specialismen && (persoon.specialismen.indexOf("Ploegbevelvoerder") !== -1 || persoon.specialismen.indexOf("Bevelvoerder") !== -1);
       var naamHtml = escapeHtml(naam) + (isBevelvoerder ? ' <span class="bv-badge">BV</span>' : '');
       var functieTekst = functiesPerPid[pid].join(" / ");
       var vcMatches = vcVoertuigen.filter(function(v){
