@@ -608,6 +608,20 @@ const APP_VERSIE = '2.5';
 // Pas dit aan zodra bekend is waar PloegCompleet definitief gehost wordt (bijv. een
 // submap naast Dagstaat op dezelfde NAS, of een heel ander adres). Relatief pad
 // ("../ploegcompleet/") werkt als beide apps op dezelfde server naast elkaar staan.
+// Specialismen volgen de namen uit C-Quential (oktober 2026). De oude Dagstaat-namen worden bij het
+// inlezen omgezet, zodat gegevens die nog onder de oude naam staan gewoon blijven werken.
+const SPECIALISME_ALIAS = {
+  'Bevelvoerder':'Ploegbevelvoerder',
+  'Manschap':'Manschap A',
+  'DPL':'Duikploegleider',
+  'Ass DPL':'Ass. duikploegleider',
+  'Hoogwerker chauffeur':'Chauffeur HW',
+  'Hoogwerkerbediener':'Voertuigbedienaar HW',
+  'HV bediener':'Voertuigbedienaar HV',
+  'FRB CH':'Chauffeur FRB'
+};
+function normSpec(s){ return Object.prototype.hasOwnProperty.call(SPECIALISME_ALIAS, s) ? SPECIALISME_ALIAS[s] : s; }
+function normSpecLijst(lijst){ const uit = []; (lijst || []).forEach(x=>{ const n = normSpec(x); if(!uit.includes(n)) uit.push(n); }); return uit; }
 const PLOEGCOMPLEET_URL = './ploegcompleet.html';
 const ROL_TOEGANG = {
   manschap:     {label:'Manschap',     tabs:['dashboard'], instellingen:false, gebruikersbeheer:false},
@@ -696,7 +710,7 @@ function defaultConfig(){
     posten: [],
     ploegen: [],
     rooster:{ ankers:[ {id:'anker1', datum:'2026-07-31', ploegLetter:'B', richting:'vooruit'} ] },
-    specialismen:['Bevelvoerder','Manschap','Chauffeur/Pompbediende','Officier van Dienst','Duiker','DPL','Ass DPL','Hoogwerkerbediener','Adembescherming','OGS (gevaarlijke stoffen)','Technische Hulpverlening','Instructeur'],
+    specialismen:['Ploegbevelvoerder','Manschap A','Chauffeur/Pompbediende','Officier van Dienst','Duiker','Duikploegleider','Ass. duikploegleider','Chauffeur HW','Voertuigbedienaar HW','Voertuigbedienaar HV','Chauffeur FRB','Adembescherming','OGS (gevaarlijke stoffen)','Technische Hulpverlening','Instructeur'],
     themas:['Brand','Redding','Gevaarlijke stoffen','Waterongevallen','Voertuigbediening','EHBO / Eerste hulp','Communicatie & procedures'],
     materialenEmails:['relatiebeheervb-midden@vggm.nl'],
     // Ook bewust leeg -- zelfde reden als hierboven bij posten/ploegen.
@@ -796,6 +810,7 @@ async function loadAll(overslaanDag){
     supaSelectMetRetry(()=>supa.from('mededelingen').select('*').order('start_datum',{ascending:false}).then(r=>r, e=>({error:e})), 'mededelingen')
   ]);
   State.config = config;
+  if(Array.isArray(State.config.specialismen)) State.config.specialismen = normSpecLijst(State.config.specialismen);
   State.config.posten = ((postenResultaat && !postenResultaat.error) ? (postenResultaat.data||[]) : []).map(r=>({
     id: r.id, naam: r.naam, voertuigFuncties: r.voertuig_functies||[]
   }));
@@ -819,7 +834,7 @@ async function loadAll(overslaanDag){
   // in de code iets te veranderen.
   State.personen = ((personenResultaat && !personenResultaat.error) ? (personenResultaat.data||[]) : []).map(r=>({
     id: r.id, naam: r.naam, persoonsnummer: r.persoonsnummer, ploegId: r.ploeg_id, postId: r.post_id,
-    type: r.type, specialismen: r.specialismen||[], email: r.email, actief: r.actief
+    type: r.type, specialismen: normSpecLijst(r.specialismen), email: r.email, actief: r.actief
   }));
   if(personenResultaat && personenResultaat.error){ if(!State.laadFouten) State.laadFouten=[]; State.laadFouten.push('personen'); }
   State.log = log;
@@ -3632,16 +3647,16 @@ async function laadDuikData(){
   return true;
 }
 
-// Duikteam = personen met specialisme Duiker, DPL of Ass DPL. "Ass DPL" komt niet
+// Duikteam = personen met specialisme Duiker, Duikploegleider of Ass. duikploegleider. "Ass. duikploegleider" komt niet
 // voor in de richtlijn en telt hier standaard als duiker (BWD) -- per registratie
 // zelf aan te passen via het formulier.
 function duikTeamLeden(){
-  return State.personen.filter(p=>(p.specialismen||[]).some(s=>s==='Duiker'||s==='DPL'||s==='Ass DPL'));
+  return State.personen.filter(p=>(p.specialismen||[]).some(s=>s==='Duiker'||s==='Duikploegleider'||s==='Ass. duikploegleider'));
 }
 function duikFunctiesVanPersoon(p){
   const uit = [];
-  if((p.specialismen||[]).includes('DPL')) uit.push('DPL');
-  if((p.specialismen||[]).includes('Duiker') || (p.specialismen||[]).includes('Ass DPL')) uit.push('BWD');
+  if((p.specialismen||[]).includes('Duikploegleider')) uit.push('DPL');
+  if((p.specialismen||[]).includes('Duiker') || (p.specialismen||[]).includes('Ass. duikploegleider')) uit.push('BWD');
   return uit;
 }
 
@@ -4496,12 +4511,12 @@ async function renderVoertuigTab(){
     // Lima/Papa/Gaspak, enz.) krijgen geen filtering: iedereen blijft gewoon
     // zichtbaar voor die functies.
     const FUNCTIE_SPECIALISME_MAP = {
-      'TS BV':'Bevelvoerder', 'TS CH':'Chauffeur/Pompbediende',
-      'MS 1':'Manschap', 'MS 2':'Manschap', 'MS 3':'Manschap', 'MS 4':'Manschap',
-      'HW CH':'Hoogwerker chauffeur', 'HW BD':'Hoogwerkerbediener',
-      'HV CH':'Chauffeur/Pompbediende', 'HV BD':'HV bediener',
-      'FRB CH':'FRB CH', 'FRB MS':'Manschap',
-      'DPL':'DPL', 'Ass DPL':'Ass DPL',
+      'TS BV':'Ploegbevelvoerder', 'TS CH':'Chauffeur/Pompbediende',
+      'MS 1':'Manschap A', 'MS 2':'Manschap A', 'MS 3':'Manschap A', 'MS 4':'Manschap A',
+      'HW CH':'Chauffeur HW', 'HW BD':'Voertuigbedienaar HW',
+      'HV CH':'Chauffeur/Pompbediende', 'HV BD':'Voertuigbedienaar HV',
+      'FRB CH':'Chauffeur FRB', 'FRB MS':'Manschap A',
+      'DPL':'Duikploegleider', 'Ass DPL':'Ass. duikploegleider',
       'Duiker 1':'Duiker', 'Duiker 2':'Duiker'
     };
     const personOpties = (huidige, functieNaam) => {
