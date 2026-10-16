@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Dagplanning Brandweer</title>
+<title>Dagplanning Brandweer · v16 okt 2026 B</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🚒</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
@@ -757,6 +757,7 @@ const State = {
   mededelingen:[],
   overdrachten:[], overdrachtOpen:[], overdrachtGeladen:false, overdrachtLaden:false, overdrachtFout:null,
   overdrachtPost:null, overdrachtDagen:7, overdrachtKanaal:null,
+  opslaanBezig:0, personenVersie:0,
   oefSubtab:'rooster', duikPersoonId:null
 };
 
@@ -791,6 +792,7 @@ async function supaSelectMetRetry(query, omschrijving){
 }
 async function loadAll(overslaanDag){
   State.laadFouten = [];
+  const personenVersieBijStart = State.personenVersie || 0;
   const [config, personenResultaat, postenResultaat, ploegenResultaat, activiteitResultaat, werkblokResultaat, themasResultaat, log, oefeningenResultaat, werkzaamhedenRuw, agendaResultaat, materialenResultaat, materialenInhoudResultaat, vcVoertuigenResultaat, oefenkaartenResultaat, mededelingenResultaat] = await Promise.all([
     sGet('config', defaultConfig(), true),
     supaSelectMetRetry(()=>supa.from('personen').select('*').then(r=>r, e=>({error:e})), 'personen'),
@@ -832,10 +834,12 @@ async function loadAll(overslaanDag){
   // Kolomnamen (snake_case) terugvertalen naar de veldnamen die de rest van
   // de app al overal gebruikt (camelCase) -- zo hoeft verder nergens anders
   // in de code iets te veranderen.
-  State.personen = ((personenResultaat && !personenResultaat.error) ? (personenResultaat.data||[]) : []).map(r=>({
+  const personenGeladenOk = !!(personenResultaat && !personenResultaat.error);
+  const nieuwePersonen = (personenGeladenOk ? (personenResultaat.data||[]) : []).map(r=>({
     id: r.id, naam: r.naam, persoonsnummer: r.persoonsnummer, ploegId: r.ploeg_id, postId: r.post_id,
     type: r.type, specialismen: normSpecLijst(r.specialismen), email: r.email, actief: r.actief
   }));
+  vervangPersonenAlsNietGewijzigd(nieuwePersonen, personenVersieBijStart, personenGeladenOk);
   if(personenResultaat && personenResultaat.error){ if(!State.laadFouten) State.laadFouten=[]; State.laadFouten.push('personen'); }
   State.log = log;
   State.oefeningen = ((oefeningenResultaat && !oefeningenResultaat.error) ? (oefeningenResultaat.data||[]) : []).map(r=>({
@@ -1174,6 +1178,61 @@ async function saveConfig(){
   delete restConfig.themas;
   await sSet('config', restConfig, true);
 }
+function persoonNaarRij(p){
+  return {
+    id: p.id, naam: p.naam, persoonsnummer: p.persoonsnummer||null,
+    ploeg_id: p.ploegId||null, post_id: p.postId||null, type: p.type||'onbekend',
+    specialismen: p.specialismen||[], email: p.email||null, actief: p.actief!==false
+  };
+}
+// Slaat één persoon op vanuit een KOPIE (dus niet vanuit State.personen, dat tussentijds door een
+// verversing vervangen kan zijn) en leest daarna terug uit de database of de waarden er echt staan.
+// Mislukt dat, dan wordt er een fout gegooid: de lijst op het scherm toont dus nooit iets dat niet bewaard is.
+async function slaPersoonOpEnControleer(persoon){
+  State.opslaanBezig = (State.opslaanBezig||0) + 1;
+  State.personenVersie = (State.personenVersie||0) + 1;
+  try{
+    const rij = persoonNaarRij(persoon);
+    const { error } = await supa.from('personen').upsert(rij, {onConflict:'id'});
+    if(error){ console.error('[dagplanning] opslaan van persoon mislukt:', error.message); throw error; }
+    const { data, error: leesFout } = await supa.from('personen').select('id, post_id, ploeg_id').eq('id', persoon.id).maybeSingle();
+    if(leesFout) throw leesFout;
+    if(!data) throw new Error('de persoon is na het opslaan niet teruggevonden in de database');
+    if((data.post_id||null) !== (rij.post_id||null) || (data.ploeg_id||null) !== (rij.ploeg_id||null)){
+      throw new Error(`de database heeft de nieuwe post of ploeg niet bewaard (staat nog op post ${data.post_id||'-'}, ploeg ${data.ploeg_id||'-'})`);
+    }
+  } finally {
+    State.opslaanBezig--;
+    State.personenVersie = (State.personenVersie||0) + 1;
+  }
+}
+async function bewaarPersoon(existing, data){
+  const nieuw = existing ? Object.assign({}, existing, data) : Object.assign({id: uid()}, data);
+  await slaPersoonOpEnControleer(nieuw);                       // eerst opslaan; pas daarna het scherm bijwerken
+  const i = State.personen.findIndex(p=>p.id===nieuw.id);
+  if(i>=0) State.personen[i] = nieuw; else State.personen.push(nieuw);
+  try{ await addLog(existing ? `Persoon '${nieuw.naam}' bewerkt.` : `Persoon '${nieuw.naam}' toegevoegd.`, null); }
+  catch(err){ console.warn('[dagplanning] logregel niet opgeslagen:', err); }   // een logregel mag een geslaagde opslag nooit tenietdoen
+  return nieuw;
+}
+async function verwijderPersoon(persoon){
+  State.opslaanBezig = (State.opslaanBezig||0) + 1;
+  State.personenVersie = (State.personenVersie||0) + 1;
+  try{ await savePersonen({verwijderIds:[persoon.id]}); }
+  finally { State.opslaanBezig--; State.personenVersie = (State.personenVersie||0) + 1; }
+  State.personen = State.personen.filter(p=>p.id!==persoon.id);
+  try{ await addLog(`Persoon '${persoon.naam}' verwijderd.`, null); }
+  catch(err){ console.warn('[dagplanning] logregel niet opgeslagen:', err); }
+}
+// Een verversing die vóór een opslag-actie begon, mag de lijst niet meer vervangen: die bevat dan
+// nog de gegevens van vóór de opslag en zou de wijziging op het scherm laten terugspringen.
+// Een mislukte verversing laat de bestaande lijst staan in plaats van die te legen.
+function vervangPersonenAlsNietGewijzigd(nieuweLijst, versieBijStart, geladenOk){
+  if(!geladenOk) return false;
+  if((State.personenVersie||0) !== versieBijStart || (State.opslaanBezig||0) > 0) return false;
+  State.personen = nieuweLijst;
+  return true;
+}
 async function savePersonen(opties){
   // Personen staat sinds september 2026 in een eigen tabel (niet meer als één
   // groot blok in kv_store).
@@ -1187,11 +1246,7 @@ async function savePersonen(opties){
   // VOLLEDIG opslaan (zonder opties): synchroniseert de hele lijst, inclusief het
   // verwijderen van rijen die er in het geheugen niet in staan. Alleen bedoeld voor
   // eenmalige migraties direct na het opstarten, waar de lijst net vers is geladen.
-  const maakRij = p=>({
-    id: p.id, naam: p.naam, persoonsnummer: p.persoonsnummer||null,
-    ploeg_id: p.ploegId||null, post_id: p.postId||null, type: p.type||'onbekend',
-    specialismen: p.specialismen||[], email: p.email||null, actief: p.actief!==false
-  });
+  const maakRij = persoonNaarRij;
   if(opties && (opties.ids || opties.verwijderIds)){
     const ids = opties.ids || [];
     const rijen = State.personen.filter(p=>ids.includes(p.id)).map(maakRij);
@@ -3513,20 +3568,20 @@ function openPersoonModal(existingId){
     const data = {naam:fd.get('naam').trim(), email:fd.get('email').trim(), persoonsnummer:fd.get('persoonsnummer').trim(), postId:fd.get('postId'), ploegId:fd.get('ploegId'), type:fd.get('type'), specialismen:fd.getAll('specialismen')};
     if(!data.naam) return;
     if(!data.email) data.email = genereerEmail(data.naam);
-    if(existing){ Object.assign(existing,data); await addLog(`Persoon '${data.naam}' bewerkt.`, null); }
-    else { data.id=uid(); State.personen.push(data); await addLog(`Persoon '${data.naam}' toegevoegd.`, null); }
-    const opgeslagenId = existing ? existing.id : data.id;
-    try{ await savePersonen({ids:[opgeslagenId]}); }
-    catch(err){ alert('Opslaan mislukt: '+(err.message||err)+'. Herlaad de pagina en probeer het opnieuw.'); return; }
+    const knop = e.target.querySelector('button[type=submit]'); knop.disabled = true;
+    try{ await bewaarPersoon(existing, data); }
+    catch(err){
+      knop.disabled = false;
+      alert('Opslaan mislukt: '+(err.message||err)+'\n\nEr is niets gewijzigd. Probeer het opnieuw; blijft het misgaan, ververs dan de pagina.');
+      return;
+    }
     closeModal(); render();
   });
   if(existing){
     document.getElementById('delFromModal').addEventListener('click', async ()=>{
       if(!confirm(`${existing.naam} verwijderen?`)) return;
-      State.personen = State.personen.filter(p=>p.id!==existing.id);
-      await addLog(`Persoon '${existing.naam}' verwijderd.`, null);
-      try{ await savePersonen({verwijderIds:[existing.id]}); }
-      catch(err){ alert('Verwijderen mislukt: '+(err.message||err)+'. Herlaad de pagina en controleer de lijst.'); return; }
+      try{ await verwijderPersoon(existing); }
+      catch(err){ alert('Verwijderen mislukt: '+(err.message||err)+'\n\nEr is niets gewijzigd.'); return; }
       closeModal(); render();
     });
   }
@@ -5682,10 +5737,8 @@ function wireEvents(){
       const p = State.personen.find(x=>x.id===el.dataset.id);
       if(!p) return;
       if(!confirm(`${p.naam} verwijderen?`)) return;
-      State.personen = State.personen.filter(x=>x.id!==p.id);
-      await addLog(`Persoon '${p.naam}' verwijderd.`, null);
-      try{ await savePersonen({verwijderIds:[p.id]}); }
-      catch(err){ alert('Verwijderen mislukt: '+(err.message||err)+'. Herlaad de pagina en controleer de lijst.'); return; }
+      try{ await verwijderPersoon(p); }
+      catch(err){ alert('Verwijderen mislukt: '+(err.message||err)+'\n\nEr is niets gewijzigd.'); return; }
       render();
     }
     else if(action==='editOefening') openOefeningModal(el.dataset.id);
@@ -6143,7 +6196,10 @@ async function init(){
   // collega's ook zonder handmatige actie zichtbaar worden. De dagplanning
   // zelf loopt via de losse, realtime-koppeling (zie abonneerOpDagRealtime).
   setInterval(async ()=>{
-    if(document.activeElement && ['input','textarea'].includes((document.activeElement.tagName||'').toLowerCase())) return; // niet verstoren tijdens actief typen
+    if(document.activeElement && ['input','textarea','select'].includes((document.activeElement.tagName||'').toLowerCase())) return; // niet verstoren tijdens actief typen
+    if((State.opslaanBezig||0) > 0) return;                                              // nooit midden in een opslag-actie
+    const modalOverlay = document.getElementById('modalOverlay');
+    if(modalOverlay && !modalOverlay.classList.contains('hidden')) return;                // niet terwijl een bewerkvenster openstaat
     await loadAll(true);
     render();
   }, 45000);
