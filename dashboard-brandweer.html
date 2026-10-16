@@ -397,7 +397,7 @@
     var rowsHtml = pids.map(function(pid){
       var persoon = personenById[pid];
       var naam = (persoon && persoon.naam) || pid;
-      var isBevelvoerder = persoon && persoon.specialismen && persoon.specialismen.indexOf("Bevelvoerder") !== -1;
+      var isBevelvoerder = persoon && persoon.specialismen && (persoon.specialismen.indexOf("Ploegbevelvoerder") !== -1 || persoon.specialismen.indexOf("Bevelvoerder") !== -1);
       var isGewijzigd = functiesPerPid[pid].some(function(label){ return !!wijzigingenDag[slugify(label)]; });
       var naamHtml = escapeHtml(naam) + (isBevelvoerder ? ' <span class="bv-badge" title="Bevelvoerder">BV</span>' : '');
       var functieTekst = functiesPerPid[pid].join(" / ");
