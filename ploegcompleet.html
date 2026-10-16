@@ -240,6 +240,20 @@
   }
 
   var LAST_USER_KEY = "ploegcompleet-last-user-v2";
+  // Specialismen volgen de namen uit C-Quential (oktober 2026). De oude Dagstaat-namen worden bij
+  // het inlezen omgezet, zodat gegevens die nog onder de oude naam staan gewoon blijven werken.
+  var SPECIALISME_ALIAS = {
+  'Bevelvoerder':'Ploegbevelvoerder',
+  'Manschap':'Manschap A',
+  'DPL':'Duikploegleider',
+  'Ass DPL':'Ass. duikploegleider',
+  'Hoogwerker chauffeur':'Chauffeur HW',
+  'Hoogwerkerbediener':'Voertuigbedienaar HW',
+  'HV bediener':'Voertuigbedienaar HV',
+  'FRB CH':'Chauffeur FRB'
+  };
+  function normSpec(s){ return SPECIALISME_ALIAS.hasOwnProperty(s) ? SPECIALISME_ALIAS[s] : s; }
+  function normSpecLijst(lijst){ var uit = []; (lijst || []).forEach(function(s){ var n = normSpec(s); if(uit.indexOf(n) === -1) uit.push(n); }); return uit; }
   var ANTWOORD_LABEL = {ja:"Ja, ik kan", kan_wel:"Kan wel, liever niet", nee:"Nee, ik kan niet"};
   var ROLE_INFO = {
     manschap: {label:"Manschap", omschrijving:"Kan reageren op open diensten (ja / kan wel, liever niet / nee) en de eigen dienst-historie bekijken."},
@@ -438,7 +452,7 @@
 
     var configRes = await sbDag.from("kv_store").select("value").eq("key","config").single();
     var dagConfig = (configRes.data && configRes.data.value) || {};
-    var specialismenOpties = dagConfig.specialismen || ["Bevelvoerder","Manschap","Duiker"];
+    var specialismenOpties = normSpecLijst(dagConfig.specialismen || ["Ploegbevelvoerder","Manschap A","Duiker"]);
 
     var ledenPubRes = await sbDag.from("leden_publiek").select("*");
     var authRes = await sbDag.from("personeel_auth").select("persoon_id,rol");
@@ -466,7 +480,7 @@
       var extra = extraById[p.id] || {};
       return {
         id: p.id, naam: p.naam, email: p.email||"", post: p.postId||"", ploeg: p.ploegId||"",
-        specialismen: p.specialismen||[], dienstverband: p.type||"onbekend",
+        specialismen: normSpecLijst(p.specialismen), dienstverband: p.type||"onbekend",
         rol: rolById[p.id] || "manschap", telefoon: extra.telefoon || "",
         correctie: extra.punten_correctie || 0,
         actief: extra.actief!==false, isExtra:false
@@ -475,7 +489,7 @@
     (ledenPubRes.data||[]).forEach(function(e){
       if(!dagIds[e.id]){
         members.push({id:e.id, naam:e.naam_override||"(naamloos account)", email:"", post:"", ploeg:"",
-          specialismen:e.specialismen||[], dienstverband:"onbekend", rol:rolById[e.id] || "manschap", telefoon:e.telefoon||"",
+          specialismen:normSpecLijst(e.specialismen), dienstverband:"onbekend", rol:rolById[e.id] || "manschap", telefoon:e.telefoon||"",
           correctie: e.punten_correctie || 0,
           actief:e.actief!==false, isExtra:true});
       }
@@ -495,7 +509,7 @@
       return {
         id:d.id, post:d.post_id, datum:d.datum, type:d.type, deadline:d.deadline, notitie:d.notitie||"",
         meldingMoment:d.melding_moment, isSpoed: !!d.is_spoed, isConcept: !!d.is_concept, isVerwijderd: !!d.is_verwijderd, autoToewijzen: !!d.auto_toewijzen,
-        doelgroep:{specialisme:d.doelgroep_specialisme||"alle", aanstelling:d.doelgroep_aanstelling||"iedereen"},
+        doelgroep:{specialisme:normSpec(d.doelgroep_specialisme||"alle"), aanstelling:d.doelgroep_aanstelling||"iedereen"},
         aangemaaktDoor:d.aangemaakt_door||"", aangemaaktDoorId:d.aangemaakt_door_id||null, aangemaaktOp:d.aangemaakt_op,
         meldingsontvangers:d.meldingsontvangers||[],
         slots: (slotsByDienst[d.id] || []).slice()
@@ -790,15 +804,10 @@
           );
           if(r2.error) throw r2.error;
         }
-        // Geen database-webhook ingesteld die dit automatisch triggert (zelfde
-        // situatie als bij het aanmaken van een dienst) -- dus zelf aanroepen.
-        try{
-          await fetch(DAG_URL + "/functions/v1/verstuur-reactie-melding", {
-            method:"POST",
-            headers:{"Content-Type":"application/json", "apikey":DAG_KEY, "Authorization":"Bearer "+DAG_KEY},
-            body: JSON.stringify({record:{slot_id:slotId, lid_id:state.currentUserId, antwoord:antwoord, tijdstip:new Date().toISOString()}})
-          });
-        }catch(e){ /* de reactie staat sowieso goed opgeslagen; de pushmelding is een bonus */ }
+        // Let op: GEEN eigen aanroep naar verstuur-reactie-melding hier --
+        // de database-trigger 'meld_nieuwe_reactie' (op tabel reacties)
+        // doet dit al automatisch, server-side. Een eigen aanroep hier zou
+        // tot een dubbele pushmelding leiden.
       }
     }, "Reactie opgeslagen").then(function(){
       // Bij een gedeelde dienst (meerdere tijdvakken): pas de bevestigingspopup
@@ -1210,18 +1219,11 @@
         if(r1.error) throw r1.error;
         var r2 = await sbDag.from("dienst_slots").insert(slots);
         if(r2.error) throw r2.error;
-        // Bij een gewone (niet-batch) dienst meteen de pushmelding-functie
-        // aanroepen -- er is geen database-webhook ingesteld die dit
-        // automatisch doet, dus de website moet dit zelf triggeren.
-        if(!isBatch){
-          try{
-            await fetch(DAG_URL + "/functions/v1/verstuur-nieuwe-dienst-melding", {
-              method:"POST",
-              headers:{"Content-Type":"application/json", "apikey":DAG_KEY, "Authorization":"Bearer "+DAG_KEY},
-              body: JSON.stringify({record: dienstData})
-            });
-          }catch(e){ /* de dienst staat sowieso goed klaar; de melding is een bonus */ }
-        }
+        // Let op: GEEN eigen aanroep naar verstuur-nieuwe-dienst-melding hier
+        // -- de database-trigger 'meld_nieuwe_dienst' (op tabel diensten,
+        // AFTER INSERT) doet dit al automatisch, server-side, zodra
+        // is_concept=false. Een eigen aanroep hier zou tot een dubbele
+        // pushmelding leiden.
       }, isBatch ? null : "Dienst opgeslagen");
       if(isBatch){
         (state.batchDienstIds = state.batchDienstIds || []).push(newId);
@@ -1658,7 +1660,7 @@
 
   function doelgroepFields(shift){
     var dg = (shift && shift.doelgroep) ? shift.doelgroep : defaultDoelgroep();
-    var opties = state.data.specialismenOpties || ["Bevelvoerder","Manschap","Duiker"];
+    var opties = state.data.specialismenOpties || ["Ploegbevelvoerder","Manschap A","Duiker"];
     return '<div class="doelgroep-box">'
       + '<div class="eyebrow">Voor wie is deze dienst?</div>'
       + '<div class="field-row">'
@@ -1825,7 +1827,7 @@
     html += '<div class="eyebrow">Personeel ('+members.length+')</div>';
     html += '<div class="info-line">"App-rechten" bepaalt wat iemand in PloegCompleet mag doen – dat is iets anders dan een functie/specialisme uit Dagstaat, ook als de naam (bv. Bevelvoerder) toevallig hetzelfde is.</div>';
     html += '<input type="text" placeholder="Zoek personeel…" oninput="App.filterPersoneelList(this.value)" style="margin-bottom:10px;" />';
-    var specialismenOpties = data.specialismenOpties || ["Bevelvoerder","Manschap","Duiker"];
+    var specialismenOpties = data.specialismenOpties || ["Ploegbevelvoerder","Manschap A","Duiker"];
     members.forEach(function(m){
       var count = computeShiftCounts(m.id, data);
       var metaBits = [];
