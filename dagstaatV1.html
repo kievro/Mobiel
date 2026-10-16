@@ -929,10 +929,11 @@ async function loadAll(overslaanDag){
     await migrateFuncties();
     await migratePloegCorrecties();
     let emailsGewijzigd = false;
+    const emailIds = [];
     State.personen.forEach(p=>{
-      if(!p.email){ p.email = genereerEmail(p.naam); emailsGewijzigd = true; }
+      if(!p.email){ p.email = genereerEmail(p.naam); emailsGewijzigd = true; emailIds.push(p.id); }
     });
-    if(emailsGewijzigd){ await savePersonen(); await addLog(`E-mailadressen automatisch gegenereerd voor ${State.personen.length} personen (voornaam.tussenvoegsel.achternaam@vggm.nl).`, null); }
+    if(emailsGewijzigd){ await savePersonen({ids: emailIds}); await addLog(`E-mailadressen automatisch gegenereerd voor ${State.personen.length} personen (voornaam.tussenvoegsel.achternaam@vggm.nl).`, null); }
   }
 
   const voorkeur = await sGet('voorkeur-post', null, false);
@@ -1211,15 +1212,39 @@ async function saveConfig(){
   delete restConfig.themas;
   await sSet('config', restConfig, true);
 }
-async function savePersonen(){
-  // Personen staat sinds vandaag in een eigen tabel (niet meer als één groot
-  // blok in kv_store) -- upsert elke rij apart, en verwijder rijen die niet
-  // meer in State.personen voorkomen (iemand is verwijderd).
-  const rijen = State.personen.map(p=>({
+async function savePersonen(opties){
+  // Personen staat sinds september 2026 in een eigen tabel (niet meer als één
+  // groot blok in kv_store).
+  //
+  // GERICHT opslaan (opties.ids / opties.verwijderIds): schrijft ALLEEN de
+  // genoemde personen, en raakt de rest van de tabel niet aan. Dit is de
+  // standaard voor elke bewerking door een gebruiker. Zo kan een venster met een
+  // verouderde lijst (een oude tab, de geïnstalleerde app) nooit de wijzigingen
+  // van een ander overschrijven, of iemand verwijderen die daar nog niet in stond.
+  //
+  // VOLLEDIG opslaan (zonder opties): synchroniseert de hele lijst, inclusief het
+  // verwijderen van rijen die er in het geheugen niet in staan. Alleen bedoeld voor
+  // eenmalige migraties direct na het opstarten, waar de lijst net vers is geladen.
+  const maakRij = p=>({
     id: p.id, naam: p.naam, persoonsnummer: p.persoonsnummer||null,
     ploeg_id: p.ploegId||null, post_id: p.postId||null, type: p.type||'onbekend',
     specialismen: p.specialismen||[], email: p.email||null, actief: p.actief!==false
-  }));
+  });
+  if(opties && (opties.ids || opties.verwijderIds)){
+    const ids = opties.ids || [];
+    const rijen = State.personen.filter(p=>ids.includes(p.id)).map(maakRij);
+    if(rijen.length){
+      const { error } = await supa.from('personen').upsert(rijen, {onConflict:'id'});
+      if(error){ console.error('[dagplanning] opslaan van personen mislukt:', error.message); throw error; }
+    }
+    const weg = opties.verwijderIds || [];
+    if(weg.length){
+      const { error } = await supa.from('personen').delete().in('id', weg);
+      if(error){ console.error('[dagplanning] verwijderen van personen mislukt:', error.message); throw error; }
+    }
+    return;
+  }
+  const rijen = State.personen.map(maakRij);
   if(rijen.length){
     const { error } = await supa.from('personen').upsert(rijen, {onConflict:'id'});
     if(error){ console.error('[dagplanning] opslaan van personen mislukt:', error.message); throw error; }
@@ -3528,14 +3553,19 @@ function openPersoonModal(existingId){
     if(!data.email) data.email = genereerEmail(data.naam);
     if(existing){ Object.assign(existing,data); await addLog(`Persoon '${data.naam}' bewerkt.`, null); }
     else { data.id=uid(); State.personen.push(data); await addLog(`Persoon '${data.naam}' toegevoegd.`, null); }
-    await savePersonen(); closeModal(); render();
+    const opgeslagenId = existing ? existing.id : data.id;
+    try{ await savePersonen({ids:[opgeslagenId]}); }
+    catch(err){ alert('Opslaan mislukt: '+(err.message||err)+'. Herlaad de pagina en probeer het opnieuw.'); return; }
+    closeModal(); render();
   });
   if(existing){
     document.getElementById('delFromModal').addEventListener('click', async ()=>{
       if(!confirm(`${existing.naam} verwijderen?`)) return;
       State.personen = State.personen.filter(p=>p.id!==existing.id);
       await addLog(`Persoon '${existing.naam}' verwijderd.`, null);
-      await savePersonen(); closeModal(); render();
+      try{ await savePersonen({verwijderIds:[existing.id]}); }
+      catch(err){ alert('Verwijderen mislukt: '+(err.message||err)+'. Herlaad de pagina en controleer de lijst.'); return; }
+      closeModal(); render();
     });
   }
 }
@@ -5692,7 +5722,9 @@ function wireEvents(){
       if(!confirm(`${p.naam} verwijderen?`)) return;
       State.personen = State.personen.filter(x=>x.id!==p.id);
       await addLog(`Persoon '${p.naam}' verwijderd.`, null);
-      await savePersonen(); render();
+      try{ await savePersonen({verwijderIds:[p.id]}); }
+      catch(err){ alert('Verwijderen mislukt: '+(err.message||err)+'. Herlaad de pagina en controleer de lijst.'); return; }
+      render();
     }
     else if(action==='editOefening') openOefeningModal(el.dataset.id);
     else if(action==='mailOefenstaf') mailOefenstaf(el.dataset.id);
