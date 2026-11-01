@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Dagplanning Brandweer · v31 okt 2026</title>
+<title>Dagplanning Brandweer · v31 okt 2026 B</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🚒</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
@@ -2713,6 +2713,28 @@ function ovdVoertuigenGebundeld(vc){
   const aantal = kaarten.reduce((som,k)=>som + k.open.length + k.afw.length, 0);
   return { kaarten, aantal };
 }
+// Telt per voertuig wat er openstaat: meldingen uit het journaal plus afwijkingen van de laatste afgeronde controle
+// (maximaal 2 dagen oud). Zelfde definitie als in het blok Voertuigen van de overdracht, zodat de getallen overal gelijk zijn.
+async function laadVoertuigOpenstaand(ids){
+  const uit = {};
+  ids.forEach(id=>{ uit[id] = { meldingen:0, afwijkingen:0 }; });
+  if(!ids.length) return uit;
+  const sinds = fmtKey(new Date(Date.now() - 2*86400000));
+  const [open, uitvoeringen] = await Promise.all([
+    overdrachtMetRetry(()=>supa.from('voertuigcontrole_journaal').select('voertuig_id').in('voertuig_id', ids).eq('opgelost', false)),
+    overdrachtMetRetry(()=>supa.from('voertuigcontrole_uitvoeringen').select('id,voertuig_id,datum,afgerond_op').in('voertuig_id', ids).eq('afgerond', true).gte('datum', sinds).order('datum',{ascending:false}).order('afgerond_op',{ascending:false}))
+  ]);
+  open.forEach(j=>{ if(uit[j.voertuig_id]) uit[j.voertuig_id].meldingen++; });
+  const laatste = {};
+  uitvoeringen.forEach(u=>{ if(!laatste[u.voertuig_id]) laatste[u.voertuig_id] = u; });     // alleen de LAATSTE afgeronde controle
+  const uitIds = Object.values(laatste).map(u=>u.id);
+  if(uitIds.length){
+    const afw = await overdrachtMetRetry(()=>supa.from('voertuigcontrole_resultaten').select('uitvoering_id').in('uitvoering_id', uitIds).eq('status','afwijking'));
+    const naarVoertuig = {}; Object.keys(laatste).forEach(vid=>{ naarVoertuig[laatste[vid].id] = vid; });
+    afw.forEach(r=>{ const vid = naarVoertuig[r.uitvoering_id]; if(vid) uit[vid].afwijkingen++; });
+  }
+  return uit;
+}
 function ovdVoertuigenHtml(){
   let html = '';
   if(State.vcFout) html += `<div class="ovd-melding fout">${esc(State.vcFout)} <button class="btn small ghost" data-ovd="ververs">Opnieuw proberen</button></div>`;
@@ -4461,6 +4483,10 @@ async function renderVoertuigcontroleOverzicht(){
       resultaten = resData||[];
     }
     const personenById = {}; State.personen.forEach(p=>personenById[p.id]=p);
+    // Openstaande punten per voertuig. Lukt dit niet, dan blijft het overzicht gewoon werken, alleen zonder deze aanduiding.
+    let openstaand = {};
+    try{ openstaand = await laadVoertuigOpenstaand(ids); }catch(err){ console.warn('[dagplanning] openstaande punten per voertuig niet opgehaald:', err && err.message); }
+    const mv = (n, een, meer) => n + ' ' + (n===1 ? een : meer);
 
     wrap.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
       <div class="eyebrow" style="margin:0;">Voertuigcontroles ${esc(postNaam(postId))} — ${esc(datumStr)}</div>
@@ -4481,10 +4507,14 @@ async function renderVoertuigcontroleOverzicht(){
         const medewerker = personenById[u.medewerker_id];
         statusHtml = `<span class="badge-vorm praktijk">✅ ${u.afgerond_op?new Date(u.afgerond_op).toLocaleTimeString('nl-NL',{hour:'2-digit',minute:'2-digit'}):''} — ${esc(medewerker?medewerker.naam:u.medewerker_id)}</span>`;
       }
+      const o = openstaand[v.id] || { meldingen:0, afwijkingen:0 };
+      const nOpen = o.meldingen + o.afwijkingen;
+      const openTitel = [o.meldingen ? mv(o.meldingen,'melding','meldingen') : '', o.afwijkingen ? mv(o.afwijkingen,'afwijking','afwijkingen')+' bij de laatste controle' : ''].filter(Boolean).join(' en ');
+      const openHtml = nOpen ? `<span class="badge-vorm" data-action="openVcDetail" data-id="${v.id}" title="${esc(openTitel)} — klik voor details" style="background:rgba(245,166,35,.18);color:var(--amber);cursor:pointer;">🔧 ${nOpen} open</span>` : '';
       return `<div class="post-block" style="margin-bottom:8px;">
         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
           <div><strong>${esc(v.voertuignummer)}</strong> — ${esc(v.omschrijving)} <span class="hint" style="margin:0;">(${esc(v.dagstaat_positie)})</span></div>
-          <div style="display:flex;align-items:center;gap:8px;">${statusHtml}<button type="button" class="btn small ghost" data-action="openVcDetail" data-id="${v.id}">📋 Details</button></div>
+          <div style="display:flex;align-items:center;gap:8px;">${openHtml}${statusHtml}<button type="button" class="btn small ghost" data-action="openVcDetail" data-id="${v.id}">📋 Details</button></div>
         </div>
         ${detailHtml}
       </div>`;
@@ -4571,18 +4601,22 @@ async function openVcDetailModal(voertuigId){
 
     box.querySelectorAll('[data-action="vcJournaalOplossen"]').forEach(btn=>{
       btn.addEventListener('click', async ()=>{
-        await supa.from('voertuigcontrole_journaal').update({opgelost:true, opgelost_door: State.ingelogdPersoon.id, opgelost_op: new Date().toISOString()}).eq('id', btn.dataset.id);
+        const r = await supa.from('voertuigcontrole_journaal').update({opgelost:true, opgelost_door: State.ingelogdPersoon.id, opgelost_op: new Date().toISOString()}).eq('id', btn.dataset.id);
+        if(r.error){ alert('Oplossen mislukt: '+r.error.message); return; }
         await addLog(`Journaalpunt opgelost voor voertuig ${voertuig.voertuignummer}.`, voertuig.post_id);
         laadEnToon();
+        if(State.activeTab==='voertuigcontrole') renderVoertuigcontroleOverzicht();   // het getal achter dit venster meteen bijwerken
       });
     });
     document.getElementById('vcMeldingToevoegenBtn').addEventListener('click', async ()=>{
       const veld = document.getElementById('vcNieuweMelding');
       const tekst = veld.value.trim();
       if(!tekst) return;
-      await supa.from('voertuigcontrole_journaal').insert({voertuig_id: voertuigId, tekst, toegevoegd_door: State.ingelogdPersoon.id});
+      const r = await supa.from('voertuigcontrole_journaal').insert({voertuig_id: voertuigId, tekst, toegevoegd_door: State.ingelogdPersoon.id});
+      if(r.error){ alert('Toevoegen mislukt: '+r.error.message); return; }
       await addLog(`Journaalmelding toegevoegd voor voertuig ${voertuig.voertuignummer}: "${tekst}".`, voertuig.post_id);
       laadEnToon();
+      if(State.activeTab==='voertuigcontrole') renderVoertuigcontroleOverzicht();   // het getal achter dit venster meteen bijwerken
     });
     document.getElementById('vcToggleOpgelost').addEventListener('click', ()=>{
       const lijst = document.getElementById('vcOpgelostLijst');
