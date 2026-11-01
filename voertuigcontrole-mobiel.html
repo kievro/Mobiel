@@ -189,6 +189,7 @@
   var huidigeUitvoeringId = null;
   var huidigePunten = []; // [{id, omschrijving, resultaatId, status, opmerking}]
   var huidigJournaal = [];
+  var huidigArchief = [];   // opgeloste meldingen van dit voertuig (zonder "Niets te melden")
   var journaalKeuzeGemaakt = false;
   var mijnVoertuigenCache = [];
 
@@ -304,6 +305,10 @@
       var punten = await sbSelect("voertuigcontrole_controlepunten?voertuig_id=eq."+voertuigId+"&actief=eq.true&order=volgorde");
       var journaalRes = await sbSelect("voertuigcontrole_journaal?voertuig_id=eq."+voertuigId+"&opgelost=eq.false&order=toegevoegd_op.asc");
       huidigJournaal = journaalRes || [];
+      try{
+        var archiefRes = await sbSelect("voertuigcontrole_journaal?voertuig_id=eq."+voertuigId+"&opgelost=eq.true&tekst=neq."+encodeURIComponent("(Niets te melden)")+"&order=opgelost_op.desc&limit=20");
+        huidigArchief = archiefRes || [];
+      }catch(e){ huidigArchief = []; }   // het archief is een extraatje: een fout hier mag de controle nooit blokkeren
       var mijnMeldingVandaagRes = await sbSelect("voertuigcontrole_journaal?voertuig_id=eq."+voertuigId+"&toegevoegd_door=eq."+loginState.gekozenId+"&toegevoegd_op=gte."+datumStr+"T00:00:00");
       journaalKeuzeGemaakt = !!(mijnMeldingVandaagRes && mijnMeldingVandaagRes.length);
       var uitvoering = huidigVoertuig._uitvoering;
@@ -366,6 +371,16 @@
       }).join("");
     }
     html += '</div>';
+
+    // ---------- Archief: eerder opgeloste meldingen van dit voertuig ----------
+    html += '<details style="margin:-6px 0 14px;"><summary class="hint" style="cursor:pointer;margin:0;padding:6px 2px;">Archief — opgeloste meldingen ('+huidigArchief.length+')</summary>'
+      + (huidigArchief.length ? huidigArchief.map(function(j){
+          var door = function(id){ var p = loginState.personen.filter(function(x){ return x.id===id; })[0]; return p ? p.naam : "?"; };
+          var wanneer = j.opgelost_op ? new Date(j.opgelost_op).toLocaleDateString("nl-NL",{day:"numeric",month:"short"}) : "";
+          return '<div style="padding:6px 2px;border-bottom:1px solid var(--border);"><div style="text-decoration:line-through;font-size:13.5px;">'+escapeHtml(j.tekst)+'</div>'
+            + '<div class="hint" style="margin:2px 0 0;">'+escapeHtml(door(j.toegevoegd_door))+' → opgelost door '+escapeHtml(door(j.opgelost_door))+(wanneer?' · '+wanneer:'')+'</div></div>';
+        }).join("") : '<div class="hint" style="margin:6px 2px;">Nog niets in het archief.</div>')
+      + '</details>';
 
     // ---------- Verplichte melding bij afronden ----------
     if(!afgerond){
