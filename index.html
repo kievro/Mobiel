@@ -251,7 +251,19 @@
       if(["bevelvoerder","pco","beheer"].indexOf(rol) === -1) return;
       document.getElementById("tegelOverdracht").classList.remove("hidden");
       var telRes = await supa.from("overdrachten").select("id", { count: "exact", head: true }).eq("is_open", true);
-      var aantal = telRes.count || 0;
+      // Openstaande voertuigmeldingen (uit de voertuigcontrole) horen bij het totaal, maar alleen van voertuigen die
+      // in gebruik zijn: dezelfde voertuigen als in de lijst, anders staat er een getal dat niemand kan wegwerken.
+      // Lukt deze telling niet, dan telt alleen het eerste deel mee; de tegel zelf blijft gewoon werken.
+      var vcAantal = 0;
+      try{
+        var vRes = await supa.from("voertuigcontrole_voertuigen").select("id").eq("actief", true);
+        var vIds = (vRes.data || []).map(function(v){ return v.id; });
+        if(vIds.length){
+          var vcTelRes = await supa.from("voertuigcontrole_journaal").select("id", { count: "exact", head: true }).eq("opgelost", false).in("voertuig_id", vIds);
+          vcAantal = (vcTelRes && !vcTelRes.error && vcTelRes.count) || 0;
+        }
+      }catch(e){ vcAantal = 0; }
+      var aantal = (telRes.count || 0) + vcAantal;
       var b = document.getElementById("overdrachtBolletje");
       if(aantal > 0){ b.textContent = aantal > 99 ? "99+" : aantal; b.classList.remove("hidden"); }
     }catch(e){ /* tegel blijft verborgen -- geen probleem */ }
