@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Dagplanning Brandweer · v31 okt 2026 D</title>
+<title>Dagplanning Brandweer · v31 okt 2026 E</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🚒</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
@@ -1121,7 +1121,7 @@ async function koppelOefeningNaarPlanning(oefening){
       const huidigType = State.config.activiteitTypes.find(x=>x.id===huidigeCel.typeId);
       const isVrijeDienst = huidigType && huidigType.naam.trim().toLowerCase()==='vrije dienst';
       if(isVrijeDienst){ overgeslagen++; return; }
-      setCel(dagData, r.rowId, blokId, {tekst: themaTekst, typeId: oefening.typeId || 't-oef'});
+      setCel(dagData, r.rowId, blokId, {tekst: themaTekst, typeId: oefening.typeId || 't-oef', oefeningId: oefening.id});
     });
   });
   const sleutel = oefening.postId+':'+datumStr;
@@ -1134,7 +1134,7 @@ async function koppelOefeningNaarPlanning(oefening){
         const huidigType = State.config.activiteitTypes.find(x=>x.id===huidigeCel.typeId);
         const isVrijeDienst = huidigType && huidigType.naam.trim().toLowerCase()==='vrije dienst';
         if(isVrijeDienst) return;
-        setCel(dagData, r.rowId, blokId, {tekst: themaTekst, typeId: oefening.typeId || 't-oef'});
+        setCel(dagData, r.rowId, blokId, {tekst: themaTekst, typeId: oefening.typeId || 't-oef', oefeningId: oefening.id});
       });
     });
   }
@@ -1146,6 +1146,60 @@ async function koppelOefeningNaarPlanning(oefening){
   const ploegWissel = (vorigePloeg && vorigePloeg!==oefening.ploegId) ? ` (dienstploeg van die dag aangepast naar ${ploegNaam})` : '';
   const skipMelding = overgeslagen>0 ? ` — ${overgeslagen} persoon/personen met vrije dienst zijn overgeslagen` : '';
   await addLog(`Oefening '${oefening.thema}' gezet in planning van ${datumStr}, ${ploegNaam}${ploegWissel}${skipMelding}.`, oefening.postId);
+}
+
+// ---------- een oefening weer uit de dagplanning halen ----------
+// Wat de planning van een oefening was (voor het opruimen en om te zien of er iets veranderd is).
+function oefeningPlanningSnapshot(o){
+  return { postId:o.postId, datum:o.datum, ploegId:o.ploegId||null, blokken:(o.blokken||[]).slice(), typeId:o.typeId||'t-oef',
+           tekst: o.welkeOefening ? `${o.thema} — ${o.welkeOefening}` : o.thema, deelnemers:'' };
+}
+function duikPlanningSnapshot(d){
+  return { postId:d.post_id, datum:d.datum, ploegId:null, blokken:(d.blokken||[]).slice(), typeId:'t-oef',
+           tekst: 'Duikoefening — ' + (d.codes||[]).join(', ') + (d.omschrijving?' ('+d.omschrijving+')':''),
+           deelnemers:(d.deelnemer_ids||[]).slice().sort().join(',') };
+}
+// Maakt de cellen leeg die door deze oefening zijn gevuld. Een cel telt als "van deze oefening" als hij het id van
+// de oefening draagt, of (oudere cellen zonder id) precies de tekst en het type die de koppeling zou hebben gezet.
+// Wat iemand daarna zelf heeft aangepast, blijft staan. Geeft het aantal opgeruimde cellen terug.
+async function ontkoppelOefeningVanPlanning(oefeningId, oud){
+  const blokken = (oud && oud.blokken) || [];
+  if(!oud || !oud.datum || !oud.postId || !blokken.length) return 0;
+  const sleutel = oud.postId+':'+oud.datum;
+  const verwachtType = oud.typeId || 't-oef';
+  const isVanDezeOefening = c => !!c && (c.oefeningId ? c.oefeningId===oefeningId : (c.tekst===oud.tekst && c.typeId===verwachtType));
+  const opruimen = dagData => {
+    let n = 0;
+    Object.keys(dagData.cellen||{}).forEach(pid=>{
+      blokken.forEach(blokId=>{
+        const c = dagData.cellen[pid] && dagData.cellen[pid][blokId];
+        if(isVanDezeOefening(c)){ delete dagData.cellen[pid][blokId]; n++; }
+      });
+      if(dagData.cellen[pid] && Object.keys(dagData.cellen[pid]).length===0) delete dagData.cellen[pid];
+    });
+    return n;
+  };
+  const isHuidige = oud.postId===State.currentPost && oud.datum===fmtKey(State.currentDate);
+  let dagData = isHuidige ? State.dag : await loadDagRaw(oud.postId, oud.datum);
+  let verwijderd = opruimen(dagData);
+  if(await isGewijzigdSindsLaden(sleutel)){
+    dagData = await loadDagRaw(oud.postId, oud.datum);   // iemand wijzigde die dag ondertussen: opnieuw opruimen op de verse versie
+    verwijderd = opruimen(dagData);
+  }
+  if(!verwijderd) return 0;                                // niets van deze oefening gevonden: niets opslaan
+  await sSet('dag:'+sleutel, dagData, true);
+  State.dagUpdatedAt[sleutel] = new Date().toISOString();
+  if(isHuidige) State.dag = dagData; else State.pinCache[sleutel] = dagData;
+  await addLog(`Oefening '${oud.tekst}' uit de planning van ${oud.datum} gehaald (${verwijderd} cel${verwijderd===1?'':'len'}).`, oud.postId);
+  return verwijderd;
+}
+// Zelfde, maar een fout mag het aanpassen of verwijderen zelf nooit ongedaan maken: dan krijgt de gebruiker een duidelijke melding.
+async function ontkoppelVeilig(oefeningId, snapshot, wat){
+  try{ return await ontkoppelOefeningVanPlanning(oefeningId, snapshot); }
+  catch(err){
+    alert(`De oefening is ${wat}, maar de dagplanning van ${snapshot.datum} kon niet worden opgeschoond: ${err.message||err}\n\nControleer de blokken van die dag en pas ze zo nodig handmatig aan.`);
+    return 0;
+  }
 }
 async function saveConfig(){
   // Posten staat sinds vandaag in een eigen tabel -- upsert per rij, plus
@@ -1886,7 +1940,7 @@ async function koppelMeerdereOefeningenNaarPlanning(oefeningen){
         const huidigType = State.config.activiteitTypes.find(x=>x.id===huidigeCel.typeId);
         const isVrijeDienst = huidigType && huidigType.naam.trim().toLowerCase()==='vrije dienst';
         if(isVrijeDienst) return;
-        setCel(dagData, r.rowId, blokId, {tekst: themaTekst, typeId: oefening.typeId || 't-oef'});
+        setCel(dagData, r.rowId, blokId, {tekst: themaTekst, typeId: oefening.typeId || 't-oef', oefeningId: oefening.id});
       });
     });
     laatsteploegNaam = (State.config.ploegen.find(p=>p.id===oefening.ploegId)||{}).naam || laatsteploegNaam;
@@ -3581,11 +3635,15 @@ function openOefeningModal(existingId){
     };
     if(!data.datum || !data.ploegId) return;
     let record;
+    const oudeSnap = existing ? oefeningPlanningSnapshot(existing) : null;   // wat er vóór deze wijziging in de planning stond
     if(existing){ delete existing.oefenleider; Object.assign(existing, data); record = existing; await addLog(`Oefening '${data.welkeOefening||data.thema}' bewerkt (${data.datum}).`, data.postId); }
     else { data.id = uid(); State.oefeningen.push(data); record = data; await addLog(`Oefening '${data.welkeOefening||data.thema}' toegevoegd (${data.datum}).`, data.postId); }
     await saveOefeningen();
     box.classList.remove('wide');
     closeModal();
+    if(oudeSnap && oudeSnap.blokken.length && JSON.stringify(oudeSnap) !== JSON.stringify(oefeningPlanningSnapshot(record))){
+      await ontkoppelVeilig(record.id, oudeSnap, 'aangepast');                // de oude blokken, dag, post of ploeg uit de planning halen
+    }
     if(record.blokken && record.blokken.length){ await koppelOefeningNaarPlanning(record); }
     if(record.materialen && record.materialen.length){
       if(confirm(`Je hebt ${record.materialen.length} materia(a)l(en) aangevinkt voor deze oefening. Wil je de relatiebeheerder Vakbekwaam hier direct over informeren per e-mail?`)){
@@ -3596,10 +3654,12 @@ function openOefeningModal(existingId){
   });
   if(existing){
     document.getElementById('delFromModal').addEventListener('click', async ()=>{
-      if(!confirm('Deze oefening verwijderen? Dit haalt hem niet automatisch weg uit de planning (die kun je daar los aanpassen).')) return;
+      if(!confirm('Deze oefening verwijderen? Hij wordt ook uit de dagplanning gehaald (cellen die je daar zelf hebt aangepast blijven staan).')) return;
+      const planSnap = oefeningPlanningSnapshot(existing);
       State.oefeningen = State.oefeningen.filter(o=>o.id!==existing.id);
       await addLog(`Oefening '${existing.welkeOefening||existing.thema}' verwijderd.`, existing.postId);
       await saveOefeningen();
+      await ontkoppelVeilig(existing.id, planSnap, 'verwijderd');
       box.classList.remove('wide');
       closeModal(); render();
     });
@@ -4177,6 +4237,7 @@ function openDuikOefeningPlanModal(bestaandId){
       codes: fd.getAll('codes'), deelnemer_ids: fd.getAll('deelnemers'), blokken: fd.getAll('blokken'),
       aangemaakt_door: (State.ingelogdPersoon&&State.ingelogdPersoon.naam)||null
     };
+    const oudeDuikSnap = bestaand ? duikPlanningSnapshot(bestaand) : null;   // wat er vóór deze wijziging in de planning stond
     try{
       let record;
       if(bestaand){
@@ -4191,18 +4252,23 @@ function openDuikOefeningPlanModal(bestaandId){
         record = data;
       }
       closeModal(); box.classList.remove('wide');
+      if(oudeDuikSnap && oudeDuikSnap.blokken.length && JSON.stringify(oudeDuikSnap) !== JSON.stringify(duikPlanningSnapshot(record))){
+        await ontkoppelVeilig('duik-'+record.id, oudeDuikSnap, 'aangepast');   // oude blokken, dag of deelnemers uit de planning halen
+      }
       if(record.blokken && record.blokken.length) await koppelDuikOefeningNaarPlanning(record);
       renderDuikSub();
     }catch(err){ alert('Opslaan mislukt: '+(err.message||err)); }
   });
   if(bestaand){
     document.getElementById('duikOefPlanVerwijder').addEventListener('click', async ()=>{
-      if(!confirm('Deze geplande duikoefening verwijderen?')) return;
+      if(!confirm('Deze geplande duikoefening verwijderen? Hij wordt ook uit de dagplanning gehaald (cellen die je daar zelf hebt aangepast blijven staan).')) return;
       try{
+        const planSnap = duikPlanningSnapshot(bestaand);
         const {error} = await supa.from('duik_oefeningen').delete().eq('id', bestaand.id);
         if(error) throw error;
         State.duikOefeningen = State.duikOefeningen.filter(o=>o.id!==bestaand.id);
         await verwijderGekoppeldeOefeningRij(bestaand.id);
+        await ontkoppelVeilig('duik-'+bestaand.id, planSnap, 'verwijderd');
         closeModal(); box.classList.remove('wide'); renderDuikSub();
       }catch(err){ alert('Verwijderen mislukt: '+(err.message||err)); }
     });
@@ -4233,7 +4299,7 @@ async function koppelDuikOefeningNaarPlanning(duikOefening){
   });
   duikOefening.blokken.forEach(blokId=>{
     duikOefening.deelnemer_ids.forEach(personId=>{
-      setCel(dagData, personId, blokId, {tekst: themaTekst, typeId: 't-oef'});
+      setCel(dagData, personId, blokId, {tekst: themaTekst, typeId: 't-oef', oefeningId: 'duik-'+duikOefening.id});
     });
   });
   const sleutel = postId+':'+datumStr;
@@ -4247,7 +4313,7 @@ async function koppelDuikOefeningNaarPlanning(duikOefening){
       }
     });
     duikOefening.blokken.forEach(blokId=>{
-      duikOefening.deelnemer_ids.forEach(personId=>{ setCel(dagData, personId, blokId, {tekst: themaTekst, typeId: 't-oef'}); });
+      duikOefening.deelnemer_ids.forEach(personId=>{ setCel(dagData, personId, blokId, {tekst: themaTekst, typeId: 't-oef', oefeningId: 'duik-'+duikOefening.id}); });
     });
   }
   await sSet('dag:'+sleutel, dagData, true);
@@ -5914,10 +5980,13 @@ function wireEvents(){
     else if(action==='delOefening'){
       const o = State.oefeningen.find(x=>x.id===el.dataset.id);
       if(!o) return;
-      if(!confirm('Deze oefening verwijderen?')) return;
+      if(!confirm('Deze oefening verwijderen? Hij wordt ook uit de dagplanning gehaald (cellen die je daar zelf hebt aangepast blijven staan).')) return;
+      const planSnap = oefeningPlanningSnapshot(o);
       State.oefeningen = State.oefeningen.filter(x=>x.id!==o.id);
       await addLog(`Oefening '${o.welkeOefening||o.thema}' verwijderd.`, o.postId);
-      await saveOefeningen(); render();
+      await saveOefeningen();
+      await ontkoppelVeilig(o.id, planSnap, 'verwijderd');
+      render();
     }
     else if(action==='removeExtra'){
       const postId = el.dataset.post;
