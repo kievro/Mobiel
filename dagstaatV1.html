@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Dagplanning Brandweer · v31 okt 2026 B</title>
+<title>Dagplanning Brandweer · v31 okt 2026 D</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🚒</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
@@ -160,6 +160,7 @@ th.col-smal .th-naam{font-size:11px;}
 .voertuig-rij label{font-size:12px;flex-shrink:0;min-width:70px;}
 .voertuig-rij select{flex:1;background:var(--surface);border:1px solid var(--border);border-radius:5px;padding:5px 6px;font-size:12px;}
 .voertuig-select.voertuig-dubbel{border-color:var(--amber);box-shadow:0 0 0 1px var(--amber);}
+.voertuig-select.voertuig-niet-gekw{border-style:dashed;border-color:var(--amber);}
 .voertuig-rij.voertuig-gewijzigd select{background:#7a4a1a;color:#fff;border-color:#a86a2a;}
 .voertuig-rij.voertuig-gewijzigd{position:relative;}
 .voertuig-wijziging-info{font-size:10px;color:var(--amber);display:block;margin-top:1px;}
@@ -592,6 +593,35 @@ function functiesFlatVoorPost(postId){
   return flat;
 }
 
+// Welk specialisme hoort bij welke voertuigfunctie. Bepaalt de indeling van de keuzelijsten in de voertuigindeling
+// (gekwalificeerd bovenaan, de overigen eronder). Functies die hier niet in staan (Corvee, Reserve, Lima/Papa/Gaspak,
+// enz.) krijgen één gewone lijst.
+const FUNCTIE_SPECIALISME_MAP = {
+  'TS BV':'Ploegbevelvoerder', 'TS CH':'Chauffeur/Pompbediende',
+  'MS 1':'Manschap A', 'MS 2':'Manschap A', 'MS 3':'Manschap A', 'MS 4':'Manschap A',
+  'HW CH':'Chauffeur HW', 'HW BD':'Voertuigbedienaar HW',
+  'HV CH':'Chauffeur/Pompbediende', 'HV BD':'Voertuigbedienaar HV',
+  'FRB CH':'Chauffeur FRB', 'FRB MS':'Manschap A',
+  'DPL':'Duikploegleider', 'Ass DPL':'Ass. duikploegleider',
+  'Duiker 1':'Duiker', 'Duiker 2':'Duiker'
+};
+// De specialismen die de voertuigindeling nodig heeft moeten altijd aan een persoon toe te wijzen zijn. Ontbreken ze
+// in de lijst die in de database staat (Instellingen → Specialismen), dan worden ze hier aangevuld.
+function vulSpecialismenAan(lijst){
+  const uit = (lijst || []).slice();
+  Object.values(FUNCTIE_SPECIALISME_MAP).forEach(sp=>{ if(!uit.includes(sp)) uit.push(sp); });
+  return uit;
+}
+// Het vinkjesraster in het persoon-scherm: de lijst uit Instellingen, plus de specialismen die deze persoon al heeft maar
+// die niet (meer) in die lijst staan. Zonder dat laatste verdwijnen die stilletjes bij het opslaan, want alleen
+// aangevinkte vakjes worden bewaard.
+function specialismenVinkjes(lijst, huidig){
+  const heeft = huidig || [];
+  const eigen = heeft.filter(sp=>!lijst.includes(sp));
+  const vink = (sp, buitenLijst) => `<label><input type="checkbox" name="specialismen" value="${esc(sp)}" ${heeft.includes(sp)?'checked':''}> ${esc(sp)}${buitenLijst?' <span class="hint" style="margin:0;" title="Dit specialisme staat niet (meer) in de lijst bij Instellingen, maar deze persoon heeft het wel. Vink het uit om het te verwijderen.">(niet in de lijst)</span>':''}</label>`;
+  return lijst.map(sp=>vink(sp,false)).concat(eigen.map(sp=>vink(sp,true))).join('');
+}
+
 /* ---------- helpers ---------- */
 function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,8);}
@@ -821,7 +851,7 @@ async function loadAll(overslaanDag){
     supaSelectMetRetry(()=>supa.from('mededelingen').select('*').order('start_datum',{ascending:false}).then(r=>r, e=>({error:e})), 'mededelingen')
   ]);
   State.config = config;
-  if(Array.isArray(State.config.specialismen)) State.config.specialismen = normSpecLijst(State.config.specialismen);
+  if(Array.isArray(State.config.specialismen)) State.config.specialismen = vulSpecialismenAan(normSpecLijst(State.config.specialismen));
   State.config.posten = ((postenResultaat && !postenResultaat.error) ? (postenResultaat.data||[]) : []).map(r=>({
     id: r.id, naam: r.naam, voertuigFuncties: r.voertuig_functies||[]
   }));
@@ -3664,7 +3694,7 @@ function openPersoonModal(existingId){
         </div>
       </div>
       <div class="field"><label>Specialismen</label>
-        <div class="checkgrid">${cfg.specialismen.map(s=>`<label><input type="checkbox" name="specialismen" value="${esc(s)}" ${existing&&(existing.specialismen||[]).includes(s)?'checked':''}> ${esc(s)}</label>`).join('')}</div>
+        <div class="checkgrid">${specialismenVinkjes(cfg.specialismen, existing && existing.specialismen)}</div>
       </div>
       <div class="modal-actions">
         ${existing?'<button type="button" class="btn ghost" id="delFromModal">Verwijderen</button>':''}
@@ -4696,40 +4726,28 @@ async function renderVoertuigTab(){
         else gebruikt[pid] = fid;
       });
     });
-    // Welk specialisme hoort bij welke functie -- bepaalt de indeling van de
-    // keuzelijst hieronder. Functies die hier niet in staan (Corvee, Reserve,
-    // Lima/Papa/Gaspak, enz.) krijgen geen filtering: iedereen blijft gewoon
-    // zichtbaar voor die functies.
-    const FUNCTIE_SPECIALISME_MAP = {
-      'TS BV':'Ploegbevelvoerder', 'TS CH':'Chauffeur/Pompbediende',
-      'MS 1':'Manschap A', 'MS 2':'Manschap A', 'MS 3':'Manschap A', 'MS 4':'Manschap A',
-      'HW CH':'Chauffeur HW', 'HW BD':'Voertuigbedienaar HW',
-      'HV CH':'Chauffeur/Pompbediende', 'HV BD':'Voertuigbedienaar HV',
-      'FRB CH':'Chauffeur FRB', 'FRB MS':'Manschap A',
-      'DPL':'Duikploegleider', 'Ass DPL':'Ass. duikploegleider',
-      'Duiker 1':'Duiker', 'Duiker 2':'Duiker'
+    // De koppeling functie → specialisme staat bovenaan het bestand (FUNCTIE_SPECIALISME_MAP): daar zit de lijst.
+    const heeftSpecialisme = (rowId, vereist) => {
+      const p = State.personen.find(pp=>pp.id===rowId);
+      return !!(p && (p.specialismen||[]).includes(vereist));
     };
+    // Iedereen die vandaag in de lijst staat is te kiezen. Wie het specialisme voor deze functie heeft, staat
+    // bovenaan; de rest staat eronder in een aparte groep. Zo helpt de indeling je, maar blokkeert ze je niet
+    // wanneer het specialisme (nog) niet in Personeel is vastgelegd.
     const personOpties = (huidige, functieNaam) => {
       const vereist = FUNCTIE_SPECIALISME_MAP[functieNaam];
       const fidVoorTelling = slug(functieNaam);
       const tellingVoorFunctie = telling[fidVoorTelling] || {};
       const metAantal = r => { const n = tellingVoorFunctie[r.rowId]||0; return `${esc(r.naam)}${n?` — ${n}x`:''}`; };
+      const optie = r => `<option value="${r.rowId}" ${huidige===r.rowId?'selected':''}>${metAantal(r)}</option>`;
       if(!vereist){
-        return `<option value="">— leeg —</option>` + rijen.map(r=>`<option value="${r.rowId}" ${huidige===r.rowId?'selected':''}>${metAantal(r)}</option>`).join('');
+        return `<option value="">— leeg —</option>` + rijen.map(optie).join('');
       }
-      const isGekwalificeerd = r => {
-        const p = State.personen.find(pp=>pp.id===r.rowId);
-        return !!(p && (p.specialismen||[]).includes(vereist));
-      };
-      let gekwalificeerd = rijen.filter(isGekwalificeerd);
-      // Uitzondering: staat de huidige toewijzing op iemand die niet (meer)
-      // gekwalificeerd is, dan blijft die persoon wel zichtbaar/geselecteerd
-      // -- anders verdwijnt een bestaande, geldige toewijzing zomaar uit beeld.
-      if(huidige && !gekwalificeerd.some(r=>r.rowId===huidige)){
-        const huidigeRij = rijen.find(r=>r.rowId===huidige);
-        if(huidigeRij) gekwalificeerd = [...gekwalificeerd, huidigeRij];
-      }
-      return `<option value="">— leeg —</option>` + gekwalificeerd.map(r=>`<option value="${r.rowId}" ${huidige===r.rowId?'selected':''}>${metAantal(r)}</option>`).join('');
+      const gekwalificeerd = rijen.filter(r=>heeftSpecialisme(r.rowId, vereist));
+      const overige = rijen.filter(r=>!heeftSpecialisme(r.rowId, vereist));
+      return `<option value="">— leeg —</option>`
+        + (gekwalificeerd.length ? `<optgroup label="Gekwalificeerd — ${esc(vereist)}">${gekwalificeerd.map(optie).join('')}</optgroup>` : '')
+        + (overige.length ? `<optgroup label="Overige — nog geen ${esc(vereist)}">${overige.map(optie).join('')}</optgroup>` : '');
     };
     const wijzigingen = (dagData.voertuigWijzigingen && dagData.voertuigWijzigingen[deel]) || {};
     return `<div class="voertuig-sectie">
@@ -4741,7 +4759,10 @@ async function renderVoertuigTab(){
             ${g.functies.map(naam=>{
               const fid = slug(naam);
               const wijziging = wijzigingen[fid];
-              return `<div class="voertuig-rij${wijziging?' voertuig-gewijzigd':''}"><label>${esc(naam)}</label><select class="voertuig-select${dubbeleFids.has(fid)?' voertuig-dubbel':''}" data-deel="${deel}" data-functie="${fid}" title="${dubbeleFids.has(fid)?'Let op: dubbel toegewezen op ditzelfde voertuig':''}">${personOpties(obj[fid]||'', naam)}</select>${wijziging?`<span class="voertuig-wijziging-info">Was: ${esc(wijziging.vorigeNaam)} <button type="button" class="voertuig-wijziging-ok" data-action="wijzigingGezien" data-deel="${deel}" data-functie="${fid}" title="Markeer als gezien">✓ gezien</button></span>`:''}</div>`;
+              const vereistHier = FUNCTIE_SPECIALISME_MAP[naam];
+              const nietGekw = !!(vereistHier && obj[fid] && !heeftSpecialisme(obj[fid], vereistHier));
+              const selectTitel = [dubbeleFids.has(fid)?'Let op: dubbel toegewezen op ditzelfde voertuig':'', nietGekw?`Let op: deze persoon heeft het specialisme ${vereistHier} (nog) niet`:''].filter(Boolean).join(' · ');
+              return `<div class="voertuig-rij${wijziging?' voertuig-gewijzigd':''}"><label>${esc(naam)}</label><select class="voertuig-select${dubbeleFids.has(fid)?' voertuig-dubbel':''}${nietGekw?' voertuig-niet-gekw':''}" data-deel="${deel}" data-functie="${fid}" title="${esc(selectTitel)}">${personOpties(obj[fid]||'', naam)}</select>${wijziging?`<span class="voertuig-wijziging-info">Was: ${esc(wijziging.vorigeNaam)} <button type="button" class="voertuig-wijziging-ok" data-action="wijzigingGezien" data-deel="${deel}" data-functie="${fid}" title="Markeer als gezien">✓ gezien</button></span>`:''}</div>`;
             }).join('')}
           </div>`).join('')}
       </div>
@@ -4749,7 +4770,7 @@ async function renderVoertuigTab(){
   }
 
   wrap.innerHTML = `
-    <div class="hint" style="margin-bottom:14px;">Voertuigindeling voor <strong>${esc(postNaam(postId))}</strong> — ${esc(dagLabel)}. Eén persoon kan op meerdere voertuigen staan; een gele rand betekent dubbel op hetzelfde voertuig. Wijzigingen worden meteen opgeslagen.</div>
+    <div class="hint" style="margin-bottom:14px;">Voertuigindeling voor <strong>${esc(postNaam(postId))}</strong> — ${esc(dagLabel)}. Eén persoon kan op meerdere voertuigen staan; een gele rand betekent dubbel op hetzelfde voertuig. Per functie staan eerst de mensen met het juiste specialisme, daaronder de overigen; een gestippelde rand betekent dat de gekozen persoon dat specialisme (nog) niet heeft. Wijzigingen worden meteen opgeslagen.</div>
     ${toevoegRij}
     <button type="button" class="btn small ghost" data-action="kopieerDagNaarAvond" style="margin:14px 0;">📋 Kopieer dag naar avond</button>
     ${bouwSectie('dag','☀️ Overdag')}
@@ -4904,9 +4925,11 @@ function renderSettings(){
   else if(State.settingsTab==='specialismen'){
     panel.innerHTML = `
       <div class="tagpill-wrap">${cfg.specialismen.map(s=>`<span class="tagpill">${esc(s)}<button data-action="delSpec" data-val="${esc(s)}">✕</button></span>`).join('')}</div>
+      <div class="hint">De specialismen die de voertuigindeling gebruikt (${[...new Set(Object.values(FUNCTIE_SPECIALISME_MAP))].map(esc).join(', ')}) staan er altijd in en zijn niet te verwijderen.</div>
       <div class="inline-add"><input type="text" id="newSpec" placeholder="Nieuw specialisme"><button class="btn small" id="addSpecBtn">Toevoegen</button></div>`;
     panel.querySelectorAll('[data-action="delSpec"]').forEach(btn=>{
       btn.addEventListener('click', async ()=>{
+        if(Object.values(FUNCTIE_SPECIALISME_MAP).includes(btn.dataset.val)){ alert(`"${btn.dataset.val}" kan niet worden verwijderd: de voertuigindeling gebruikt dit specialisme.`); return; }
         cfg.specialismen = cfg.specialismen.filter(s=>s!==btn.dataset.val);
         await saveConfig(); renderSettings();
       });
