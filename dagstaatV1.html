@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Dagplanning Brandweer · v31 okt 2026 E</title>
+<title>Dagplanning Brandweer · v31 okt 2026 F</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🚒</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
@@ -1201,7 +1201,7 @@ async function ontkoppelVeilig(oefeningId, snapshot, wat){
     return 0;
   }
 }
-async function saveConfig(){
+async function saveConfigIntern(){
   // Posten staat sinds vandaag in een eigen tabel -- upsert per rij, plus
   // verwijderen van rijen die niet meer voorkomen. Zelfde patroon als
   // savePersonen(), en om dezelfde reden: een storing bij het opslaan van
@@ -1269,7 +1269,21 @@ async function saveConfig(){
   delete restConfig.activiteitTypes;
   delete restConfig.werkblokken;
   delete restConfig.themas;
-  await sSet('config', restConfig, true);
+  // sSet geeft bij een fout alleen 'false' terug in plaats van een fout te gooien: dat resultaat moet hier bekeken
+  // worden, anders lijkt het opslaan gelukt terwijl de configuratie niet is bewaard.
+  const bewaard = await sSet('config', restConfig, true);
+  if(!bewaard) throw new Error('de instellingen konden niet in de database worden gezet');
+}
+// Alle 40+ plekken die de instellingen opslaan lopen hierlangs: een fout wordt altijd gemeld, en de periodieke
+// verversing wacht zolang er wordt opgeslagen, zodat die de wijziging niet kan overschrijven.
+async function saveConfig(){
+  State.opslaanBezig = (State.opslaanBezig||0) + 1;
+  try{ await saveConfigIntern(); }
+  catch(err){
+    alert('Opslaan van de instellingen mislukt: '+(err.message||err)+'\n\nDe wijziging is mogelijk niet bewaard. Ververs de pagina en controleer het.');
+    throw err;
+  }
+  finally{ State.opslaanBezig--; }
 }
 function persoonNaarRij(p){
   return {
@@ -1653,9 +1667,33 @@ async function genereerWeekberichtVoorstel(file){
   return items;
 }
 
+// Schrijft alleen het weekbericht weg, in de ACTUELE configuratie uit de database. Zo hangt het niet af van het opslaan
+// van alle andere instellingen (posten, ploegen, ...), kan een verversing er niets tussendoor overschrijven, en wordt
+// daarna teruggelezen of het weekbericht er echt staat. Pas dan verandert het scherm; anders volgt een fout.
 async function saveWeekbericht(weekLabel, items){
-  State.config.weekbericht = { weekLabel, gepubliceerdOp: new Date().toISOString(), items };
-  await saveConfig();
+  const wb = { weekLabel, gepubliceerdOp: new Date().toISOString(), items };
+  State.opslaanBezig = (State.opslaanBezig||0) + 1;
+  try{
+    const { data, error } = await supa.from('kv_store').select('value').eq('key', 'config').maybeSingle();
+    if(error) throw error;
+    if(!data || !data.value) throw new Error('de configuratie kon niet worden gelezen');
+    const { error: schrijfFout } = await supa.from('kv_store').upsert({ key:'config', value:Object.assign({}, data.value, { weekbericht: wb }), updated_at:new Date().toISOString() });
+    if(schrijfFout) throw schrijfFout;
+    const { data: terug, error: leesFout } = await supa.from('kv_store').select('value').eq('key', 'config').maybeSingle();
+    if(leesFout) throw leesFout;
+    const bewaard = terug && terug.value && terug.value.weekbericht;
+    if(!bewaard || bewaard.gepubliceerdOp !== wb.gepubliceerdOp || (bewaard.items||[]).length !== items.length){
+      throw new Error('het weekbericht staat na het opslaan niet in de database');
+    }
+    State.config.weekbericht = wb;
+    markSaveStatus(true);
+  }catch(err){
+    markSaveStatus(false);
+    console.error('[dagplanning] weekbericht niet opgeslagen:', err && err.message);
+    throw err;
+  }finally{
+    State.opslaanBezig--;
+  }
 }
 
 // Leest het jaarlijkse maandcontrole-verdelingsbestand in (één tabblad per ploeg:
@@ -5486,12 +5524,20 @@ function renderSettings(){
         State.weekberichtVoorstel = null;
         renderSettings();
       });
-      document.getElementById('wbPubliceren').addEventListener('click', async () => {
-        await saveWeekbericht(State.weekberichtWeekLabel, State.weekberichtVoorstel);
-        await addLog(`Weekbericht '${State.weekberichtWeekLabel}' gepubliceerd (${State.weekberichtVoorstel.length} mededelingen).`, null);
+      document.getElementById('wbPubliceren').addEventListener('click', async e => {
+        const knop = e.currentTarget; knop.disabled = true;
+        const label = State.weekberichtWeekLabel, aantal = State.weekberichtVoorstel.length;
+        try{ await saveWeekbericht(label, State.weekberichtVoorstel); }
+        catch(err){
+          knop.disabled = false;
+          alert('Het weekbericht is NIET gepubliceerd: '+(err.message||err)+'\n\nControleer je verbinding en probeer het opnieuw. Je voorstel staat nog open, je hoeft het bestand niet opnieuw te kiezen.');
+          return;
+        }
+        try{ await addLog(`Weekbericht '${label}' gepubliceerd (${aantal} mededelingen).`, null); }
+        catch(err){ console.warn('[dagplanning] logregel niet opgeslagen:', err); }   // een logregel mag een geslaagde publicatie nooit tenietdoen
         State.weekberichtVoorstel = null;
         renderSettings();
-        alert('Weekbericht gepubliceerd — verschijnt binnen enkele minuten op de Dashboards (of direct na hun eigen ververs-cyclus).');
+        alert('Weekbericht gepubliceerd. Het staat in de database en verschijnt op de pagina "Weekbericht" van de dashboards: die vernieuwen elke minuut en wisselen elke 20 seconden van pagina, dus reken op hooguit twee minuten.');
       });
       panel.querySelectorAll('[data-wbveld]').forEach(el => {
         el.addEventListener('input', () => {
