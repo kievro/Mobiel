@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Dagplanning Brandweer · v31 okt 2026 F</title>
+<title>Dagplanning Brandweer · v3 nov 2026 H</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🚒</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
@@ -426,6 +426,7 @@ footer.pagefoot{margin-top:40px;text-align:center;color:var(--text-faint);font-s
     <span class="versie-badge" id="versieBadge"></span>
     <select class="postselect hidden" id="rolSelect" title="Bekijk als rol (alleen zichtbaar voor Beheer) — laat zien wat een andere rol te zien krijgt."></select>
     <span class="user-chip" id="userChip"></span>
+    <button class="btn ghost hidden" id="btnOnline" title="Wie is er nu online in Dagstaat (alleen zichtbaar voor beheer en pco)">👥 —</button>
     <button class="btn ghost" id="btnUitloggen" title="Uitloggen">🚪 Uitloggen</button>
     <button class="btn ghost" id="btnPrint">🖨 Printen</button>
     <button class="btn ghost" id="btnExport">⬇ Exporteren</button>
@@ -641,7 +642,7 @@ function contrastTextColor(hex){
 const SUPABASE_URL = 'https://iyquepqubfqrhybriqif.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml5cXVlcHF1YmZxcmh5YnJpcWlmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYwODI2MDMsImV4cCI6MjEwMTY1ODYwM30.0zMg5njpz3wnu3qSLDCRQ2Rx2IZlWGnZTj1mQkyWKsw';
 const supa = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
-const APP_VERSIE = '2.5';
+const APP_VERSIE = '3 nov 2026 H';   // zelfde label als in de titel van het tabblad; ook zichtbaar in de kop en bij wie online is
 
 // Pas dit aan zodra bekend is waar PloegCompleet definitief gehost wordt (bijv. een
 // submap naast Dagstaat op dezelfde NAS, of een heel ander adres). Relatief pad
@@ -782,7 +783,7 @@ function setCel(dag, personId, kolomId, data){
 }
 
 /* ---------- state ---------- */
-const APP_VERSIE_DATUM = "25 september 2026"; // pas deze regel aan bij elke nieuwe versie die je installeert
+const APP_VERSIE_DATUM = "3 november 2026"; // pas deze regel aan bij elke nieuwe versie die je installeert
 
 const State = {
   config:null, personen:[], dag:null, log:[], oefeningen:[],
@@ -946,11 +947,8 @@ async function loadAll(overslaanDag){
 
   if(!overslaanDag) await loadDag(State.currentPost, State.currentDate);
 
-  const key = fmtKey(new Date());
-  const firstPost = State.config.posten[0].id;
-  if(State.currentPost===firstPost && fmtKey(State.currentDate)===key && State.log.length===0){
-    await addLog("Roosterdata ingeladen vanuit Roosters_namen.xlsx (3 posten, 12 ploegen, 186 personen). Vul type (beroeps/vrijwillig) en specialismen per persoon aan via de Personeel-tab.", null);
-  }
+  // (Hier stond een eenmalige opstartregel over roosterdata uit het oorspronkelijke Excelbestand, die telkens werd geschreven
+  // als het logboek leeg leek. Er werd niets ingeladen, en bij een niet-leesbaar logboek overschreef ze het echte logboek. Verwijderd.)
 }
 function normaliseerDag(dagData){
   if(!dagData || dagData.blokken || !dagData.cellen) dagData = emptyDag(State.config);
@@ -2035,9 +2033,22 @@ function openOefExportModal(){
 }
 async function addLog(message, postIdOverride){
   const wie = State.ingelogdPersoon ? State.ingelogdPersoon.naam : 'Onbekend';
-  State.log.unshift({ts:new Date().toISOString(), day: fmtKey(State.currentDate), postId: postIdOverride===null?null:(postIdOverride||State.currentPost), message: `${message} (door ${wie})`, door: wie});
+  const regel = {ts:new Date().toISOString(), day: fmtKey(State.currentDate), postId: postIdOverride===null?null:(postIdOverride||State.currentPost), message: `${message} (door ${wie})`, door: wie};
+  State.log.unshift(regel);                                  // meteen zichtbaar in het scherm
   if(State.log.length>300) State.log.length=300;
-  await sSet('log', State.log, true);
+  // Het logboek is één lijst in de database. Daarom wordt eerst de actuele lijst uit de database gelezen en de nieuwe regel
+  // daarvoor gezet. Zo kan een logboek dat bij het opstarten niet gelezen kon worden (en dus leeg lijkt) het opgeslagen
+  // logboek nooit meer overschrijven. Kan het logboek nu niet gelezen worden, dan wordt er niets weggeschreven.
+  try{
+    const { data, error } = await supa.from('kv_store').select('value').eq('key', 'log').maybeSingle();
+    if(error) throw error;
+    const bestaand = (data && Array.isArray(data.value)) ? data.value : [];
+    const samen = [regel].concat(bestaand).slice(0, 300);
+    const bewaard = await sSet('log', samen, true);
+    if(bewaard) State.log = samen;
+  }catch(err){
+    console.warn('[dagplanning] logregel niet opgeslagen (het logboek was niet te lezen); het bestaande logboek blijft ongemoeid:', err && err.message);
+  }
 }
 function ploegenVanPost(postId){ return State.config.ploegen.filter(p=>p.postId===postId); }
 function postNaam(postId){ const p=State.config.posten.find(x=>x.id===postId); return p?p.naam:'—'; }
@@ -2136,6 +2147,114 @@ function renderCalendarPopover(){
     });
   });
 }
+/* ---------- WIE IS ONLINE (alleen voor beheer en pco) ---------- */
+// Elk geopend Dagstaat-venster meldt elke 30 seconden via de database-functie meld_aanwezig dat het open staat. Beheer en pco
+// zien via wie_is_online() wie in de laatste 90 seconden een levensteken gaf. De rechten zitten in de database: wie geen beheer of pco
+// is, krijgt van wie_is_online() niets terug, ook niet als hij de functie zelf aanroept. Er wordt niets bewaard: sluit je het
+// venster, dan verdwijnt de regel direct, en regels ouder dan een dag worden elke nacht opgeruimd.
+const AANWEZIG_INTERVAL_MS = 30000;
+const TAB_NAMEN = { dashboard:'Dashboard', voertuigindeling:'Voertuigindeling', planning:'Planning', overdracht:'Overdracht', oefenrooster:'Oefenrooster',
+                    diensten:'Diensten', personeel:'Personeel', log:'Logboek', voertuigcontrole:'Voertuigcontrole' };
+function magAanwezigheidZien(){ return State.rolWerkelijk==='beheer' || State.rolWerkelijk==='pco'; }   // de echte rol, niet de rol die beheer bekijkt
+function nieuweSessieId(){
+  try{ if(window.crypto && window.crypto.randomUUID) return window.crypto.randomUUID(); }catch(err){}
+  return 's' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+}
+async function meldAanwezig(){
+  if(!supa || !State.ingelogdPersoon || !State.sessieId) return;
+  try{
+    const { error } = await supa.rpc('meld_aanwezig', { p_sessie: State.sessieId, p_app: 'dagstaat', p_versie: APP_VERSIE,
+      p_tabblad: State.activeTab || null, p_post: State.currentPost || null, p_zichtbaar: document.visibilityState !== 'hidden' });
+    if(error) throw error;
+    State.aanwezigheidFout = null;
+  }catch(err){
+    if(!State.aanwezigheidFout) console.warn('[dagplanning] aanwezigheid doorgeven mislukt (blokkeert verder niets):', err && err.message ? err.message : err);
+    State.aanwezigheidFout = (err && err.message) || String(err);
+  }
+}
+async function laadAanwezigheid(){
+  if(!magAanwezigheidZien() || !supa) return;
+  try{
+    const { data, error } = await supa.rpc('wie_is_online');
+    if(error) throw error;
+    State.aanwezigheid = data || [];
+    State.aanwezigheidLeesFout = null;
+  }catch(err){ State.aanwezigheidLeesFout = (err && err.message) || String(err); }
+  renderAanwezigheidKnop();
+  vulAanwezigheidLijst();
+}
+// Bundelt de vensters tot één regel per persoon. 'andereVersie' = een andere versie van Dagstaat dan de jouwe.
+function groepeerAanwezigheid(rijen, eigenVersie){
+  const perPersoon = new Map();
+  (rijen || []).forEach(r=>{
+    let p = perPersoon.get(r.persoon_id);
+    if(!p){ p = { persoonId:r.persoon_id, naam:r.naam, rol:r.rol, vensters:[] }; perPersoon.set(r.persoon_id, p); }
+    p.vensters.push({ app:r.app, versie:r.versie, tabblad:r.tabblad, post:r.post_id, zichtbaar:r.zichtbaar!==false, seconden:r.seconden_geleden||0, sinds:r.sinds,
+                      andereVersie: !!(eigenVersie && r.versie && r.versie!==eigenVersie) });
+  });
+  return [...perPersoon.values()].map(p=>({ ...p, actief:p.vensters.some(v=>v.zichtbaar), laatst:Math.min(...p.vensters.map(v=>v.seconden)),
+                                            andereVersie:p.vensters.some(v=>v.andereVersie) }))
+    .sort((a,b)=>String(a.naam).localeCompare(String(b.naam),'nl'));
+}
+function renderAanwezigheidKnop(){
+  const knop = document.getElementById('btnOnline'); if(!knop) return;
+  knop.classList.toggle('hidden', !magAanwezigheidZien());
+  if(!magAanwezigheidZien()) return;
+  if(State.aanwezigheid===null || State.aanwezigheid===undefined){
+    knop.textContent = State.aanwezigheidLeesFout ? '👥 ?' : '👥 —';
+    knop.title = State.aanwezigheidLeesFout ? 'Kon niet ophalen wie er online is: '+State.aanwezigheidLeesFout : 'Wie is er nu online in Dagstaat';
+    return;
+  }
+  const groepen = groepeerAanwezigheid(State.aanwezigheid, APP_VERSIE);
+  knop.textContent = `👥 ${groepen.length} online`;
+  knop.title = groepen.length ? groepen.map(g=>g.naam).join(', ') : 'Niemand online';
+}
+function aanwezigheidLijstHtml(){
+  if(State.aanwezigheidLeesFout && (State.aanwezigheid===null || State.aanwezigheid===undefined)){
+    return `<div class="empty-hint">Kon niet ophalen wie er online is: ${esc(State.aanwezigheidLeesFout)}</div>`;
+  }
+  const groepen = groepeerAanwezigheid(State.aanwezigheid || [], APP_VERSIE);
+  if(!groepen.length) return '<div class="empty-hint">Er is niemand gemeld, ook jijzelf niet. Vernieuw de pagina; blijft dit zo, dan wordt de aanwezigheid niet doorgegeven.</div>';
+  const eigenId = State.ingelogdPersoon && State.ingelogdPersoon.id;
+  const rolLabel = rol => (ROL_TOEGANG[rol] && ROL_TOEGANG[rol].label) || rol || '—';
+  const wanneer = sec => sec < 5 ? 'nu' : `${sec} s geleden`;
+  return `<table class="dash-table"><thead><tr><th>Naam</th><th>Rol</th><th>Waar</th><th>Versie</th><th>Laatst gezien</th></tr></thead><tbody>${groepen.map(g=>`
+    <tr>
+      <td><strong>${esc(g.naam)}</strong>${g.persoonId===eigenId?' <span class="hint" style="margin:0;">(jij)</span>':''}</td>
+      <td>${esc(rolLabel(g.rol))}</td>
+      <td>${g.vensters.map(v=>`${esc(TAB_NAMEN[v.tabblad]||v.tabblad||'—')}${v.post?' · '+esc(postNaam(v.post)):''}${v.zichtbaar?'':' <span class="hint" style="margin:0;">(op de achtergrond)</span>'}`).join('<br>')}</td>
+      <td>${g.vensters.map(v=>`${v.andereVersie?'⚠ ':''}v${esc(v.versie||'?')}`).join('<br>')}</td>
+      <td>${esc(wanneer(g.laatst))}</td>
+    </tr>`).join('')}</tbody></table>`;
+}
+function vulAanwezigheidLijst(){ const el = document.getElementById('aanwezigheidLijst'); if(el) el.innerHTML = aanwezigheidLijstHtml(); }
+function openAanwezigheidModal(){
+  if(!magAanwezigheidZien()) return;
+  const box = document.getElementById('modalBox');
+  box.classList.add('wide');
+  box.innerHTML = `
+    <div class="modal-head"><h3>Wie is online</h3><button class="modal-close" data-close="modal">✕</button></div>
+    <div id="aanwezigheidLijst">${aanwezigheidLijstHtml()}</div>
+    <div class="hint" style="margin-top:12px;">Een venster telt als online tot 90 seconden na het laatste levensteken; de lijst ververst zichzelf. Een waarschuwingsteken bij de versie betekent dat die persoon een andere versie van Dagstaat open heeft dan jij, en de pagina moet herladen. Alleen beheer en pco zien dit. Er wordt niets bewaard: regels verdwijnen als het venster sluit, en anders na een dag.</div>`;
+  document.getElementById('modalOverlay').classList.remove('hidden');
+  laadAanwezigheid();
+}
+function startAanwezigheid(){
+  if(State.aanwezigheidTimer || !supa) return;
+  State.sessieId = State.sessieId || nieuweSessieId();
+  meldAanwezig();
+  State.aanwezigheidTimer = setInterval(()=>{ meldAanwezig(); laadAanwezigheid(); }, AANWEZIG_INTERVAL_MS);
+  document.addEventListener('visibilitychange', ()=>{ meldAanwezig(); });
+  window.addEventListener('pagehide', ()=>{ stopAanwezigheid(true); });
+  renderAanwezigheidKnop();
+  laadAanwezigheid();
+}
+async function stopAanwezigheid(snel){
+  clearInterval(State.aanwezigheidTimer); State.aanwezigheidTimer = null;
+  if(!supa || !State.sessieId) return;
+  try{ const p = supa.rpc('meld_afwezig', { p_sessie: State.sessieId }); if(!snel) await p; }catch(err){}
+}
+
 function pasRolToe(){
   const rol = State.rol || 'manschap';
   const toegang = ROL_TOEGANG[rol] || ROL_TOEGANG.manschap;
@@ -2145,6 +2264,7 @@ function pasRolToe(){
   document.getElementById('btnSettings').classList.toggle('hidden', !toegang.instellingen);
   const magBeheerGebruikers = State.rolWerkelijk==='beheer' || State.rolWerkelijk==='pco';
   document.getElementById('btnGebruikers').classList.toggle('hidden', !magBeheerGebruikers);
+  document.getElementById('btnOnline').classList.toggle('hidden', !magAanwezigheidZien());
   document.getElementById('btnActivatie').classList.toggle('hidden', State.rolWerkelijk!=='beheer');
   const rolSel = document.getElementById('rolSelect');
   rolSel.classList.toggle('hidden', State.rolWerkelijk!=='beheer');
@@ -5799,8 +5919,10 @@ function wireEvents(){
   document.getElementById('userChip').addEventListener('click', e=>{
   });
   document.getElementById('btnGebruikers').addEventListener('click', openGebruikersScherm);
+  document.getElementById('btnOnline').addEventListener('click', openAanwezigheidModal);
   document.getElementById('btnUitloggen').addEventListener('click', async ()=>{
     if(!confirm('Alle wijzigingen worden automatisch al opgeslagen, dus dat is al in orde. Weet je zeker dat je wilt uitloggen?')) return;
+    await stopAanwezigheid();
     try{ await supa.auth.signOut(); }catch(err){ console.warn('Uitloggen bij Supabase mislukt (gaat lokaal wel door):', err); }
     try{ localStorage.removeItem('dp_laatste_persoon_id'); }catch(err){}
     location.reload();
@@ -6463,6 +6585,7 @@ async function init(){
   document.getElementById('app').classList.remove('hidden');
   render();
   pasRolToe();
+  startAanwezigheid();
 
   // Periodiek, op de achtergrond, de niet-dag-gebonden gegevens verversen
   // (config/personeel/oefeningen/materialen/agenda) -- zodat wijzigingen van
