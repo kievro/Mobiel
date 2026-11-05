@@ -23,6 +23,10 @@
   .status.nog-niet{background:rgba(154,161,172,.18);color:var(--text-dim);}
   .status.verstuurd{background:rgba(232,163,61,.18);color:var(--amber);}
   .status.geactiveerd{background:rgba(63,184,127,.18);color:var(--ok);}
+  .status.zelf{background:rgba(63,184,127,.08);color:var(--text-dim);}
+  .status.verlopen{background:rgba(214,65,47,.14);color:#ff7a6e;}
+  .samenvatting{font-size:13px;color:var(--text-dim);margin-bottom:12px;line-height:1.7;}
+  .samenvatting strong{color:var(--text);}
   .top-bar{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:10px;}
   button{background:var(--accent);color:#fff;border:none;border-radius:8px;padding:10px 18px;font-size:14px;font-weight:600;cursor:pointer;}
   button:disabled{opacity:.5;cursor:not-allowed;}
@@ -53,6 +57,36 @@
   function escapeHtml(s){ return String(s==null?"":s).replace(/[&<>"']/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
 
   var ALLE_PERSONEN = [];
+  var DETAILS_BESCHIKBAAR = true;   // false zolang het databasescript voor het activatie-overzicht nog niet is uitgevoerd
+  var STATUS_FILTER = "alle";
+
+  function datumTijd(iso){
+    return iso ? new Date(iso).toLocaleString("nl-NL", { day:"numeric", month:"short", hour:"2-digit", minute:"2-digit" }) : "";
+  }
+  // Vijf mogelijke statussen:
+  //  geactiveerd  de activatielink is gebruikt (met tijdstip)
+  //  zelf         de pincode is op een andere manier ingesteld (bijvoorbeeld zelf gewijzigd in Dagstaat), niet via een link
+  //  verlopen     er is een link aangemaakt, maar die is verlopen zonder gebruikt te zijn
+  //  verstuurd    er is een link aangemaakt die nog geldig is en nog niet is gebruikt
+  //  nog-niet     nog nooit een link aangemaakt
+  // "verstuurd" betekent dat de link is AANGEMAAKT: het versturen zelf (mailmerge) gebeurt buiten deze pagina.
+  function bepaalStatus(auth, info, nu, detailsBeschikbaar){
+    if(detailsBeschikbaar === false) return (auth && auth.moet_wijzigen === false) ? { status:"geactiveerd" } : { status:"nog-niet" };
+    if(info && info.geactiveerd_op) return { status:"geactiveerd", op:info.geactiveerd_op };
+    if(auth && auth.moet_wijzigen === false) return { status:"zelf" };
+    if(info && info.verloopt_op && new Date(info.verloopt_op).getTime() < nu) return { status:"verlopen", op:info.laatste_uitnodiging, tot:info.verloopt_op };
+    if(info) return { status:"verstuurd", op:info.laatste_uitnodiging, tot:info.verloopt_op };
+    return { status:"nog-niet" };
+  }
+  function statusTekst(p){
+    switch(p.status){
+      case "geactiveerd": return p.op ? "Geactiveerd op " + datumTijd(p.op) : "Geactiveerd";
+      case "zelf":        return "Pincode zelf ingesteld";
+      case "verlopen":    return "Link verlopen op " + datumTijd(p.tot);
+      case "verstuurd":   return "Link aangemaakt " + datumTijd(p.op) + (p.tot ? ", geldig tot " + datumTijd(p.tot) : "");
+      default:            return "Nog niet uitgenodigd";
+    }
+  }
 
   async function laadPersoneel(){
     var personenRes = await supa.from("personen").select("*");
@@ -62,43 +96,71 @@
     var authRes = await supa.from("personeel_auth").select("persoon_id, moet_wijzigen");
     var authById = {};
     (authRes.data||[]).forEach(function(a){ authById[a.persoon_id] = a; });
-    var tokensRes = await supa.from("activatie_tokens").select("persoon_id, gebruikt_op, aangemaakt_op").order("aangemaakt_op",{ascending:false});
-    var laatsteTokenPerPersoon = {};
-    (tokensRes.data||[]).forEach(function(t){ if(!laatsteTokenPerPersoon[t.persoon_id]) laatsteTokenPerPersoon[t.persoon_id] = t; });
-
+    // De tabel met de uitnodigingen is bewust niet rechtstreeks leesbaar; het overzicht komt uit een database-functie die alleen beheer iets geeft.
+    var infoById = {};
+    DETAILS_BESCHIKBAAR = true;
+    try{
+      var ovRes = await supa.rpc("activatie_overzicht");
+      if(ovRes.error) throw ovRes.error;
+      (ovRes.data||[]).forEach(function(t){ infoById[t.persoon_id] = t; });
+    }catch(e){ DETAILS_BESCHIKBAAR = false; }
+    var nu = Date.now();
     ALLE_PERSONEN = personen.map(function(p){
-      var auth = authById[p.id];
-      var token = laatsteTokenPerPersoon[p.id];
-      var status = "nog-niet";
-      if(auth && auth.moet_wijzigen === false) status = "geactiveerd";
-      else if(token) status = "verstuurd";
-      return { id:p.id, naam:p.naam||p.id, email:p.email||"", status:status };
+      var st = bepaalStatus(authById[p.id], infoById[p.id], nu, DETAILS_BESCHIKBAAR);
+      return { id:p.id, naam:p.naam||p.id, email:p.email||"", status:st.status, op:st.op, tot:st.tot };
     }).sort(function(a,b){ return a.naam.localeCompare(b.naam,"nl"); });
   }
 
-  function statusLabel(s){ return {"nog-niet":"Nog niet uitgenodigd","verstuurd":"Uitnodiging verstuurd","geactiveerd":"Geactiveerd"}[s]||s; }
+  var FILTER_OPTIES = [
+    ["alle", "Alle personen"], ["geactiveerd", "Geactiveerd"], ["zelf", "Pincode zelf ingesteld"],
+    ["verstuurd", "Link aangemaakt, nog niet gebruikt"], ["verlopen", "Link verlopen"], ["nog-niet", "Nog niet uitgenodigd"],
+    ["actie", "Nog niet geactiveerd (nog actie nodig)"]
+  ];
+  function pastBijFilter(p, filter){
+    if(filter === "alle") return true;
+    if(filter === "actie") return p.status === "verstuurd" || p.status === "verlopen" || p.status === "nog-niet";
+    return p.status === filter;
+  }
+  function samenvattingHtml(lijst){
+    var n = { geactiveerd:0, zelf:0, verstuurd:0, verlopen:0, "nog-niet":0 };
+    lijst.forEach(function(p){ n[p.status] = (n[p.status]||0) + 1; });
+    return "Van de <strong>" + lijst.length + "</strong> personen: <strong>" + n.geactiveerd + "</strong> geactiveerd"
+      + (DETAILS_BESCHIKBAAR ? " via de link, <strong>" + n.zelf + "</strong> pincode zelf ingesteld" : "")
+      + ", <strong>" + n.verstuurd + "</strong> link aangemaakt maar nog niet gebruikt"
+      + (DETAILS_BESCHIKBAAR ? ", <strong>" + n.verlopen + "</strong> link verlopen" : "")
+      + ", <strong>" + n["nog-niet"] + "</strong> nog niet uitgenodigd.";
+  }
+  function bewaarSelectie(){ return [].slice.call(document.querySelectorAll(".rijSelect:checked")).map(function(cb){ return cb.dataset.id; }); }
 
   function render(){
+    var gekozen = document.getElementById("selectAll") ? bewaarSelectie() : [];
     var inhoud = document.getElementById("inhoud");
+    var zichtbaar = ALLE_PERSONEN.filter(function(p){ return pastBijFilter(p, STATUS_FILTER); });
+    if(STATUS_FILTER === "geactiveerd") zichtbaar = zichtbaar.slice().sort(function(a,b){ return String(b.op||"").localeCompare(String(a.op||"")); });
     inhoud.innerHTML =
-      '<div class="top-bar">'
+      '<div class="samenvatting">' + samenvattingHtml(ALLE_PERSONEN)
+      + (DETAILS_BESCHIKBAAR ? '' : '<br>Tijdstippen en het verschil tussen een link en een zelf ingestelde pincode zijn nog niet beschikbaar: voer het databasescript voor het activatie-overzicht uit.')
+      + '</div>'
+      + '<div class="top-bar">'
       + '<label><input type="checkbox" id="selectAll"> Alles selecteren</label>'
+      + '<select id="statusFilter">' + FILTER_OPTIES.map(function(o){ return '<option value="'+o[0]+'"'+(o[0]===STATUS_FILTER?' selected':'')+'>'+o[1]+'</option>'; }).join('') + '</select>'
       + '<div><button class="secundair" id="btnExport">Exporteer voor mailmerge</button> '
       + '<button id="btnVerstuur">Activatielink(s) genereren</button></div>'
       + '</div>'
       + '<div id="meldingZone"></div>'
       + '<table><thead><tr><th></th><th>Naam</th><th>E-mailadres</th><th>Status</th></tr></thead><tbody>'
-      + ALLE_PERSONEN.map(function(p){
-          return '<tr><td><input type="checkbox" class="rijSelect" data-id="'+p.id+'"></td>'
+      + (zichtbaar.length ? zichtbaar.map(function(p){
+          return '<tr><td><input type="checkbox" class="rijSelect" data-id="'+p.id+'"'+(gekozen.indexOf(p.id)!==-1?' checked':'')+'></td>'
             + '<td>'+escapeHtml(p.naam)+'</td>'
             + '<td>'+(p.email?escapeHtml(p.email):'<span style="color:var(--text-dim)">(geen mailadres)</span>')+'</td>'
-            + '<td><span class="status '+p.status+'">'+statusLabel(p.status)+'</span></td></tr>';
-        }).join('')
+            + '<td><span class="status '+p.status+'">'+escapeHtml(statusTekst(p))+'</span></td></tr>';
+        }).join('') : '<tr><td colspan="4" style="color:var(--text-dim);">Niemand met deze status.</td></tr>')
       + '</tbody></table>';
 
     document.getElementById("selectAll").addEventListener("change", function(e){
       document.querySelectorAll(".rijSelect").forEach(function(cb){ cb.checked = e.target.checked; });
     });
+    document.getElementById("statusFilter").addEventListener("change", function(e){ STATUS_FILTER = e.target.value; render(); });
     document.getElementById("btnVerstuur").addEventListener("click", genereerLinks);
     document.getElementById("btnExport").addEventListener("click", exporteerMailmerge);
   }
@@ -108,6 +170,20 @@
   async function genereerLinks(){
     var geselecteerd = [...document.querySelectorAll(".rijSelect:checked")].map(function(cb){ return cb.dataset.id; });
     if(!geselecteerd.length){ toonMelding("Selecteer eerst minimaal één persoon.", "fout"); return; }
+    // Een nieuwe link maakt elke eerdere, nog ongebruikte link van die persoon METEEN ongeldig (de functie verwijdert die). Wie de
+    // oude link al in zijn mail heeft, kan hem dan niet meer gebruiken. Daarom eerst vragen als dat voor iemand in de selectie geldt.
+    var gekozenPersonen = ALLE_PERSONEN.filter(function(p){ return geselecteerd.indexOf(p.id) !== -1; });
+    var metGeldigeLink = gekozenPersonen.filter(function(p){ return p.status === "verstuurd"; });
+    var alActief = gekozenPersonen.filter(function(p){ return p.status === "geactiveerd" || p.status === "zelf"; });
+    var namen = function(lijst){ var eerste = lijst.slice(0,5).map(function(p){ return p.naam; }).join(", "); return lijst.length > 5 ? eerste + " en " + (lijst.length-5) + " anderen" : eerste; };
+    var waarschuwing = [];
+    if(!DETAILS_BESCHIKBAAR){
+      waarschuwing.push("Het overzicht van bestaande links is niet beschikbaar, dus ik kan niet zien wie al een geldige link heeft. Een nieuwe link maakt een eerdere, nog ongebruikte link van dezelfde persoon ONMIDDELLIJK ongeldig.");
+    } else {
+      if(metGeldigeLink.length) waarschuwing.push(metGeldigeLink.length + " van de geselecteerde personen hebben al een geldige link (" + namen(metGeldigeLink) + "). Een nieuwe link maakt hun eerdere link ONMIDDELLIJK ongeldig: wie die al in zijn mail heeft, kan hem dan niet meer gebruiken.");
+      if(alActief.length) waarschuwing.push(alActief.length + " van de geselecteerde personen hebben al een pincode (" + namen(alActief) + "). Met een nieuwe link kunnen zij een nieuwe pincode instellen.");
+    }
+    if(waarschuwing.length && !confirm(waarschuwing.join("\n\n") + "\n\nWeet je zeker dat je nieuwe links wilt maken?")) return;
     var btn = document.getElementById("btnVerstuur");
     btn.disabled = true; btn.textContent = "Bezig…";
     try{
@@ -120,8 +196,8 @@
       var json = await res.json();
       if(!json.ok){ toonMelding("Mislukt: "+(json.reden||json.error||"onbekende fout"), "fout"); return; }
       LAATSTE_RESULTAAT = json.resultaat;
-      toonMelding(json.aantal+" activatielink(s) aangemaakt. Gebruik 'Exporteer voor mailmerge' om ze te versturen.", "ok");
       await laadPersoneel(); render();
+      toonMelding(json.aantal+" activatielink(s) aangemaakt. Gebruik 'Exporteer voor mailmerge' om ze te versturen.", "ok");   // na render(), anders verdwijnt de melding direct
     }catch(e){ toonMelding("Mislukt: "+e.message, "fout"); }
     finally{ btn.disabled = false; btn.textContent = "Activatielink(s) genereren"; }
   }
@@ -142,17 +218,50 @@
     document.getElementById("meldingZone").innerHTML = '<div class="melding '+soort+'">'+escapeHtml(tekst)+'</div>';
   }
 
+  // Toont waarom er geen toegang is, met precies wat de pagina ziet. Zo is meteen duidelijk of het aan de
+  // persoon, de rol of de rechten ligt, in plaats van een algemene weigering.
+  function toonGeenToegang(regels){
+    var html = '<div class="geen-toegang"><strong>Deze pagina is alleen toegankelijk voor beheerders.</strong><br><br>'
+      + regels.map(escapeHtml).join('<br>')
+      + '<br><br><button class="secundair" id="btnAndersInloggen">Als iemand anders inloggen</button></div>';
+    document.getElementById("inhoud").innerHTML = html;
+    document.getElementById("btnAndersInloggen").addEventListener("click", async function(){
+      try{ localStorage.removeItem(INGELOGD_KEY); }catch(e){}
+      try{ await supa.auth.signOut(); }catch(e){}
+      location.href = "./index.html";
+    });
+  }
+
   async function init(){
     var ingelogdId = null;
     try{ ingelogdId = localStorage.getItem(INGELOGD_KEY); }catch(e){}
     var { data: sessieData } = await supa.auth.getSession();
-    if(!ingelogdId || !sessieData.session){ location.href = "./index.html"; return; }
+    var sessie = sessieData && sessieData.session;
+    // De SESSIE is leidend: dat is de persoon die de database (en de functie die de links maakt) als ingelogd
+    // ziet. Het in de browser onthouden id kan van een eerdere inlog zijn, bijvoorbeeld een collega of een testaccount.
+    var sessiePersoonId = sessie && sessie.user && sessie.user.user_metadata && sessie.user.user_metadata.persoon_id;
+    if(!sessie || (!sessiePersoonId && !ingelogdId)){ location.href = "./index.html"; return; }
+    var persoonId = sessiePersoonId || ingelogdId;
 
-    var authRes = await supa.from("personeel_auth").select("rol").eq("persoon_id", ingelogdId).maybeSingle();
-    if(!authRes.data || authRes.data.rol !== "beheer"){
-      document.getElementById("inhoud").innerHTML = '<div class="geen-toegang">Deze pagina is alleen toegankelijk voor beheerders.</div>';
+    var authRes = await supa.from("personeel_auth").select("rol").eq("persoon_id", persoonId).maybeSingle();
+    var persRes = await supa.from("personen").select("naam").eq("id", persoonId).maybeSingle();
+    var naam = (persRes && persRes.data && persRes.data.naam) || persoonId;
+    var anderOnthouden = sessiePersoonId && ingelogdId && ingelogdId !== sessiePersoonId;
+
+    if(authRes.error){
+      toonGeenToegang(["Ingelogd als " + naam + ".", "Je rol kon niet worden opgevraagd: " + authRes.error.message]);
       return;
     }
+    if(!authRes.data){
+      toonGeenToegang(["Ingelogd als " + naam + ".", "Er is voor deze persoon geen rol gevonden."].concat(anderOnthouden ? ["Let op: deze browser onthoudt een andere persoon dan de actieve inlog."] : []));
+      return;
+    }
+    if(authRes.data.rol !== "beheer"){
+      toonGeenToegang(["Ingelogd als " + naam + ", met de rol \u201c" + authRes.data.rol + "\u201d."].concat(anderOnthouden ? ["Let op: deze browser onthoudt een andere persoon dan de actieve inlog."] : []));
+      return;
+    }
+    // Maak de onthouden persoon weer gelijk aan de actieve inlog, zodat andere pagina's niet dezelfde verwarring krijgen.
+    if(anderOnthouden){ try{ localStorage.setItem(INGELOGD_KEY, sessiePersoonId); }catch(e){} }
 
     await laadPersoneel();
     render();
