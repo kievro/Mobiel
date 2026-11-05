@@ -287,7 +287,7 @@
     beheerAlleenOpen: false,
     moetPincodeWijzigen: false,
     batchModus: false,
-    verzendstatusOpen: false
+    verzendstatusOpen: false, pushOverzicht: null, pushOverzichtFout: null, verzendstatusPersoonData: null, verzendstatusPersoonLaden: false
   };
   var toastTimer = null;
 
@@ -940,10 +940,30 @@
       state.laatstActiefPerLid = {};
       (actiefRes.data||[]).forEach(function(r){ if(r.laatst_actief) state.laatstActiefPerLid[r.id] = r.laatst_actief; });
     }catch(e){ state.verzendstatusData = []; state.laatstActiefPerLid = {}; }
+    await laadPushOverzicht();
+    if(state.verzendstatusPersoon && state.verzendstatusPersoon !== "alle") await laadVerzendstatusPersoon(state.verzendstatusPersoon);
     state.verzendstatusLoading = false;
     if(!state.verzendstatusFilter) state.verzendstatusFilter = "alles";
     render();
   };
+  // Wie kan meldingen ontvangen? Komt uit de database-functie push_overzicht (alleen aantallen, geen adressen van toestellen).
+  async function laadPushOverzicht(){
+    try{
+      var r = await sbDag.rpc("push_overzicht");
+      if(r.error) throw r.error;
+      var kaart = {};
+      (r.data||[]).forEach(function(x){ kaart[x.lid_id] = { toestellen:x.toestellen, bijgewerkt_op:x.bijgewerkt_op }; });
+      state.pushOverzicht = kaart; state.pushOverzichtFout = null;
+    }catch(e){ state.pushOverzicht = null; state.pushOverzichtFout = (e && e.message) || String(e); }
+  }
+  // De eigen regels van één persoon, los van de laatste 100 van iedereen: anders is iemand van wie de regels ouder zijn niet te vinden.
+  async function laadVerzendstatusPersoon(id){
+    try{
+      var res = await sbDag.from("verzonden_meldingen").select("*").eq("lid_id", id).order("id",{ascending:false}).limit(200);
+      if(res.error) throw res.error;
+      state.verzendstatusPersoonData = res.data || [];
+    }catch(e){ state.verzendstatusPersoonData = []; }
+  }
   App.toonReactieGeschiedenis = async function(slotId){
     if(state.geschiedenisSlotId === slotId){ state.geschiedenisSlotId = null; render(); return; }
     state.geschiedenisSlotId = slotId;
@@ -1034,26 +1054,35 @@
       + '<div class="verzendstatus-lijst">'+body+'</div></div>';
   }
   App.zetVerzendstatusFilter = function(f){ state.verzendstatusFilter = f; render(); };
-  App.zetVerzendstatusPersoon = function(id){ state.verzendstatusPersoon = id; render(); };
+  App.zetVerzendstatusPersoon = async function(id){
+    state.verzendstatusPersoon = id; state.verzendstatusPersoonData = null;
+    if(id !== "alle"){
+      state.verzendstatusPersoonLaden = true; render();
+      await laadVerzendstatusPersoon(id);
+      state.verzendstatusPersoonLaden = false;
+    }
+    render();
+  };
   App.wisselVerzendstatusSortering = function(){
     state.verzendstatusSortering = (state.verzendstatusSortering==="oud-eerst") ? "nieuw-eerst" : "oud-eerst";
     render();
   };
   function renderVerzendstatus(data){
-    if(state.verzendstatusLoading) return '<div class="card">Bezig met laden…</div>';
-    var rijen = state.verzendstatusData || [];
-    if(!rijen.length) return '<div class="card">Nog geen meldingen verstuurd.</div>';
+    if(state.verzendstatusLoading || state.verzendstatusPersoonLaden) return '<div class="card">Bezig met laden…</div>';
+    var persoonFilter = state.verzendstatusPersoon || "alle";
+    var metPersoon = persoonFilter !== "alle";
+    var rijen = (metPersoon ? state.verzendstatusPersoonData : state.verzendstatusData) || [];
+    var pushKaart = state.pushOverzicht;
+    var heeftMeldingen = function(id){ return !!(pushKaart && pushKaart[id] && pushKaart[id].toestellen > 0); };
+    if(!rijen.length && !metPersoon) return '<div class="card">Nog geen meldingen verstuurd.</div>';
 
     var filter = state.verzendstatusFilter || "alles";
-    var persoonFilter = state.verzendstatusPersoon || "alle";
     var sortering = state.verzendstatusSortering || "nieuw-eerst";
-
     var gefilterd = rijen.filter(function(r){
       var laatstActief = state.laatstActiefPerLid[r.lid_id];
       var actiefSindsMelding = r.verstuurd_op && laatstActief && new Date(laatstActief) >= new Date(r.verstuurd_op);
       if(filter==="mislukt" && r.gelukt) return false;
       if(filter==="niet-geopend" && !(r.gelukt && !actiefSindsMelding)) return false;
-      if(persoonFilter!=="alle" && r.lid_id!==persoonFilter) return false;
       return true;
     });
     gefilterd.sort(function(a,b){
@@ -1061,21 +1090,48 @@
       return sortering==="oud-eerst" ? da-db : db-da;
     });
 
-    // Alfabetische lijst van iedereen die ooit een melding kreeg, voor de dropdown
-    var personenInLog = {};
-    rijen.forEach(function(r){ personenInLog[r.lid_id] = getMemberName(r.lid_id, data); });
-    var persoonOpties = Object.keys(personenInLog).map(function(id){ return {id:id, naam:personenInLog[id]}; })
-      .sort(function(a,b){ return a.naam.localeCompare(b.naam); });
+    // Het keuzemenu bevat IEDEREEN, niet alleen wie in de laatste 100 regels voorkomt: anders is een persoon van wie de regels
+    // ouder zijn niet eens te kiezen. Is bekend wie geen meldingen heeft, dan staat dat erbij.
+    var alleLeden = data.members.slice().sort(function(a,b){ return String(a.naam).localeCompare(String(b.naam), "nl"); });
+    var opties = alleLeden.map(function(m){
+      var label = m.naam + (pushKaart && !heeftMeldingen(m.id) ? " \u2014 geen meldingen" : "");
+      return '<option value="'+m.id+'" '+(persoonFilter===m.id?'selected':'')+'>'+escapeHtml(label)+'</option>';
+    }).join("");
+
+    var pushHtml = "";
+    if(pushKaart){
+      var zonder = alleLeden.filter(function(m){ return !heeftMeldingen(m.id); });
+      pushHtml = '<div style="font-size:12.5px;margin:0 0 10px;"><strong>'+(alleLeden.length-zonder.length)+' van '+alleLeden.length+'</strong> personen kunnen meldingen ontvangen.'
+        + (zonder.length ? ' <details style="display:inline;"><summary style="cursor:pointer;color:var(--amber);">Zonder meldingen ('+zonder.length+')</summary>'
+          + '<div style="margin-top:6px;color:var(--text-muted);">'+zonder.map(function(m){ return escapeHtml(m.naam); }).join(", ")+'</div></details>' : '')
+        + '</div>';
+    } else if(state.pushOverzichtFout){
+      pushHtml = '<div style="font-size:11.5px;color:var(--text-muted);margin:0 0 10px;">Wie meldingen kan ontvangen is nog niet te zien: voer het databasescript voor het meldingenoverzicht uit ('+escapeHtml(state.pushOverzichtFout)+').</div>';
+    }
+
+    var persoonHtml = "";
+    if(metPersoon){
+      var lid = getMember(persoonFilter, data);
+      var info = pushKaart ? pushKaart[persoonFilter] : null;
+      var meldingTekst = "";
+      if(pushKaart){
+        meldingTekst = heeftMeldingen(persoonFilter)
+          ? 'Meldingen staan <strong>aan</strong> op '+info.toestellen+' toestel'+(info.toestellen===1?'':'len')
+            + (info.bijgewerkt_op ? ' (ingesteld op '+new Date(info.bijgewerkt_op).toLocaleString("nl-NL",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})+')' : '') + '.'
+          : 'Meldingen staan <strong>niet aan</strong>: deze persoon heeft geen toestel ingesteld en kan dus geen melding ontvangen.';
+      }
+      persoonHtml = '<div style="font-size:12.5px;margin:0 0 10px;padding:8px 10px;background:var(--surface-2);border-radius:6px;border:1px solid var(--border);">'
+        + '<strong>'+escapeHtml(lid ? lid.naam : "(onbekend lid)")+'</strong>' + (meldingTekst ? ' \u2014 '+meldingTekst : '') + '</div>';
+    }
 
     var filterBalk = '<div class="btn-row" style="margin-bottom:10px;flex-wrap:wrap;">'
       + '<button class="btn'+(filter==="alles"?" btn-primary":"")+'" onclick="App.zetVerzendstatusFilter(\'alles\')">Alles ('+rijen.length+')</button>'
       + '<button class="btn'+(filter==="mislukt"?" btn-primary":"")+'" onclick="App.zetVerzendstatusFilter(\'mislukt\')">Alleen mislukt</button>'
       + '<button class="btn'+(filter==="niet-geopend"?" btn-primary":"")+'" onclick="App.zetVerzendstatusFilter(\'niet-geopend\')">Afgeleverd, nog niet geopend</button>'
       + '<select onchange="App.zetVerzendstatusPersoon(this.value)" style="background:var(--surface-2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:6px 8px;font-size:13px;">'
-        + '<option value="alle">Alle personen</option>'
-        + persoonOpties.map(function(p){ return '<option value="'+p.id+'" '+(persoonFilter===p.id?'selected':'')+'>'+escapeHtml(p.naam)+'</option>'; }).join("")
+        + '<option value="alle">Alle personen</option>' + opties
       + '</select>'
-      + '<button class="btn" onclick="App.wisselVerzendstatusSortering()">'+(sortering==="oud-eerst"?"↑ Oudste eerst":"↓ Nieuwste eerst")+'</button>'
+      + '<button class="btn" onclick="App.wisselVerzendstatusSortering()">'+(sortering==="oud-eerst"?"\u2191 Oudste eerst":"\u2193 Nieuwste eerst")+'</button>'
       + '</div>';
 
     var body = gefilterd.map(function(r){
@@ -1097,11 +1153,16 @@
       return '<div class="verzendstatus-rij"><span class="vz-naam">'+escapeHtml(naam)+'</span><span class="vz-titel">'+escapeHtml(r.titel||"")+'</span>'+statusHtml+'<span class="vz-tijd">'+tijd+'</span></div>';
     }).join("");
 
-    return '<div class="card"><h3 style="margin-top:0;display:flex;align-items:center;justify-content:space-between;">Verzendstatus \u2014 laatste 100 meldingen'
+    var leeg = metPersoon && !rijen.length
+      ? '<div class="empty">Voor deze persoon is nog geen enkele melding verstuurd.</div>'
+      : '<div class="empty">Niets gevonden voor dit filter.</div>';
+    return '<div class="card"><h3 style="margin-top:0;display:flex;align-items:center;justify-content:space-between;">Verzendstatus \u2014 '+(metPersoon?'laatste 200 meldingen van deze persoon':'laatste 100 meldingen')
       + '<button class="small-btn" onclick="App.ververVerzendstatus()">\u21bb Ververs</button></h3>'
-      + '<p style="font-size:11.5px;color:var(--text-muted);margin:0 0 10px;">"Afgeleverd" betekent: succesvol overgedragen aan Apple/Google. Er bestaat geen leesbevestiging \u2014 "app geopend nadien" is de meest betrouwbare aanwijzing dat iemand het ook echt gezien kan hebben.</p>'
+      + '<p style="font-size:11.5px;color:var(--text-muted);margin:0 0 10px;">"Afgeleverd" betekent: succesvol overgedragen aan Apple/Google. Er bestaat geen leesbevestiging \u2014 "app geopend nadien" is de meest betrouwbare aanwijzing dat iemand de melding heeft gezien. Mensen zonder toestel met meldingen komen alleen in deze lijst voor bij een gecombineerd bericht.</p>'
+      + pushHtml
       + filterBalk
-      + (gefilterd.length ? '<div class="verzendstatus-lijst">'+body+'</div>' : '<div class="empty">Niets gevonden voor dit filter.</div>')
+      + persoonHtml
+      + (gefilterd.length ? '<div class="verzendstatus-lijst">'+body+'</div>' : leeg)
       + '</div>';
   }
   App.openNewShiftForm = function(){ state.showForm = true; state.editingShiftId = "new"; render(); };
