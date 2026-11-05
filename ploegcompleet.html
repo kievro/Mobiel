@@ -652,10 +652,33 @@
     try{
       await fn();
       await refreshAllData();
-      if(toastMsg) showToast(toastMsg, true); else render();
+      var melding = typeof toastMsg === "function" ? toastMsg() : toastMsg;   // een functie wordt pas nu bepaald, dus met het echte resultaat
+      if(melding) showToast(melding, true); else render();
     }catch(e){
       showToast("Actie mislukt – " + (e && e.message ? e.message : "controleer de verbinding."), true);
     }
+  }
+
+  // Stuurt het gecombineerde bericht bij het vrijgeven van een batch. De functie verstuur-batch-melding laat alleen aanroepen met een
+  // echte inlog-JWT toe (Verify JWT staat aan, wat veiliger is dan open): daarom de sessie van de ingelogde planner meesturen, NIET de
+  // publishable sleutel (dat is geen JWT en wordt met een 401 geweigerd). Geeft terug of het gelukt is; een mislukt bericht houdt het
+  // vrijgeven zelf nooit tegen, maar wordt wel gemeld.
+  async function verstuurBatchBericht(ontvangerIds, titel, tekst){
+    try{
+      var sessie = await sbDag.auth.getSession();
+      var token = sessie && sessie.data && sessie.data.session ? sessie.data.session.access_token : null;
+      if(!token) return { ok:false, reden:"niet ingelogd" };
+      var res = await fetch(DAG_URL + "/functions/v1/verstuur-batch-melding", {
+        method:"POST",
+        headers:{"Content-Type":"application/json", "apikey":DAG_KEY, "Authorization":"Bearer "+token},
+        body: JSON.stringify({ontvangerIds:ontvangerIds, titel:titel, tekst:tekst})
+      });
+      if(!res.ok){
+        var uitleg = ""; try{ uitleg = (await res.text()).slice(0, 80); }catch(e){}
+        return { ok:false, reden:"HTTP " + res.status + (uitleg ? ": " + uitleg : "") };
+      }
+      return { ok:true, reden:"" };
+    }catch(e){ return { ok:false, reden:(e && e.message) || "onbekende fout" }; }
   }
 
   async function loadInitial(){
@@ -1119,17 +1142,16 @@
     var titel = "Let op: meerdere nieuwe diensten";
     var tekst = ids.length + " nieuwe diensten zijn opengezet in het rooster (" + Object.keys(postenBetrokken).join(", ") + "). Bekijk de app voor details.";
 
+    var batchResultaat = { ok:true, reden:"" };
     runAction(async function(){
       var r1 = await sbDag.from("diensten").update({is_concept:false}).in("id", ids);
       if(r1.error) throw r1.error;
-      try{
-        await fetch(DAG_URL + "/functions/v1/verstuur-batch-melding", {
-          method:"POST",
-          headers:{"Content-Type":"application/json", "apikey":DAG_KEY, "Authorization":"Bearer "+DAG_KEY},
-          body: JSON.stringify({ontvangerIds:ontvangerLijst, titel:titel, tekst:tekst})
-        });
-      }catch(e){ /* de diensten staan sowieso goed vrijgegeven; het bericht is een bonus */ }
-    }, ids.length+" diensten vrijgegeven, 1 gecombineerd bericht verstuurd");
+      batchResultaat = await verstuurBatchBericht(ontvangerLijst, titel, tekst);   // een mislukt bericht houdt het vrijgeven niet tegen
+    }, function(){
+      return batchResultaat.ok
+        ? ids.length + " diensten vrijgegeven, 1 gecombineerd bericht verstuurd"
+        : ids.length + " diensten vrijgegeven, maar het gecombineerde bericht is NIET verstuurd (" + batchResultaat.reden + ")";
+    });
 
     state.batchModus = false; state.batchId = null; state.batchDienstIds = [];
     state.showForm = false; state.editingShiftId = null;
