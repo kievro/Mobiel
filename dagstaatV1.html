@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Dagplanning Brandweer · v3 nov 2026 H</title>
+<title>Dagplanning Brandweer · v7 nov 2026 I</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🚒</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
@@ -305,6 +305,20 @@ table.pers-table tr:last-child td{border-bottom:none;}
 #modalOverlay{z-index:200;}
 .modal-box{background:var(--surface);border:1px solid var(--border);border-radius:12px;width:100%;max-width:560px;padding:24px;}
 .modal-box.wide{max-width:820px;}
+/* Venster voor het maken en bewerken van een oefening: bijna schermbreed, en op een groot scherm twee kolommen naast elkaar.
+   Gekoppeld aan de inhoud van dat ene venster (:has), dus geen enkel ander venster verandert mee. Een oudere browser zonder :has
+   houdt het gewone, smallere venster in één kolom. */
+.oef-kolommen{display:block;}
+@supports selector(:has(*)){
+  .modal-box:has(.oef-kolommen){max-width:min(1500px,97vw);padding:28px 36px;}
+  .modal-overlay:has(.oef-kolommen){padding:20px 16px;}
+  .modal-box:has(.oef-kolommen) .checkgrid{max-height:260px;}
+  .modal-box:has(.oef-kolommen) .materialen-lijst{max-height:380px;}
+  .modal-box:has(.oef-kolommen) .field textarea{min-height:130px;}
+  @media (min-width:1100px){
+    .oef-kolommen{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:0 40px;align-items:start;}
+  }
+}
 .modal-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;}
 .modal-head h3{font-size:18px;}
 .modal-close{background:none;border:none;color:var(--text-dim);font-size:20px;padding:2px 6px;}
@@ -642,7 +656,7 @@ function contrastTextColor(hex){
 const SUPABASE_URL = 'https://iyquepqubfqrhybriqif.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml5cXVlcHF1YmZxcmh5YnJpcWlmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYwODI2MDMsImV4cCI6MjEwMTY1ODYwM30.0zMg5njpz3wnu3qSLDCRQ2Rx2IZlWGnZTj1mQkyWKsw';
 const supa = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
-const APP_VERSIE = '3 nov 2026 H';   // zelfde label als in de titel van het tabblad; ook zichtbaar in de kop en bij wie online is
+const APP_VERSIE = '7 nov 2026 I';   // zelfde label als in de titel van het tabblad; ook zichtbaar in de kop en bij wie online is
 
 // Pas dit aan zodra bekend is waar PloegCompleet definitief gehost wordt (bijv. een
 // submap naast Dagstaat op dezelfde NAS, of een heel ander adres). Relatief pad
@@ -783,7 +797,7 @@ function setCel(dag, personId, kolomId, data){
 }
 
 /* ---------- state ---------- */
-const APP_VERSIE_DATUM = "3 november 2026"; // pas deze regel aan bij elke nieuwe versie die je installeert
+const APP_VERSIE_DATUM = "7 november 2026"; // pas deze regel aan bij elke nieuwe versie die je installeert
 
 const State = {
   config:null, personen:[], dag:null, log:[], oefeningen:[],
@@ -3592,6 +3606,7 @@ function openOefeningModal(existingId){
   box.innerHTML = `
     <div class="modal-head"><h3>${existing?'Oefening bewerken':'Oefening toevoegen'}</h3><button class="modal-close" data-close="modal">✕</button></div>
     <form id="oefForm">
+      <div class="oef-kolommen"><div class="oef-kolom">
       <div class="fieldrow">
         <div class="field"><label>Datum</label><input type="date" name="datum" required value="${existing?esc(existing.datum):fmtKey(State.currentDate)}"></div>
         <div class="field"><label>Post</label>
@@ -3625,6 +3640,7 @@ function openOefeningModal(existingId){
           <label style="text-transform:none;font-weight:400;display:flex;align-items:center;gap:8px;margin-top:6px;"><input type="checkbox" name="ruimteGereserveerd" style="width:auto;" ${existing&&existing.ruimteGereserveerd?'checked':''}> Ruimte gereserveerd</label>
         </div>
       </div>
+      </div><div class="oef-kolom">
       <div class="field"><label>Oefenleiding</label>
         <div class="radio-row">
           <label><input type="radio" name="oefenleidingType" value="intern" ${(!existing||existing.oefenleidingType==='intern')?'checked':''}> Intern</label>
@@ -3660,6 +3676,7 @@ function openOefeningModal(existingId){
         <div id="bijlageUploadStatus" class="hint" style="margin:4px 0 0;"></div>
         ` : `<div class="hint" style="margin-top:0;">Sla de oefening eerst op — daarna kun je hier bijlagen toevoegen.</div>`}
       </div>
+      </div></div>
       <div class="modal-actions">
         ${existing?'<button type="button" class="btn ghost" id="delFromModal">Verwijderen</button>':''}
         <button type="button" class="btn ghost" data-close="modal">Annuleren</button>
