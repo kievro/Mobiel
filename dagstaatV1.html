@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Dagplanning Brandweer · v7 nov 2026 I</title>
+<title>Dagplanning Brandweer · v7 nov 2026 J</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🚒</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
@@ -440,7 +440,8 @@ footer.pagefoot{margin-top:40px;text-align:center;color:var(--text-faint);font-s
     <span class="versie-badge" id="versieBadge"></span>
     <select class="postselect hidden" id="rolSelect" title="Bekijk als rol (alleen zichtbaar voor Beheer) — laat zien wat een andere rol te zien krijgt."></select>
     <span class="user-chip" id="userChip"></span>
-    <button class="btn ghost hidden" id="btnOnline" title="Wie is er nu online in Dagstaat (alleen zichtbaar voor beheer en pco)">👥 —</button>
+    <button class="btn ghost hidden" id="btnOnline" title="Wie is er nu online (alleen zichtbaar voor beheer en pco)">👥 —</button>
+    <button class="btn ghost hidden" id="btnLogins" title="Wie heeft wanneer ingelogd of een account geactiveerd (alleen zichtbaar voor beheer en pco)">🔑 Logins</button>
     <button class="btn ghost" id="btnUitloggen" title="Uitloggen">🚪 Uitloggen</button>
     <button class="btn ghost" id="btnPrint">🖨 Printen</button>
     <button class="btn ghost" id="btnExport">⬇ Exporteren</button>
@@ -656,7 +657,7 @@ function contrastTextColor(hex){
 const SUPABASE_URL = 'https://iyquepqubfqrhybriqif.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml5cXVlcHF1YmZxcmh5YnJpcWlmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYwODI2MDMsImV4cCI6MjEwMTY1ODYwM30.0zMg5njpz3wnu3qSLDCRQ2Rx2IZlWGnZTj1mQkyWKsw';
 const supa = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
-const APP_VERSIE = '7 nov 2026 I';   // zelfde label als in de titel van het tabblad; ook zichtbaar in de kop en bij wie online is
+const APP_VERSIE = '7 nov 2026 J';   // zelfde label als in de titel van het tabblad; ook zichtbaar in de kop en bij wie online is
 
 // Pas dit aan zodra bekend is waar PloegCompleet definitief gehost wordt (bijv. een
 // submap naast Dagstaat op dezelfde NAS, of een heel ander adres). Relatief pad
@@ -2204,7 +2205,7 @@ function groepeerAanwezigheid(rijen, eigenVersie){
     let p = perPersoon.get(r.persoon_id);
     if(!p){ p = { persoonId:r.persoon_id, naam:r.naam, rol:r.rol, vensters:[] }; perPersoon.set(r.persoon_id, p); }
     p.vensters.push({ app:r.app, versie:r.versie, tabblad:r.tabblad, post:r.post_id, zichtbaar:r.zichtbaar!==false, seconden:r.seconden_geleden||0, sinds:r.sinds,
-                      andereVersie: !!(eigenVersie && r.versie && r.versie!==eigenVersie) });
+                      andereVersie: !!(eigenVersie && r.app==='dagstaat' && r.versie && r.versie!==eigenVersie) });   // de mobiele apps hebben een eigen versie
   });
   return [...perPersoon.values()].map(p=>({ ...p, actief:p.vensters.some(v=>v.zichtbaar), laatst:Math.min(...p.vensters.map(v=>v.seconden)),
                                             andereVersie:p.vensters.some(v=>v.andereVersie) }))
@@ -2236,8 +2237,8 @@ function aanwezigheidLijstHtml(){
     <tr>
       <td><strong>${esc(g.naam)}</strong>${g.persoonId===eigenId?' <span class="hint" style="margin:0;">(jij)</span>':''}</td>
       <td>${esc(rolLabel(g.rol))}</td>
-      <td>${g.vensters.map(v=>`${esc(TAB_NAMEN[v.tabblad]||v.tabblad||'—')}${v.post?' · '+esc(postNaam(v.post)):''}${v.zichtbaar?'':' <span class="hint" style="margin:0;">(op de achtergrond)</span>'}`).join('<br>')}</td>
-      <td>${g.vensters.map(v=>`${v.andereVersie?'⚠ ':''}v${esc(v.versie||'?')}`).join('<br>')}</td>
+      <td>${g.vensters.map(v=>`${esc(appNaam(v.app))}${v.tabblad?' · '+esc(TAB_NAMEN[v.tabblad]||v.tabblad):''}${v.post?' · '+esc(postNaam(v.post)):''}${v.zichtbaar?'':' <span class="hint" style="margin:0;">(op de achtergrond)</span>'}`).join('<br>')}</td>
+      <td>${g.vensters.map(v=>v.versie?`${v.andereVersie?'⚠ ':''}v${esc(v.versie)}`:'—').join('<br>')}</td>
       <td>${esc(wanneer(g.laatst))}</td>
     </tr>`).join('')}</tbody></table>`;
 }
@@ -2249,7 +2250,7 @@ function openAanwezigheidModal(){
   box.innerHTML = `
     <div class="modal-head"><h3>Wie is online</h3><button class="modal-close" data-close="modal">✕</button></div>
     <div id="aanwezigheidLijst">${aanwezigheidLijstHtml()}</div>
-    <div class="hint" style="margin-top:12px;">Een venster telt als online tot 90 seconden na het laatste levensteken; de lijst ververst zichzelf. Een waarschuwingsteken bij de versie betekent dat die persoon een andere versie van Dagstaat open heeft dan jij, en de pagina moet herladen. Alleen beheer en pco zien dit. Er wordt niets bewaard: regels verdwijnen als het venster sluit, en anders na een dag.</div>`;
+    <div class="hint" style="margin-top:12px;">Een venster telt als online tot 90 seconden na het laatste levensteken; de lijst ververst zichzelf. Je ziet ook wie in een van de mobiele apps zit. Een waarschuwingsteken bij de versie betekent dat die persoon een andere versie van Dagstaat open heeft dan jij, en de pagina moet herladen. Alleen beheer en pco zien dit. Er wordt niets bewaard: regels verdwijnen als het venster sluit, en anders na een dag.</div>`;
   document.getElementById('modalOverlay').classList.remove('hidden');
   laadAanwezigheid();
 }
@@ -2269,6 +2270,81 @@ async function stopAanwezigheid(snel){
   try{ const p = supa.rpc('meld_afwezig', { p_sessie: State.sessieId }); if(!snel) await p; }catch(err){}
 }
 
+/* ---------- INLOGS EN ACTIVATIES (alleen voor beheer en pco) ---------- */
+// Elke geslaagde inlog (met pincode) in een van de apps en elke activatie van een account komt in login_log. Beheer en pco
+// zien de laatste 200 regels via de database-functie login_overzicht(); voor anderen is de uitkomst leeg. Wie na het inloggen
+// ingelogd blijft, laat geen nieuwe regel achter: daarvoor is het overzicht van wie online is.
+const APP_NAMEN = { dagstaat:'Dagstaat', 'dagstaat-mobiel':'Dagstaat mobiel', hub:'Hub (mobiel)', overdracht:'Overdracht (mobiel)',
+                    voertuigcontrole:'Voertuigcontrole (mobiel)', oefenplanning:'Oefenplanning (mobiel)', start:'Start (mobiel)',
+                    'ploegcompleet-mobiel':'PloegCompleet mobiel', 'ploegcompleet-web':'PloegCompleet web', bezetting:'Bezettingsmonitor',
+                    activatie:'Activatielink', web:'PloegCompleet web', mobiel:'PloegCompleet mobiel' };
+function appNaam(code){ return APP_NAMEN[code] || code || '—'; }
+function toestelUitUserAgent(ua){
+  if(!ua) return '—';
+  const s = String(ua);
+  if(/iPad/i.test(s)) return 'iPad';
+  if(/iPhone|iPod/i.test(s)) return 'iPhone';
+  if(/Android/i.test(s)) return 'Android';
+  if(/Windows/i.test(s)) return 'Windows';
+  if(/Macintosh|Mac OS X/i.test(s)) return 'Mac';
+  if(/Linux|X11|CrOS/i.test(s)) return 'Linux';
+  return 'Onbekend';
+}
+async function laadLoginOverzicht(){
+  if(!magAanwezigheidZien() || !supa) return;
+  try{
+    const { data, error } = await supa.rpc('login_overzicht', { p_limiet: 200 });
+    if(error) throw error;
+    State.loginOverzicht = data || [];
+    State.loginOverzichtFout = null;
+  }catch(err){ State.loginOverzicht = null; State.loginOverzichtFout = (err && err.message) || String(err); }
+  vulLoginOverzicht();
+}
+function loginLijstHtml(){
+  if(State.loginOverzichtFout && !State.loginOverzicht){
+    return `<div class="empty-hint">Kon de inlogs niet ophalen: ${esc(State.loginOverzichtFout)}. Is het databasescript voor het logboek van inlogs uitgevoerd?</div>`;
+  }
+  if(!State.loginOverzicht) return '<div class="empty-hint">Bezig met laden…</div>';
+  const filter = State.loginFilter || 'alles';
+  const zoek = String(State.loginZoek || '').trim().toLowerCase();
+  const rijen = State.loginOverzicht.filter(r => (filter==='alles' || r.gebeurtenis===filter) && (!zoek || String(r.naam || r.lid_id || '').toLowerCase().includes(zoek)));
+  const nInlog = State.loginOverzicht.filter(r => r.gebeurtenis !== 'activatie').length, nActiv = State.loginOverzicht.length - nInlog;
+  const samenvatting = `<div class="hint" style="margin:0 0 8px;">${State.loginOverzicht.length} regels: ${nInlog} inlogs en ${nActiv} activaties${rijen.length!==State.loginOverzicht.length ? ' · '+rijen.length+' getoond' : ''}.</div>`;
+  if(!rijen.length) return samenvatting + '<div class="empty-hint">Geen regels voor deze keuze.</div>';
+  const wanneer = iso => iso ? new Date(iso).toLocaleString('nl-NL', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' }) : '—';
+  const gebeurtenis = g => g==='activatie' ? 'Account geactiveerd' : g==='inloggen' ? 'Ingelogd' : (g || '—');
+  return samenvatting + `<table class="dash-table"><thead><tr><th>Wanneer</th><th>Naam</th><th>Gebeurtenis</th><th>Waar</th><th>Toestel</th></tr></thead><tbody>${rijen.map(r=>`
+    <tr>
+      <td>${esc(wanneer(r.tijdstip))}</td>
+      <td><strong>${esc(r.naam || r.lid_id || '—')}</strong></td>
+      <td>${esc(gebeurtenis(r.gebeurtenis))}</td>
+      <td>${esc(appNaam(r.app))}</td>
+      <td>${esc(toestelUitUserAgent(r.user_agent))}</td>
+    </tr>`).join('')}</tbody></table>`;
+}
+function vulLoginOverzicht(){ const el = document.getElementById('loginLijst'); if(el) el.innerHTML = loginLijstHtml(); }
+function zetLoginFilter(waarde){ State.loginFilter = waarde; vulLoginOverzicht(); }
+function zetLoginZoek(waarde){ State.loginZoek = waarde; vulLoginOverzicht(); }
+function openLoginOverzicht(){
+  if(!magAanwezigheidZien()) return;
+  State.loginOverzicht = null; State.loginOverzichtFout = null; State.loginFilter = 'alles'; State.loginZoek = '';
+  const box = document.getElementById('modalBox');
+  box.classList.add('wide');
+  box.innerHTML = `
+    <div class="modal-head"><h3>Inlogs en activaties</h3><button class="modal-close" data-close="modal">✕</button></div>
+    <div class="btn-row" style="margin-bottom:10px;gap:8px;flex-wrap:wrap;align-items:center;">
+      <select onchange="zetLoginFilter(this.value)" style="background:var(--surface-2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:6px 8px;font-size:13px;">
+        <option value="alles">Alles</option><option value="inloggen">Alleen inlogs</option><option value="activatie">Alleen activaties</option>
+      </select>
+      <input type="search" placeholder="Zoek op naam" oninput="zetLoginZoek(this.value)" style="background:var(--surface-2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:6px 8px;font-size:13px;">
+      <button class="btn ghost" onclick="laadLoginOverzicht()">↻ Ververs</button>
+    </div>
+    <div id="loginLijst">${loginLijstHtml()}</div>
+    <div class="hint" style="margin-top:12px;">Een inlog wordt vastgelegd op het moment dat iemand zijn pincode invoert; wie ingelogd blijft, laat geen nieuwe regel achter (daarvoor is Wie is online). Alleen beheer en pco zien dit. Regels worden na verloop van tijd opgeruimd (standaard na 180 dagen).</div>`;
+  document.getElementById('modalOverlay').classList.remove('hidden');
+  laadLoginOverzicht();
+}
+
 function pasRolToe(){
   const rol = State.rol || 'manschap';
   const toegang = ROL_TOEGANG[rol] || ROL_TOEGANG.manschap;
@@ -2279,6 +2355,7 @@ function pasRolToe(){
   const magBeheerGebruikers = State.rolWerkelijk==='beheer' || State.rolWerkelijk==='pco';
   document.getElementById('btnGebruikers').classList.toggle('hidden', !magBeheerGebruikers);
   document.getElementById('btnOnline').classList.toggle('hidden', !magAanwezigheidZien());
+  document.getElementById('btnLogins').classList.toggle('hidden', !magAanwezigheidZien());
   document.getElementById('btnActivatie').classList.toggle('hidden', State.rolWerkelijk!=='beheer');
   const rolSel = document.getElementById('rolSelect');
   rolSel.classList.toggle('hidden', State.rolWerkelijk!=='beheer');
@@ -5937,6 +6014,7 @@ function wireEvents(){
   });
   document.getElementById('btnGebruikers').addEventListener('click', openGebruikersScherm);
   document.getElementById('btnOnline').addEventListener('click', openAanwezigheidModal);
+  document.getElementById('btnLogins').addEventListener('click', openLoginOverzicht);
   document.getElementById('btnUitloggen').addEventListener('click', async ()=>{
     if(!confirm('Alle wijzigingen worden automatisch al opgeslagen, dus dat is al in orde. Weet je zeker dat je wilt uitloggen?')) return;
     await stopAanwezigheid();
@@ -6465,7 +6543,7 @@ function vraagInlog(){
           const res = await fetch(SUPABASE_URL + '/functions/v1/login-pin', {
             method: 'POST',
             headers: {'Content-Type':'application/json'},
-            body: JSON.stringify({persoonId: persoon.id, pin: pin})
+            body: JSON.stringify({persoonId: persoon.id, pin: pin, app: 'dagstaat'})
           });
           uitkomst = await res.json();
         }
