@@ -138,7 +138,7 @@
 </div>
 
 <div id="app" class="hidden">
-  <a href="./index.html" style="display:inline-block;font-size:11px;color:var(--text-muted);text-decoration:none;margin-bottom:8px;">← Overzicht</a>
+  <div id="kopPlek"><a href="./index.html" style="display:inline-block;font-size:15px;font-weight:600;color:#fff;text-decoration:none;margin-bottom:10px;">‹ Overzicht</a></div>
   <div class="topbar">
     <div class="brand">DAGSTAAT<small id="ingelogdAls"></small></div>
     <select id="postSelect">
@@ -165,6 +165,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="./aanwezig.js"></script>
+<script src="./kop.js"></script>
 <script>
 (function(){
   var DAG_URL = "https://iyquepqubfqrhybriqif.supabase.co";
@@ -172,6 +173,10 @@
   var DAG_KEY_HEADERS = {"apikey":DAG_KEY,"Authorization":"Bearer "+DAG_KEY};
   var supa = window.supabase.createClient(DAG_URL, DAG_KEY);
   if(window.Aanwezig) Aanwezig.start(supa, {app:'dagstaat-mobiel'});
+  if(window.Kop){
+    Kop.start({ client: supa, ververs: function(){ return laadEnRender(); } });
+    Kop.plaats('kopPlek', { terug: { tekst: 'Overzicht', href: './index.html' }, ververs: true, meldingen: true });
+  }
   // Houdt de losse headers (gebruikt door sbSelect) altijd synchroon met de
   // sessie die de bibliotheek zelf bijhoudt -- ook bij een automatische
   // verversing op de achtergrond, ongeacht hoe lang de app open blijft staan.
