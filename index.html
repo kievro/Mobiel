@@ -153,12 +153,14 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="./aanwezig.js"></script>
 <script>
 (function(){
   var DAG_URL = "https://iyquepqubfqrhybriqif.supabase.co";
   var DAG_KEY = "sb_publishable_Pb0fFfxZQggKnFCtJYMH9A_avw0GaPn";
   var DAG_KEY_HEADERS = {"apikey":DAG_KEY,"Authorization":"Bearer "+DAG_KEY};
   var supa = window.supabase.createClient(DAG_URL, DAG_KEY);
+  if(window.Aanwezig) Aanwezig.start(supa, {app:'hub'});
   // Houdt de losse headers (gebruikt door sbSelect) altijd synchroon met de
   // sessie die de bibliotheek zelf bijhoudt -- ook bij een automatische
   // verversing op de achtergrond, ongeacht hoe lang de app open blijft staan.
@@ -353,7 +355,7 @@
       var loginRes = await fetch(DAG_URL + "/functions/v1/login-pin", {
         method: "POST",
         headers: {"Content-Type":"application/json"},
-        body: JSON.stringify({persoonId: loginState.gekozenId, pin: pin})
+        body: JSON.stringify({persoonId: loginState.gekozenId, pin: pin, app: 'hub'})
       });
       var res = await loginRes.json();
       if(res && res.ok){
