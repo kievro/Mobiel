@@ -1,11 +1,11 @@
 /* kop.js — één vaste bovenkant voor alle mobiele apps.
  *
- *   Links:  een pijl met tekst ("‹ Overzicht"), wit en groot genoeg om goed te raken.
+ *   Links:  een pijl met tekst ("‹ Brandweer Mobiel"), wit en groot genoeg om goed te raken.
  *   Rechts: verversen en meldingen aanzetten (🔔 staat aan, 🔕 staat uit).
  *
  * Gebruik
  *   Kop.start({ client: supa, ververs: function(){ ... }, meldingen: function(){ ... } });
- *   Kop.plaats('kopPlek', { terug: { tekst: 'Overzicht', href: './index.html' }, ververs: true, meldingen: true });
+ *   Kop.plaats('kopPlek', { terug: { tekst: 'Brandweer Mobiel', href: './index.html' }, ververs: true, meldingen: true });
  *   Kop.plaatsKnoppen('kopActies', { ververs: true, meldingen: true });   // alleen de knoppen rechts (hub, geen terugknop)
  *   Kop.html(opties)                                                      // voor apps die hun bovenkant zelf met JavaScript opbouwen
  *   Kop.zetNav({ terug: { tekst: '...', actie: functie }, ververs: false, meldingen: true });   // de bovenkant onderweg aanpassen
