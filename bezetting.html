@@ -6,6 +6,7 @@
 <title>Bezetting — Brandweer Gelderland Midden</title>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="./aanwezig.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
@@ -219,6 +220,7 @@
   var DAG_URL = "https://iyquepqubfqrhybriqif.supabase.co";
   var DAG_KEY = "sb_publishable_Pb0fFfxZQggKnFCtJYMH9A_avw0GaPn";
   var supa = window.supabase.createClient(DAG_URL, DAG_KEY);
+  if(window.Aanwezig) Aanwezig.start(supa, {app:'bezetting'});
 
   var POST_NAMEN = {post1:"Arnhem Noord", post2:"Arnhem Zuid", post3:"Ede Stad"};
   var SHEET_NAAR_POST = {"Post Arnhem Noord":"post1", "Post Arnhem Zuid":"post2", "Post Ede stad":"post3"};
@@ -323,7 +325,7 @@
       var loginRes = await fetch(DAG_URL + "/functions/v1/login-pin", {
         method: "POST",
         headers: {"Content-Type":"application/json"},
-        body: JSON.stringify({persoonId: loginState.gekozenId, pin: pin})
+        body: JSON.stringify({persoonId: loginState.gekozenId, pin: pin, app: 'bezetting'})
       });
       var res = await loginRes.json();
       if(res && res.ok){
