@@ -118,6 +118,7 @@
 <div id="sheetOverlay" class="sheet-overlay hidden"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="./aanwezig.js"></script>
 <script>
 (function(){
   "use strict";
@@ -125,6 +126,7 @@
   var DAG_URL = "https://iyquepqubfqrhybriqif.supabase.co";
   var DAG_KEY = "sb_publishable_Pb0fFfxZQggKnFCtJYMH9A_avw0GaPn";
   var sb = window.supabase.createClient(DAG_URL, DAG_KEY);
+  if(window.Aanwezig) Aanwezig.start(sb, {app:'overdracht'});
 
   var INGELOGD_KEY = "brw-mobiel-ingelogd-persoon"; // gedeeld met de hub en de andere mobiele apps
   var POST_KEY = "brw-overdracht-post";
