@@ -110,6 +110,21 @@
   }
   async function ververStatus() { status.waarde = await bepaalStatus(); zetIconen(); return status.waarde; }
 
+  // Stuurt één testmelding naar de ingelogde persoon zelf, zodat meteen te zien is dat meldingen echt aankomen. Gebruikt de bestaande
+  // verstuurfunctie met de sessie van de gebruiker (via supabase-js, dus met een echte JWT); er wordt maar naar één persoon gestuurd.
+  async function testmelding(client, persoonId) {
+    try {
+      var r = await client.functions.invoke('verstuur-batch-melding', {
+        body: { ontvangerIds: [persoonId], titel: 'Testmelding', tekst: 'Meldingen werken op dit toestel \u2713' }
+      });
+      if (r && r.error) throw r.error;
+      var tekst = r && typeof r.data === 'string' ? r.data : '';
+      var m = /ok, (\d+) verstuurd, (\d+) mislukt/.exec(tekst);
+      if (m && Number(m[1]) >= 1 && Number(m[2]) === 0) return { ok: true, reden: '' };
+      return { ok: false, reden: tekst || 'onbekend antwoord' };
+    } catch (e) { return { ok: false, reden: e && e.message ? e.message : String(e) }; }
+  }
+
   async function aanzetten() {
     var client = opties.client;
     if (!client) { toast('Meldingen: niet beschikbaar in deze app.'); return; }
@@ -138,7 +153,10 @@
       await client.from('push_subscriptions').delete().eq('subscriptie->>endpoint', json.endpoint).neq('lid_id', persoonId);
       var res = await client.from('push_subscriptions').upsert({ lid_id: persoonId, subscriptie: json, bijgewerkt_op: new Date().toISOString() }, { onConflict: 'lid_id,endpoint' });
       if (res.error) { toast('Meldingen: opslaan mislukt \u2013 ' + res.error.message); return; }
-      toast('Meldingen ingeschakeld \u2713');
+      toast('Meldingen ingeschakeld \u2713 \u2013 testmelding wordt verstuurd\u2026');
+      var t = await testmelding(client, persoonId);
+      toast(t.ok ? 'Testmelding verstuurd. Zie je hem op je telefoon? Zo niet, kijk dan bij de instellingen van je telefoon.'
+                 : 'Meldingen staan aan, maar de testmelding kon niet worden verstuurd (' + t.reden + ').');
     } catch (e) { toast('Meldingen: instellen mislukt \u2013 ' + (e && e.message ? e.message : e)); }
   }
 
@@ -175,6 +193,6 @@
     document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') ververStatus(); });
   }
 
-  window.Kop = { start: start, html: html, plaats: plaats, plaatsKnoppen: plaatsKnoppen, zetNav: zetNav, toast: toast, ververStatus: ververStatus,
+  window.Kop = { start: start, html: html, plaats: plaats, plaatsKnoppen: plaatsKnoppen, zetNav: zetNav, toast: toast, ververStatus: ververStatus, testmelding: testmelding,
                  _opties: opties, _status: status, _klik: klik, _aanzetten: aanzetten };
 })();
