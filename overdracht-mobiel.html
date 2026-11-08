@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <meta name="theme-color" content="#12161B" />
-<title>Overdracht — Brandweer Gelderland Midden</title>
+<title>Overdracht — Brandweer VGGM</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📝</text></svg>">
@@ -299,7 +299,7 @@
     var app = document.getElementById("app");
     if(state.laden){ app.innerHTML = '<div class="laden">Bezig met laden…</div>'; return; }
     if(!state.toegang){
-      app.innerHTML = (window.Kop ? Kop.html({ terug: { tekst: 'Overzicht', href: './index.html' }, meldingen: true }) + '<div class="topbar"><div class="brand">Overdracht</div></div>'
+      app.innerHTML = (window.Kop ? Kop.html({ terug: { tekst: 'Brandweer Mobiel', href: './index.html' }, meldingen: true }) + '<div class="topbar"><div class="brand">Overdracht</div></div>'
                                   : '<div class="topbar"><div class="brand">Overdracht</div><a class="icon-btn" href="./index.html" title="Terug">🏠</a></div>')
         + '<div class="melding">Deze pagina is voor bevelvoerders, ploegcommandanten en beheer.</div>';
       return;
@@ -315,7 +315,7 @@
 
     var brandHtml = '<div class="brand">Overdracht<small>Dagjournaal · '+esc(postNaam(state.post))+'</small></div>';
     var html = window.Kop
-      ? Kop.html({ terug: { tekst: 'Overzicht', href: './index.html' }, ververs: true, ververAttr: 'data-actie="ververs"', meldingen: true }) + '<div class="topbar">' + brandHtml + '</div>'
+      ? Kop.html({ terug: { tekst: 'Brandweer Mobiel', href: './index.html' }, ververs: true, ververAttr: 'data-actie="ververs"', meldingen: true }) + '<div class="topbar">' + brandHtml + '</div>'
       : '<div class="topbar">' + brandHtml + '<div style="display:flex;gap:8px;"><button class="icon-btn" data-actie="ververs" title="Verversen">↻</button><a class="icon-btn" href="./index.html" title="Terug naar overzicht">🏠</a></div></div>';
     if(state.fout) html += '<div class="melding">'+esc(state.fout)+' <button class="btn klein" data-actie="ververs" style="margin-left:6px;">Opnieuw proberen</button></div>';
     html += '<div class="filter-row"><select id="postSelect">'+opties+'</select></div>';
