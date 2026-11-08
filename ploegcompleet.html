@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="./aanwezig.js"></script>
 <style>
   :root{
     --bg:#12161B;
@@ -180,7 +181,7 @@
 <script>
 (function(){
   "use strict";
-  var APP_VERSIE_DATUM = "25 augustus 2026"; // pas deze regel aan bij elke nieuwe versie die je installeert
+  var APP_VERSIE_DATUM = "7 november 2026 (C)"; // pas deze regel aan bij elke nieuwe versie die je installeert
 
   // ---------- Supabase ----------
   // Eén Supabase-project voor alles -- PloegCompleet gebruikt voortaan
@@ -189,6 +190,7 @@
   var DAG_URL = "https://iyquepqubfqrhybriqif.supabase.co";
   var DAG_KEY = "sb_publishable_Pb0fFfxZQggKnFCtJYMH9A_avw0GaPn";
   var sbDag = window.supabase.createClient(DAG_URL, DAG_KEY);
+  if(window.Aanwezig) Aanwezig.start(sbDag, {app:'ploegcompleet-web', versie:function(){ return typeof APP_VERSIE_DATUM !== 'undefined' ? APP_VERSIE_DATUM : null; }});
 
   // Pushmeldingen -- hergebruikt dezelfde push_subscriptions-tabel en dezelfde
   // Edge Functions als de mobiele Ploeg-app. Vraagt na het inloggen om
@@ -1158,11 +1160,12 @@
       : '<div class="empty">Niets gevonden voor dit filter.</div>';
     return '<div class="card"><h3 style="margin-top:0;display:flex;align-items:center;justify-content:space-between;">Verzendstatus \u2014 '+(metPersoon?'laatste 200 meldingen van deze persoon':'laatste 100 meldingen')
       + '<button class="small-btn" onclick="App.ververVerzendstatus()">\u21bb Ververs</button></h3>'
-      + '<p style="font-size:11.5px;color:var(--text-muted);margin:0 0 10px;">"Afgeleverd" betekent: succesvol overgedragen aan Apple/Google. Er bestaat geen leesbevestiging \u2014 "app geopend nadien" is de meest betrouwbare aanwijzing dat iemand de melding heeft gezien. Mensen zonder toestel met meldingen komen alleen in deze lijst voor bij een gecombineerd bericht.</p>'
+      + '<p style="font-size:11.5px;color:var(--text-muted);margin:0 0 10px;">"Afgeleverd" betekent: succesvol overgedragen aan Apple/Google. Er bestaat geen leesbevestiging \u2014 "app geopend nadien" is de meest betrouwbare aanwijzing dat iemand het ook echt gezien kan hebben. Mensen zonder toestel met meldingen komen alleen in deze lijst voor bij een gecombineerd bericht.</p>'
       + pushHtml
       + filterBalk
       + persoonHtml
       + (gefilterd.length ? '<div class="verzendstatus-lijst">'+body+'</div>' : leeg)
+      + '<div style="font-size:11px;color:var(--text-muted);margin-top:8px;">PloegCompleet \u2014 versie van '+escapeHtml(APP_VERSIE_DATUM)+'</div>'
       + '</div>';
   }
   App.openNewShiftForm = function(){ state.showForm = true; state.editingShiftId = "new"; render(); };
