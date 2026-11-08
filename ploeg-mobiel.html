@@ -519,7 +519,11 @@
       await sbDag.from("push_subscriptions").delete().eq("subscriptie->>endpoint", subJson.endpoint).neq("lid_id", state.currentUserId);
       var res = await sbDag.from("push_subscriptions").upsert({ lid_id: state.currentUserId, subscriptie: subJson, bijgewerkt_op: new Date().toISOString() }, {onConflict:"lid_id,endpoint"});
       if(res.error){ showToast("Meldingen: opslaan mislukt \u2013 "+res.error.message); return; }
-      showToast("Meldingen ingeschakeld \u2713");
+      if(window.Kop && Kop.testmelding){
+        showToast("Meldingen ingeschakeld \u2713 \u2013 testmelding wordt verstuurd\u2026");
+        var t = await Kop.testmelding(sbDag, state.currentUserId);   // één testmelding naar jezelf: zo zie je dat het echt aankomt
+        showToast(t.ok ? "Testmelding verstuurd. Zie je hem op je telefoon?" : "Meldingen staan aan, maar de testmelding kon niet worden verstuurd ("+t.reden+").");
+      } else showToast("Meldingen ingeschakeld \u2713");
     }catch(e){ showToast("Meldingen: instellen mislukt \u2013 "+(e&&e.message?e.message:e)); }
   }
 
