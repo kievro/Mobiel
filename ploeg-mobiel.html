@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <meta name="theme-color" content="#12161B" />
-<title>PloegCompleet — Brandweer Gelderland Midden</title>
+<title>PloegCompleet — Brandweer VGGM</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -703,7 +703,7 @@
     return false;
   };
 
-  function brandBlock(){ return '<div class="brand"><b>PloegCompleet</b><small>Brandweer Gelderland Midden</small></div>'; }
+  function brandBlock(){ return '<div class="brand"><b>PloegCompleet</b><small>Brandweer VGGM</small></div>'; }
   function renderLoading(){ return '<div class="login-wrap">'+brandBlock()+'<div class="chevron-divider"></div><div class="info-line">Bezig met laden\u2026</div></div>'; }
   function renderLoadError(){
     return '<div class="login-wrap">'+brandBlock()+'<div class="chevron-divider"></div>'
@@ -979,7 +979,7 @@
     var brandHtml = '<div class="brand">PloegCompleet<small style="cursor:pointer;" onclick="App.switchUser()" title="Andere gebruiker inloggen">'+escapeHtml(me.naam)+' \u270E</small></div>';
     var inboxHtml = kanBeheren ? '<button class="icon-btn" title="Berichten" onclick="App.toggleBell()">\uD83D\uDCE5'+(unread?'<span class="bel-badge">'+unread+'</span>':'')+'</button>' : '';
     var topNieuw = '<div class="topbar" style="flex-direction:column;align-items:stretch;gap:4px;">'
-      + (window.Kop ? Kop.html({ terug: { tekst: 'Overzicht', href: './index.html' }, ververs: true, meldingen: true }) : '')
+      + (window.Kop ? Kop.html({ terug: { tekst: 'Brandweer Mobiel', href: './index.html' }, ververs: true, meldingen: true }) : '')
       + '<div style="display:flex;justify-content:space-between;align-items:center;">' + brandHtml + (inboxHtml ? '<div style="display:flex;gap:8px;">' + inboxHtml + '</div>' : '') + '</div></div>';
     var top = (window.Kop ? topNieuw : topOud)
       + (state.bellOpen ? '<div class="melding-backdrop" onclick="App.toggleBell()"></div>' + renderMeldingenDropdown(data) : '');
