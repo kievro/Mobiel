@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aankomende oefeningen — Vakbekwaam</title>
+<style>
+  :root{
+    --bg:#12161B; --surface:#1a1f26; --surface-2:#212831; --border:#2a323c;
+    --text:#e8eaed; --text-dim:#9aa4b2; --text-muted:#6b7684;
+    --lime:#c9e02c; --amber:#f0a93a; --red:#e33629; --green:#4CAF7D; --purple:#8b6fd9;
+    --font-body:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+    --font-display:"Segoe UI",Arial,sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:var(--font-body);padding:20px;max-width:1400px;margin:0 auto;}
+  .topbar{display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;margin-bottom:4px;}
+  .brand{font-family:var(--font-display);font-weight:700;font-size:22px;}
+  .brand small{display:block;font-size:12px;font-weight:400;color:var(--text-muted);margin-top:2px;}
+  .venster-info{font-size:12px;color:var(--text-muted);}
+  .filter-row{display:flex;gap:8px;flex-wrap:wrap;margin:16px 0;}
+  select{background:var(--surface-2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 10px;font-size:13px;font-family:inherit;}
+
+  .rooster{width:100%;border-collapse:collapse;table-layout:fixed;}
+  .rooster col.datum-col{width:120px;}
+  .rooster th{text-align:left;font-family:var(--font-display);font-weight:700;font-size:13px;color:var(--lime);padding:8px 10px;border-bottom:2px solid var(--border);position:sticky;top:0;background:var(--bg);}
+  .rooster td{vertical-align:top;padding:8px 10px;border-bottom:1px solid var(--border);}
+  .rooster tr:nth-child(even) td{background:rgba(255,255,255,0.015);}
+  .datum-cel{font-weight:700;font-size:13px;white-space:nowrap;}
+  .datum-cel .weekdag{display:block;font-weight:400;font-size:11px;color:var(--text-muted);text-transform:capitalize;}
+  .leeg-cel{color:var(--text-muted);font-size:12px;}
+
+  .oef-kaart{background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--lime);border-radius:6px;padding:9px 11px;margin-bottom:6px;}
+  .oef-top{display:flex;justify-content:space-between;align-items:flex-start;gap:6px;flex-wrap:wrap;}
+  .badge{font-size:9px;font-weight:700;padding:2px 7px;border-radius:20px;text-transform:uppercase;letter-spacing:.03em;white-space:nowrap;}
+  .badge.intern{background:rgba(76,175,125,.18);color:var(--green);}
+  .badge.extern{background:rgba(240,169,58,.18);color:var(--amber);}
+  .badge.vorm{background:rgba(139,111,217,.18);color:var(--purple);}
+  .oef-thema{font-size:12.5px;font-weight:600;margin-top:4px;}
+  .oef-tekst{font-size:12px;color:var(--text-dim);margin-top:2px;}
+  .materialen-box{margin-top:6px;padding-top:6px;border-top:1px solid var(--border);}
+  .materiaal-pill{display:inline-block;font-size:10.5px;background:var(--surface-2);border:1px solid var(--border);border-radius:5px;padding:2px 7px;margin:0 4px 4px 0;}
+  .droogijs-let-op{color:var(--red);font-weight:700;}
+  .empty{color:var(--text-muted);text-align:center;padding:40px 0;}
+  .footer-note{font-size:11px;color:var(--text-muted);text-align:center;margin-top:24px;}
+</style>
+</head>
+<body>
+
+  <div class="topbar">
+    <div class="brand">Aankomende oefeningen<small>Brandweer Gelderland-Midden — voor relatiebeheerder(s) Vakbekwaam</small></div>
+    <div class="venster-info" id="vensterInfo">Bezig met laden…</div>
+  </div>
+
+  <div class="filter-row">
+    <select id="themaFilter"><option value="">Alle thema's</option></select>
+    <select id="leidingFilter">
+      <option value="">Intern + extern</option>
+      <option value="intern">Alleen intern</option>
+      <option value="extern">Alleen extern</option>
+    </select>
+  </div>
+
+  <div id="inhoud"><div class="empty">Bezig met laden…</div></div>
+  <div class="footer-note" id="footerNote"></div>
+
+<script>
+  // Vervang dit door de daadwerkelijke URL van de vb-overzicht Edge Function na het deployen.
+  var FUNCTIE_URL = "https://iyquepqubfqrhybriqif.supabase.co/functions/v1/vb-overzicht";
+
+  var ALLE_OEFENINGEN = [];
+  var POSTEN = [];
+  var VENSTER_VANAF = null, VENSTER_TOT = null;
+
+  function escapeHtml(s){
+    return String(s==null?"":s).replace(/[&<>"']/g, function(c){
+      return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];
+    });
+  }
+
+  function vulFilters(){
+    var themas = {};
+    ALLE_OEFENINGEN.forEach(function(o){ if(o.thema) themas[o.thema] = true; });
+    var themaSelect = document.getElementById("themaFilter");
+    var huidigThema = themaSelect.value;
+    themaSelect.innerHTML = '<option value="">Alle thema\'s</option>' + Object.keys(themas).sort().map(function(t){
+      return '<option value="'+escapeHtml(t)+'">'+escapeHtml(t)+'</option>';
+    }).join("");
+    if(themas[huidigThema]) themaSelect.value = huidigThema;
+  }
+
+  function oefKaartHtml(o){
+    var materialenHtml = "";
+    if(o.materialen && o.materialen.length){
+      materialenHtml = '<div class="materialen-box">'
+        + o.materialen.map(function(m){
+            var isDroogijs = /droogijs/i.test(m.naam);
+            return '<span class="materiaal-pill'+(isDroogijs?' droogijs-let-op':'')+'">'+(isDroogijs?'⚠ ':'')+escapeHtml(m.naam)+'</span>';
+          }).join("")
+        + '</div>';
+    }
+    var vormLabel = o.vorm==="theorie" ? "Theorie" : (o.vorm==="gemengd" ? "Th./Pr." : "Praktijk");
+    return '<div class="oef-kaart">'
+      + '<div class="oef-top"><span class="badge '+o.oefenleidingType+'">'+(o.oefenleidingType==="extern"?"Extern":"Intern")+'</span><span class="badge vorm">'+vormLabel+'</span></div>'
+      + (o.thema ? '<div class="oef-thema">'+escapeHtml(o.thema)+'</div>' : '')
+      + (o.omschrijving ? '<div class="oef-tekst">'+escapeHtml(o.omschrijving)+'</div>' : '')
+      + materialenHtml
+      + '</div>';
+  }
+
+  function alleDatumsInVenster(){
+    // Alle dagen van vandaag t/m het einde van het venster, zondagen overgeslagen
+    // (er wordt op zondag niet geoefend).
+    var datums = [];
+    var d = new Date(VENSTER_VANAF+"T00:00:00");
+    var tot = new Date(VENSTER_TOT+"T00:00:00");
+    while(d <= tot){
+      if(d.getDay() !== 0) datums.push(d.toISOString().slice(0,10)); // 0 = zondag
+      d.setDate(d.getDate()+1);
+    }
+    return datums;
+  }
+
+  function render(){
+    var themaFilter = document.getElementById("themaFilter").value;
+    var leidingFilter = document.getElementById("leidingFilter").value;
+
+    var gefilterd = ALLE_OEFENINGEN.filter(function(o){
+      if(themaFilter && o.thema !== themaFilter) return false;
+      if(leidingFilter && o.oefenleidingType !== leidingFilter) return false;
+      return true;
+    });
+
+    var inhoud = document.getElementById("inhoud");
+    if(!POSTEN.length){
+      inhoud.innerHTML = '<div class="empty">Geen posten gevonden.</div>';
+      return;
+    }
+
+    // Per datum, per post: lijst van oefeningen
+    var perDatumPerPost = {};
+    gefilterd.forEach(function(o){
+      if(!perDatumPerPost[o.datum]) perDatumPerPost[o.datum] = {};
+      (perDatumPerPost[o.datum][o.postId] = perDatumPerPost[o.datum][o.postId] || []).push(o);
+    });
+
+    var datums = alleDatumsInVenster();
+
+    var headerHtml = '<tr><th>Datum</th>' + POSTEN.map(function(p){ return '<th>'+escapeHtml(p.naam)+'</th>'; }).join('') + '</tr>';
+    var rijenHtml = datums.map(function(datumKey){
+      var d = new Date(datumKey+"T00:00:00");
+      var dagLabel = d.toLocaleDateString("nl-NL",{day:"numeric",month:"short"});
+      var weekdagLabel = d.toLocaleDateString("nl-NL",{weekday:"long"});
+      var celData = perDatumPerPost[datumKey] || {};
+      var cellenHtml = POSTEN.map(function(p){
+        var lijst = celData[p.id];
+        if(!lijst || !lijst.length) return '<td><span class="leeg-cel">—</span></td>';
+        return '<td>' + lijst.map(oefKaartHtml).join('') + '</td>';
+      }).join('');
+      return '<tr><td class="datum-cel">'+escapeHtml(dagLabel)+'<span class="weekdag">'+escapeHtml(weekdagLabel)+'</span></td>'+cellenHtml+'</tr>';
+    }).join('');
+
+    inhoud.innerHTML = '<table class="rooster"><colgroup><col class="datum-col">' + POSTEN.map(function(){return '<col>';}).join('') + '</colgroup>'
+      + '<thead>'+headerHtml+'</thead><tbody>'+rijenHtml+'</tbody></table>';
+  }
+
+  async function laadData(){
+    try{
+      var res = await fetch(FUNCTIE_URL + "?dagen=28");
+      var json = await res.json();
+      if(!json.ok) throw new Error(json.error || "onbekende fout");
+      ALLE_OEFENINGEN = json.oefeningen || [];
+      POSTEN = (json.posten || []).slice().sort(function(a,b){ return a.naam.localeCompare(b.naam,'nl'); });
+      VENSTER_VANAF = json.vanaf; VENSTER_TOT = json.tot;
+      var vanafLabel = new Date(json.vanaf+"T00:00:00").toLocaleDateString("nl-NL",{day:"numeric",month:"short"});
+      var totLabel = new Date(json.tot+"T00:00:00").toLocaleDateString("nl-NL",{day:"numeric",month:"short"});
+      document.getElementById("vensterInfo").textContent = "Venster: " + vanafLabel + " – " + totLabel + " (schuift dagelijks automatisch op, zondagen overgeslagen)";
+      vulFilters();
+      render();
+      document.getElementById("footerNote").textContent = "Bijgewerkt " + new Date().toLocaleTimeString("nl-NL",{hour:"2-digit",minute:"2-digit"});
+    }catch(e){
+      document.getElementById("inhoud").innerHTML = '<div class="empty">Kon niet laden: '+escapeHtml(e.message||"onbekende fout")+'</div>';
+    }
+  }
+
+  document.getElementById("themaFilter").addEventListener("change", render);
+  document.getElementById("leidingFilter").addEventListener("change", render);
+
+  laadData();
+  setInterval(laadData, 5*60*1000); // elke 5 minuten verversen
+</script>
+</body>
+</html>
