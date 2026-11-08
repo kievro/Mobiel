@@ -1,6 +1,6 @@
 {
   "name": "Brandweer Mobiel",
-  "short_name": "BRW Mobiel",
+  "short_name": "Brandweer Mobiel",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#12161B",
