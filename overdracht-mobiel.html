@@ -119,6 +119,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="./aanwezig.js"></script>
+<script src="./kop.js"></script>
 <script>
 (function(){
   "use strict";
@@ -127,6 +128,7 @@
   var DAG_KEY = "sb_publishable_Pb0fFfxZQggKnFCtJYMH9A_avw0GaPn";
   var sb = window.supabase.createClient(DAG_URL, DAG_KEY);
   if(window.Aanwezig) Aanwezig.start(sb, {app:'overdracht'});
+  if(window.Kop) Kop.start({ client: sb });   // verversen handelt deze app zelf af (data-actie)
 
   var INGELOGD_KEY = "brw-mobiel-ingelogd-persoon"; // gedeeld met de hub en de andere mobiele apps
   var POST_KEY = "brw-overdracht-post";
@@ -297,7 +299,8 @@
     var app = document.getElementById("app");
     if(state.laden){ app.innerHTML = '<div class="laden">Bezig met laden…</div>'; return; }
     if(!state.toegang){
-      app.innerHTML = '<div class="topbar"><div class="brand">Overdracht</div><a class="icon-btn" href="./index.html" title="Terug">🏠</a></div>'
+      app.innerHTML = (window.Kop ? Kop.html({ terug: { tekst: 'Overzicht', href: './index.html' }, meldingen: true }) + '<div class="topbar"><div class="brand">Overdracht</div></div>'
+                                  : '<div class="topbar"><div class="brand">Overdracht</div><a class="icon-btn" href="./index.html" title="Terug">🏠</a></div>')
         + '<div class="melding">Deze pagina is voor bevelvoerders, ploegcommandanten en beheer.</div>';
       return;
     }
@@ -310,8 +313,10 @@
       return '<option value="'+esc(p.id)+'"'+(p.id===state.post?" selected":"")+'>'+esc(p.naam)+c+'</option>';
     }).join("");
 
-    var html = '<div class="topbar"><div class="brand">Overdracht<small>Dagjournaal · '+esc(postNaam(state.post))+'</small></div>'
-      + '<div style="display:flex;gap:8px;"><button class="icon-btn" data-actie="ververs" title="Verversen">↻</button><a class="icon-btn" href="./index.html" title="Terug naar overzicht">🏠</a></div></div>';
+    var brandHtml = '<div class="brand">Overdracht<small>Dagjournaal · '+esc(postNaam(state.post))+'</small></div>';
+    var html = window.Kop
+      ? Kop.html({ terug: { tekst: 'Overzicht', href: './index.html' }, ververs: true, ververAttr: 'data-actie="ververs"', meldingen: true }) + '<div class="topbar">' + brandHtml + '</div>'
+      : '<div class="topbar">' + brandHtml + '<div style="display:flex;gap:8px;"><button class="icon-btn" data-actie="ververs" title="Verversen">↻</button><a class="icon-btn" href="./index.html" title="Terug naar overzicht">🏠</a></div></div>';
     if(state.fout) html += '<div class="melding">'+esc(state.fout)+' <button class="btn klein" data-actie="ververs" style="margin-left:6px;">Opnieuw proberen</button></div>';
     html += '<div class="filter-row"><select id="postSelect">'+opties+'</select></div>';
 
