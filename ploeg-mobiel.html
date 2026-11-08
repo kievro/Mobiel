@@ -14,6 +14,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="./aanwezig.js"></script>
+<script src="./kop.js"></script>
 <style>
   :root{
     --bg:#12161B; --surface:#1B2129; --surface-2:#232B34; --border:#2E3843;
@@ -170,6 +171,7 @@
   var DAG_KEY = "sb_publishable_Pb0fFfxZQggKnFCtJYMH9A_avw0GaPn";
   var sbDag = window.supabase.createClient(DAG_URL, DAG_KEY);
   if(window.Aanwezig) Aanwezig.start(sbDag, {app:'ploegcompleet-mobiel'});
+  if(window.Kop) Kop.start({ client: sbDag, ververs: function(){ App.ververGegevens(); }, ververStil: true, meldingen: function(){ return App.testPush(); } });
 
   // Openbare VAPID-sleutel -- LET OP: dit is de OUDE sleutel van het vorige
   // PloegCompleet-project. Er is een NIEUW VAPID-sleutelpaar aangemaakt in
@@ -538,7 +540,7 @@
     state.bellOpen = !state.bellOpen;
     render();
   };
-  App.testPush = function(){ state.pushGevraagd = false; vraagPushToestemming(); };
+  App.testPush = function(){ state.pushGevraagd = false; return vraagPushToestemming(); };
   App.setView = function(v){ state.view = v; state.showForm=false; render(); };
   App.filterMembers = function(val){
     var v = val.toLowerCase();
@@ -963,11 +965,19 @@
     var kanBeheren = kanDienstenBeheren(me.rol);
     var unread = data.meldingen.filter(function(m){ return !m.gelezen; }).length;
 
-    var top = '<div class="topbar"><div class="brand">PloegCompleet<small style="cursor:pointer;" onclick="App.switchUser()" title="Andere gebruiker inloggen">'+escapeHtml(me.naam)+' \u270E</small></div><div style="display:flex;gap:8px;">'
+    var topOud = '<div class="topbar"><div class="brand">PloegCompleet<small style="cursor:pointer;" onclick="App.switchUser()" title="Andere gebruiker inloggen">'+escapeHtml(me.naam)+' \u270E</small></div><div style="display:flex;gap:8px;">'
       + (kanBeheren ? '<button class="icon-btn" title="Meldingen" onclick="App.toggleBell()">\uD83D\uDD14'+(unread?'<span class="bel-badge">'+unread+'</span>':'')+'</button>' : '')
       + '<button class="icon-btn" onclick="App.testPush()" title="Pushmeldingen (opnieuw) inschakelen">\u2699\uFE0F</button>'
       + '<a class="icon-btn" href="./index.html" title="Terug naar overzicht" style="text-decoration:none;display:inline-flex;align-items:center;justify-content:center;">\uD83C\uDFE0</a>'
-      + '<button class="icon-btn" onclick="App.ververGegevens()" title="Gegevens verversen">\u21BB</button></div></div>'
+      + '<button class="icon-btn" onclick="App.ververGegevens()" title="Gegevens verversen">\u21BB</button></div></div>';
+    // Nieuwe bovenkant: links terug naar het overzicht, rechts verversen en meldingen aanzetten. De bel voor de berichten van planners is hier een inbox-icoon,
+    // zodat er maar één bel is: die voor pushmeldingen.
+    var brandHtml = '<div class="brand">PloegCompleet<small style="cursor:pointer;" onclick="App.switchUser()" title="Andere gebruiker inloggen">'+escapeHtml(me.naam)+' \u270E</small></div>';
+    var inboxHtml = kanBeheren ? '<button class="icon-btn" title="Berichten" onclick="App.toggleBell()">\uD83D\uDCE5'+(unread?'<span class="bel-badge">'+unread+'</span>':'')+'</button>' : '';
+    var topNieuw = '<div class="topbar" style="flex-direction:column;align-items:stretch;gap:4px;">'
+      + (window.Kop ? Kop.html({ terug: { tekst: 'Overzicht', href: './index.html' }, ververs: true, meldingen: true }) : '')
+      + '<div style="display:flex;justify-content:space-between;align-items:center;">' + brandHtml + (inboxHtml ? '<div style="display:flex;gap:8px;">' + inboxHtml + '</div>' : '') + '</div></div>';
+    var top = (window.Kop ? topNieuw : topOud)
       + (state.bellOpen ? '<div class="melding-backdrop" onclick="App.toggleBell()"></div>' + renderMeldingenDropdown(data) : '');
     var body;
     if(state.showForm && kanBeheren) body = shiftForm();
