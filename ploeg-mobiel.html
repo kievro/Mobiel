@@ -13,6 +13,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="./aanwezig.js"></script>
 <style>
   :root{
     --bg:#12161B; --surface:#1B2129; --surface-2:#232B34; --border:#2E3843;
@@ -168,6 +169,7 @@
   var DAG_URL = "https://iyquepqubfqrhybriqif.supabase.co";
   var DAG_KEY = "sb_publishable_Pb0fFfxZQggKnFCtJYMH9A_avw0GaPn";
   var sbDag = window.supabase.createClient(DAG_URL, DAG_KEY);
+  if(window.Aanwezig) Aanwezig.start(sbDag, {app:'ploegcompleet-mobiel'});
 
   // Openbare VAPID-sleutel -- LET OP: dit is de OUDE sleutel van het vorige
   // PloegCompleet-project. Er is een NIEUW VAPID-sleutelpaar aangemaakt in
