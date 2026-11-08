@@ -109,7 +109,7 @@
 <body>
 
 <div id="toegangsScherm" style="min-height:100vh;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:14px;padding:20px;">
-  <div class="brand" style="text-align:center;">DAGSTAAT MOBIEL<small>Brandweer Gelderland Midden</small></div>
+  <div class="brand" style="text-align:center;">DAGSTAAT MOBIEL<small>Brandweer VGGM</small></div>
   <div id="loginNaamStap">
     <p style="color:var(--text-muted);font-size:14px;margin:0 0 10px;text-align:center;">Wie ben jij?</p>
     <input type="text" id="naamZoek" placeholder="Typ je naam…" autofocus style="width:260px;text-align:center;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:10px 16px;font-size:15px;box-sizing:border-box;">
@@ -138,7 +138,7 @@
 </div>
 
 <div id="app" class="hidden">
-  <div id="kopPlek"><a href="./index.html" style="display:inline-block;font-size:15px;font-weight:600;color:#fff;text-decoration:none;margin-bottom:10px;">‹ Overzicht</a></div>
+  <div id="kopPlek"><a href="./index.html" style="display:inline-block;font-size:15px;font-weight:600;color:#fff;text-decoration:none;margin-bottom:10px;">‹ Brandweer Mobiel</a></div>
   <div class="topbar">
     <div class="brand">DAGSTAAT<small id="ingelogdAls"></small></div>
     <select id="postSelect">
@@ -175,7 +175,7 @@
   if(window.Aanwezig) Aanwezig.start(supa, {app:'dagstaat-mobiel'});
   if(window.Kop){
     Kop.start({ client: supa, ververs: function(){ return laadEnRender(); } });
-    Kop.plaats('kopPlek', { terug: { tekst: 'Overzicht', href: './index.html' }, ververs: true, meldingen: true });
+    Kop.plaats('kopPlek', { terug: { tekst: 'Brandweer Mobiel', href: './index.html' }, ververs: true, meldingen: true });
   }
   // Houdt de losse headers (gebruikt door sbSelect) altijd synchroon met de
   // sessie die de bibliotheek zelf bijhoudt -- ook bij een automatische
