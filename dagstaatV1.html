@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Dagplanning Brandweer · v7 nov 2026 K</title>
+<title>Dagplanning Brandweer · v7 nov 2026 L</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🚒</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
@@ -221,6 +221,8 @@ select.add-select{background:var(--surface-2);border:1px dashed var(--border);co
 .ovd-vc-arch .doorgehaald{text-decoration:line-through;color:var(--text-dim);}
 .ovd-vc-regel .doorgehaald{text-decoration:line-through;color:var(--text-dim);}
 .ovd-vc-ctrl{margin-top:8px;padding-top:8px;border-top:1px solid var(--border-soft);}
+.ovd-afhandeltekst{margin-top:6px;font-size:13px;line-height:1.4;padding:6px 10px;background:var(--surface);border-left:3px solid var(--lime,#9BD13B);border-radius:6px;white-space:pre-wrap;}
+.ovd-afhandeltekst strong{color:var(--text-dim);font-weight:600;}
 .ovd-melding{background:var(--surface-2);border:1px solid var(--border-soft);border-radius:var(--radius);padding:12px 16px;font-size:14px;margin-bottom:12px;}
 .ovd-melding.fout{border-color:var(--red-text);}
 .mededelingen-paneel{background:var(--surface-2);border:1px solid var(--border-soft);border-radius:var(--radius);padding:12px 16px;margin-bottom:14px;}
@@ -659,7 +661,7 @@ function contrastTextColor(hex){
 const SUPABASE_URL = 'https://iyquepqubfqrhybriqif.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml5cXVlcHF1YmZxcmh5YnJpcWlmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYwODI2MDMsImV4cCI6MjEwMTY1ODYwM30.0zMg5njpz3wnu3qSLDCRQ2Rx2IZlWGnZTj1mQkyWKsw';
 const supa = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
-const APP_VERSIE = '7 nov 2026 K';   // zelfde label als in de titel van het tabblad; ook zichtbaar in de kop en bij wie online is
+const APP_VERSIE = '7 nov 2026 L';   // zelfde label als in de titel van het tabblad; ook zichtbaar in de kop en bij wie online is
 
 // Pas dit aan zodra bekend is waar PloegCompleet definitief gehost wordt (bijv. een
 // submap naast Dagstaat op dezelfde NAS, of een heel ander adres). Relatief pad
@@ -3025,7 +3027,7 @@ function vcPlatteAfwijking(rij){
   var u = rij.voertuigcontrole_uitvoeringen || {};
   return { id: rij.id, uitvoering_id: rij.uitvoering_id, voertuig_id: u.voertuig_id, datum: u.datum, medewerker_id: u.medewerker_id, afgerond_op: u.afgerond_op,
            omschrijving_snapshot: rij.omschrijving_snapshot, opmerking: rij.opmerking, volgorde: rij.volgorde || 0,
-           afgehandeld: !!rij.afgehandeld, afgehandeld_door: rij.afgehandeld_door || null, afgehandeld_op: rij.afgehandeld_op || null };
+           afgehandeld: !!rij.afgehandeld, afgehandeld_door: rij.afgehandeld_door || null, afgehandeld_op: rij.afgehandeld_op || null, afhandeling_tekst: rij.afhandeling_tekst || null };
 }
 function vcIndeelAfwijkingen(openRijen, afgehandeldRijen, nu){
   var zichtbaar = [], archief = [];
@@ -3045,7 +3047,7 @@ function vcGroepeerPerControle(rijen){
 }
 async function vcLaadAfwijkingen(client, ids, nu, metRetry){
   if(!ids.length) return { zichtbaar: [], archief: [] };
-  var kolommen = "id,uitvoering_id,omschrijving_snapshot,opmerking,volgorde,afgehandeld,afgehandeld_door,afgehandeld_op,voertuigcontrole_uitvoeringen!inner(voertuig_id,datum,medewerker_id,afgerond_op,afgerond)";
+  var kolommen = "id,uitvoering_id,omschrijving_snapshot,opmerking,volgorde,afgehandeld,afgehandeld_door,afgehandeld_op,afhandeling_tekst,voertuigcontrole_uitvoeringen!inner(voertuig_id,datum,medewerker_id,afgerond_op,afgerond)";
   function basis(){
     return client.from("voertuigcontrole_resultaten").select(kolommen).eq("status", "afwijking")
       .in("voertuigcontrole_uitvoeringen.voertuig_id", ids).eq("voertuigcontrole_uitvoeringen.afgerond", true);
@@ -3111,11 +3113,12 @@ function ovdAfgehandeldMeta(r, naamVan){
   return r.afgehandeld_door ? `Afgehandeld door ${esc(naamVan(r.afgehandeld_door))}${r.afgehandeld_op?' · '+esc(ovdDatumTijd(r.afgehandeld_op)):''}`
                             : `Eerder afgesloten${r.afgehandeld_op?' · '+esc(ovdDatumTijd(r.afgehandeld_op)):''}`;
 }
+function ovdToelichtingHtml(t){ return t ? `<div class="ovd-afhandeltekst"><strong>Afhandeling:</strong> ${esc(t)}</div>` : ''; }
 function ovdAfwRegelHtml(r, naamVan){
   const tekst = `⚠ ${esc(r.omschrijving_snapshot)}: ${esc(r.opmerking||'(geen opmerking)')}`;
   if(r.stand==='open') return `<div class="ovd-vc-regel"><div><span class="punt">${tekst}</span></div>
         <button class="btn small primary" data-ovd="vcAfhandelen" data-id="${esc(r.id)}">✓ Afgehandeld</button></div>`;
-  return `<div class="ovd-vc-regel"><div><div class="doorgehaald">${tekst}</div><div class="ovd-meta">${ovdAfgehandeldMeta(r, naamVan)}</div></div>
+  return `<div class="ovd-vc-regel"><div><div class="doorgehaald">${tekst}</div><div class="ovd-meta">${ovdAfgehandeldMeta(r, naamVan)}</div>${ovdToelichtingHtml(r.afhandeling_tekst)}</div>
         <button class="btn small ghost" data-ovd="vcTerugzetten" data-id="${esc(r.id)}">↩ Terugzetten</button></div>`;
 }
 function ovdVoertuigenHtml(){
@@ -3139,14 +3142,14 @@ function ovdVoertuigenHtml(){
   if(State.vcArchiefOpen){
     html += vc.archief.length ? vc.archief.map(j=>{
       const v = vc.voertuigen.find(x=>x.id===j.voertuig_id);
-      return `<div class="ovd-vc-arch"><div class="doorgehaald">${esc(j.tekst)}</div><div class="ovd-meta">${v?esc(v.voertuignummer)+' · ':''}${esc(naamVan(j.toegevoegd_door))} → opgelost door ${esc(naamVan(j.opgelost_door))}${j.opgelost_op?' · '+esc(ovdDatumTijd(j.opgelost_op)):''}</div></div>`;
+      return `<div class="ovd-vc-arch"><div class="doorgehaald">${esc(j.tekst)}</div><div class="ovd-meta">${v?esc(v.voertuignummer)+' · ':''}${esc(naamVan(j.toegevoegd_door))} → opgelost door ${esc(naamVan(j.opgelost_door))}${j.opgelost_op?' · '+esc(ovdDatumTijd(j.opgelost_op)):''}</div>${ovdToelichtingHtml(j.opgelost_toelichting)}</div>`;
     }).join('') : '<div class="ovd-leeg">Nog niets in het archief.</div>';
   }
   html += `<div style="margin:6px 0 4px;"><button class="btn small ghost" data-ovd="afwArchief">${State.afwArchiefOpen?'Archief verbergen':`Archief afgehandelde afwijkingen (${vc.afwArchief.length})`}</button></div>`;
   if(State.afwArchiefOpen){
     html += vc.afwArchief.length ? vc.afwArchief.map(r=>{
       const v = vc.voertuigen.find(x=>x.id===r.voertuig_id);
-      return `<div class="ovd-vc-arch"><div class="doorgehaald">⚠ ${esc(r.omschrijving_snapshot)}: ${esc(r.opmerking||'(geen opmerking)')}</div><div class="ovd-meta">${v?esc(v.voertuignummer)+' · ':''}Controle van ${esc(ovdDagLabel(r.datum).toLowerCase())} · ${ovdAfgehandeldMeta(r, naamVan)}</div></div>`;
+      return `<div class="ovd-vc-arch"><div class="doorgehaald">⚠ ${esc(r.omschrijving_snapshot)}: ${esc(r.opmerking||'(geen opmerking)')}</div><div class="ovd-meta">${v?esc(v.voertuignummer)+' · ':''}Controle van ${esc(ovdDagLabel(r.datum).toLowerCase())} · ${ovdAfgehandeldMeta(r, naamVan)}</div>${ovdToelichtingHtml(r.afhandeling_tekst)}</div>`;
     }).join('') : '<div class="ovd-leeg">Nog niets in het archief.</div>';
   }
   return html;
@@ -3177,7 +3180,7 @@ function ovdMagWijzigen(n){
 function ovdKaartHtml(n, soort){
   const wie = esc(n.aangemaakt_door || 'Onbekend');
   const meta = wie + ' · ' + (soort==='open' ? ovdDatumTijd(n.aangemaakt_op) : ovdTijd(n.aangemaakt_op));
-  const klaar = n.afgehandeld_op ? `<div class="ovd-meta">✓ Afgehandeld door ${esc(n.afgehandeld_door||'')} · ${esc(ovdDatumTijd(n.afgehandeld_op))}</div>` : '';
+  const klaar = n.afgehandeld_op ? `<div class="ovd-meta">✓ Afgehandeld door ${esc(n.afgehandeld_door||'')} · ${esc(ovdDatumTijd(n.afgehandeld_op))}</div>${ovdToelichtingHtml(n.afhandeling_tekst)}` : '';
   let acties = '';
   if(soort==='open') acties += `<button class="btn small primary" data-ovd="afhandelen" data-id="${esc(n.id)}">✓ Afhandelen</button>`;
   if(ovdMagWijzigen(n)){
@@ -3242,6 +3245,61 @@ function renderOverdracht(){
 }
 
 function ovdZoek(id){ return State.overdrachten.concat(State.overdrachtOpen).find(n=>n.id===id); }
+// Afhandelen vraagt eerst "Hoe is het afgehandeld?" (niet verplicht). Alleen als er een tekst is, wordt die meegestuurd.
+async function ovdAfhandelUitvoeren(soort, id, tekst){
+  if(soort==='notitie'){
+    const wijz = {is_open:false, afgehandeld_door:State.ingelogdPersoon.naam, afgehandeld_door_id:State.ingelogdPersoon.id, afgehandeld_op:new Date().toISOString()};
+    if(tekst) wijz.afhandeling_tekst = tekst;
+    const r = await supa.from('overdrachten').update(wijz).eq('id', id);
+    if(r.error) throw r.error;
+  } else if(soort==='journaal'){
+    const wijz = {opgelost:true, opgelost_door:State.ingelogdPersoon.id, opgelost_op:new Date().toISOString()};
+    if(tekst) wijz.opgelost_toelichting = tekst;
+    const r = await supa.from('voertuigcontrole_journaal').update(wijz).eq('id', id).eq('opgelost', false).select('id');
+    if(r.error) throw r.error;
+    if(!(r.data && r.data.length)) alert('Deze melding was al opgelost door iemand anders.');
+  } else {
+    const args = { p_id: id };
+    if(tekst) args.p_tekst = tekst;
+    const r = await supa.rpc('handel_afwijking_af', args);
+    if(r.error) throw r.error;
+    if(!r.data) alert('Deze afwijking was al afgehandeld door iemand anders.');
+  }
+}
+function ovdAfhandelContext(soort, id){
+  if(soort==='notitie'){ const n = ovdZoek(id); return n ? n.tekst : ''; }
+  const vc = State.vcOverdracht;
+  if(soort==='journaal'){ const j = vc && vc.open.find(x=>x.id===id); return j ? j.tekst : ''; }
+  const r = vc && vc.afw.find(x=>x.id===id);
+  return r ? `⚠ ${r.omschrijving_snapshot}: ${r.opmerking||'(geen opmerking)'}` : '';
+}
+function openAfhandelModal(soort, id){
+  const box = document.getElementById('modalBox');
+  const wat = ovdAfhandelContext(soort, id);
+  box.innerHTML = `<div class="modal-head"><h3>Afhandelen</h3><button class="modal-close" data-close="modal">✕</button></div>
+    <form id="afhandelForm">
+      ${wat?`<div class="hint" style="margin:0 0 10px;color:var(--text);">${esc(wat)}</div>`:''}
+      <div class="field"><label>Hoe is het afgehandeld? (niet verplicht)</label><textarea name="tekst" rows="4" maxlength="500" placeholder="Bijvoorbeeld: band bijgepompt, monteur gebeld, gemeld bij …"></textarea></div>
+      <p style="font-size:12px;color:var(--text-faint);margin:6px 0 0;">Geen persoons- of medische gegevens in een toelichting zetten.</p>
+      <div class="modal-actions">
+        <button type="button" class="btn ghost" data-close="modal">Annuleren</button>
+        <button type="submit" class="btn primary">✓ Afhandelen</button>
+      </div>
+    </form>`;
+  document.getElementById('modalOverlay').classList.remove('hidden');
+  const form = document.getElementById('afhandelForm');
+  const veld = form.querySelector('textarea'); if(veld) veld.focus();
+  form.addEventListener('submit', async ev=>{
+    ev.preventDefault();
+    const tekst = String(new FormData(form).get('tekst')||'').trim();
+    const knop = form.querySelector('button[type=submit]'); knop.disabled = true;
+    try{
+      await ovdAfhandelUitvoeren(soort, id, tekst);
+      closeModal();
+      await laadOverdrachten();
+    }catch(err){ knop.disabled = false; alert('Afhandelen mislukt: '+(err.message||err)); }   // het venster blijft open, de ingetypte tekst blijft staan
+  });
+}
 async function ovdKlik(e){
   const knop = e.target.closest('[data-ovd]');
   if(!knop) return;
@@ -3251,31 +3309,18 @@ async function ovdKlik(e){
   else if(actie==='ververs') laadOverdrachten();
   else if(actie==='vcArchief'){ State.vcArchiefOpen = !State.vcArchiefOpen; render(); }
   else if(actie==='afwArchief'){ State.afwArchiefOpen = !State.afwArchiefOpen; render(); }
-  else if(actie==='vcAfhandelen' || actie==='vcTerugzetten'){
-    const afhandelen = actie==='vcAfhandelen';
+  else if(actie==='vcAfhandelen') openAfhandelModal('afwijking', id);
+  else if(actie==='vcTerugzetten'){
     try{
-      const r = await supa.rpc(afhandelen ? 'handel_afwijking_af' : 'zet_afwijking_terug', { p_id: id });
+      const r = await supa.rpc('zet_afwijking_terug', { p_id: id });
       if(r.error) throw r.error;
-      if(!r.data) alert(afhandelen ? 'Deze afwijking was al afgehandeld door iemand anders.' : 'Deze afwijking was al teruggezet.');
+      if(!r.data) alert('Deze afwijking was al teruggezet.');
       await laadOverdrachten();
-    }catch(err){ alert((afhandelen ? 'Afhandelen' : 'Terugzetten')+' mislukt: '+(err.message||err)); }
+    }catch(err){ alert('Terugzetten mislukt: '+(err.message||err)); }
   }
-  else if(actie==='vcOplossen'){
-    try{
-      const r = await supa.from('voertuigcontrole_journaal').update({opgelost:true, opgelost_door:State.ingelogdPersoon.id, opgelost_op:new Date().toISOString()}).eq('id', id).eq('opgelost', false).select('id');
-      if(r.error) throw r.error;
-      if(!(r.data && r.data.length)) alert('Deze melding was al opgelost door iemand anders.');
-      await laadOverdrachten();
-    }catch(err){ alert('Oplossen mislukt: '+(err.message||err)); }
-  }
+  else if(actie==='vcOplossen') openAfhandelModal('journaal', id);
   else if(actie==='print'){ renderPrintView(); window.print(); }
-  else if(actie==='afhandelen'){
-    try{
-      const r = await supa.from('overdrachten').update({is_open:false, afgehandeld_door:State.ingelogdPersoon.naam, afgehandeld_door_id:State.ingelogdPersoon.id, afgehandeld_op:new Date().toISOString()}).eq('id', id);
-      if(r.error) throw r.error;
-      await laadOverdrachten();
-    }catch(err){ alert('Afvinken mislukt: '+(err.message||err)); }
-  }
+  else if(actie==='afhandelen') openAfhandelModal('notitie', id);
   else if(actie==='verwijderen'){
     if(!confirm('Deze notitie verwijderen?')) return;
     try{
@@ -3340,12 +3385,12 @@ function renderOverdrachtPrint(){
   } else {
     const perDag = {}, volgorde = [];
     State.overdrachten.forEach(n=>{ if(!perDag[n.datum]){ perDag[n.datum]=[]; volgorde.push(n.datum); } perDag[n.datum].push(n); });
-    const item = (n,soort)=>`<div class="p-ovd-item ${soort==='open'?'open':''}">${esc(n.tekst)}<div class="p-ovd-meta">${esc(n.aangemaakt_door||'Onbekend')} · ${esc(soort==='open'?ovdDatumTijd(n.aangemaakt_op):ovdTijd(n.aangemaakt_op))}${n.afgehandeld_op?' · ✓ afgehandeld door '+esc(n.afgehandeld_door||'')+' ('+esc(ovdDatumTijd(n.afgehandeld_op))+')':''}</div></div>`;
+    const item = (n,soort)=>`<div class="p-ovd-item ${soort==='open'?'open':''}">${esc(n.tekst)}<div class="p-ovd-meta">${esc(n.aangemaakt_door||'Onbekend')} · ${esc(soort==='open'?ovdDatumTijd(n.aangemaakt_op):ovdTijd(n.aangemaakt_op))}${n.afgehandeld_op?' · ✓ afgehandeld door '+esc(n.afgehandeld_door||'')+' ('+esc(ovdDatumTijd(n.afgehandeld_op))+')':''}</div>${n.afhandeling_tekst?`<div class="p-ovd-meta">Afhandeling: ${esc(n.afhandeling_tekst)}</div>`:''}</div>`;
     const vcBundel = State.vcOverdracht ? ovdVoertuigenGebundeld(State.vcOverdracht) : { kaarten:[], aantal:0 };
     const vcNaam = id => (State.vcOverdracht && State.vcOverdracht.namen[id]) || 'Onbekend';
     const vcBlok = State.vcOverdracht ? `<div class="p-blok"><h2>Voertuigen — openstaand (${vcBundel.aantal})</h2>${vcBundel.kaarten.length ? vcBundel.kaarten.map(k=>`<div class="p-ovd-item open"><strong>${esc(k.v.voertuignummer)}${k.v.omschrijving?' · '+esc(k.v.omschrijving):''}</strong>
         ${k.open.map(j=>`<div>• ${esc(j.tekst)}<span class="p-ovd-meta"> — ${esc(vcNaam(j.toegevoegd_door))} · ${esc(ovdDatumTijd(j.toegevoegd_op))}</span></div>`).join('')}
-        ${k.groepen.map(g=>`<div class="p-ovd-meta">Controle van ${esc(ovdDagLabel(g.datum).toLowerCase())}${g.medewerker_id?' door '+esc(vcNaam(g.medewerker_id)):''}</div>${g.regels.map(r=>`<div>${r.stand==='open'?'⚠':'✓ (afgehandeld)'} ${esc(r.omschrijving_snapshot)}: ${esc(r.opmerking||'(geen opmerking)')}</div>`).join('')}`).join('')}</div>`).join('') : '<div class="p-row">Geen openstaande meldingen of afwijkingen bij de voertuigen.</div>'}</div>` : '';
+        ${k.groepen.map(g=>`<div class="p-ovd-meta">Controle van ${esc(ovdDagLabel(g.datum).toLowerCase())}${g.medewerker_id?' door '+esc(vcNaam(g.medewerker_id)):''}</div>${g.regels.map(r=>`<div>${r.stand==='open'?'⚠':'✓ (afgehandeld)'} ${esc(r.omschrijving_snapshot)}: ${esc(r.opmerking||'(geen opmerking)')}${r.afhandeling_tekst?' — afhandeling: '+esc(r.afhandeling_tekst):''}</div>`).join('')}`).join('')}</div>`).join('') : '<div class="p-row">Geen openstaande meldingen of afwijkingen bij de voertuigen.</div>'}</div>` : '';
     inhoud = `<div class="p-blok"><h2>Open punten (${open.length})</h2>${open.length?open.map(n=>item(n,'open')).join(''):'<div class="p-row">Geen openstaande punten.</div>'}</div>
       ${vcBlok}
       <div class="p-blok"><h2>Journaal — ${State.overdrachtDagen===2?'vandaag en gisteren':'laatste '+State.overdrachtDagen+' dagen'}</h2>${volgorde.length?volgorde.map(d=>`<div class="p-ovd-dag">${esc(ovdDagLabel(d))}</div>`+perDag[d].map(n=>item(n,'journaal')).join('')).join(''):'<div class="p-row">Geen notities in deze periode.</div>'}</div>`;
