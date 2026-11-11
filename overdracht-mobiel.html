@@ -75,6 +75,8 @@
   .vc-regel .doorgehaald{text-decoration:line-through;color:var(--text-muted);}
   .vc-ctrl{margin-top:9px;padding-top:9px;border-top:1px solid var(--border);}
   .vc-ctrl > .meta{margin-bottom:-2px;}
+  .afhandeltekst{margin-top:6px;font-size:13.5px;line-height:1.4;padding:7px 10px;background:var(--surface);border-left:3px solid var(--lime);border-radius:6px;white-space:pre-wrap;}
+  .afhandeltekst strong{color:var(--text-muted);font-weight:600;}
 </style>
 <!-- SESSIE-BEWAKING begin (identiek in alle mobiele pagina's; wijzig overal tegelijk) -->
 <script>
@@ -243,7 +245,7 @@
     var u = rij.voertuigcontrole_uitvoeringen || {};
     return { id: rij.id, uitvoering_id: rij.uitvoering_id, voertuig_id: u.voertuig_id, datum: u.datum, medewerker_id: u.medewerker_id, afgerond_op: u.afgerond_op,
              omschrijving_snapshot: rij.omschrijving_snapshot, opmerking: rij.opmerking, volgorde: rij.volgorde || 0,
-             afgehandeld: !!rij.afgehandeld, afgehandeld_door: rij.afgehandeld_door || null, afgehandeld_op: rij.afgehandeld_op || null };
+             afgehandeld: !!rij.afgehandeld, afgehandeld_door: rij.afgehandeld_door || null, afgehandeld_op: rij.afgehandeld_op || null, afhandeling_tekst: rij.afhandeling_tekst || null };
   }
   function vcIndeelAfwijkingen(openRijen, afgehandeldRijen, nu){
     var zichtbaar = [], archief = [];
@@ -263,7 +265,7 @@
   }
   async function vcLaadAfwijkingen(client, ids, nu, metRetry){
     if(!ids.length) return { zichtbaar: [], archief: [] };
-    var kolommen = "id,uitvoering_id,omschrijving_snapshot,opmerking,volgorde,afgehandeld,afgehandeld_door,afgehandeld_op,voertuigcontrole_uitvoeringen!inner(voertuig_id,datum,medewerker_id,afgerond_op,afgerond)";
+    var kolommen = "id,uitvoering_id,omschrijving_snapshot,opmerking,volgorde,afgehandeld,afgehandeld_door,afgehandeld_op,afhandeling_tekst,voertuigcontrole_uitvoeringen!inner(voertuig_id,datum,medewerker_id,afgerond_op,afgerond)";
     function basis(){
       return client.from("voertuigcontrole_resultaten").select(kolommen).eq("status", "afwijking")
         .in("voertuigcontrole_uitvoeringen.voertuig_id", ids).eq("voertuigcontrole_uitvoeringen.afgerond", true);
@@ -282,11 +284,12 @@
     return r.afgehandeld_door ? "Afgehandeld door " + esc(vcNaam(r.afgehandeld_door)) + (r.afgehandeld_op ? " · " + datumTijdLabel(r.afgehandeld_op) : "")
                               : "Eerder afgesloten" + (r.afgehandeld_op ? " · " + datumTijdLabel(r.afgehandeld_op) : "");
   }
+  function vcToelichtingHtml(t){ return t ? '<div class="afhandeltekst"><strong>Afhandeling:</strong> ' + esc(t) + '</div>' : ""; }
   function vcAfwRegelHtml(r){
     var tekst = "⚠ " + esc(r.omschrijving_snapshot) + ": " + esc(r.opmerking || "(geen opmerking)");
     if(r.stand === "open") return '<div class="vc-regel"><div class="tekst"><span class="punt">' + tekst + '</span></div>'
       + '<button class="btn klein primair" data-actie="vcAfhandelen" data-id="' + esc(r.id) + '">✓ Afgehandeld</button></div>';
-    return '<div class="vc-regel"><div class="tekst"><div class="doorgehaald">' + tekst + '</div><div class="meta">' + vcAfgehandeldMeta(r) + '</div></div>'
+    return '<div class="vc-regel"><div class="tekst"><div class="doorgehaald">' + tekst + '</div><div class="meta">' + vcAfgehandeldMeta(r) + '</div>' + vcToelichtingHtml(r.afhandeling_tekst) + '</div>'
       + '<button class="btn klein" data-actie="vcTerugzetten" data-id="' + esc(r.id) + '">↩ Terugzetten</button></div>';
   }
   function voertuigenHtml(){
@@ -328,7 +331,7 @@
       html += n ? vc.archief.map(function(j){
         var v = vc.voertuigen.filter(function(x){ return x.id===j.voertuig_id; })[0];
         return '<div class="vc-arch"><div class="doorgehaald">'+esc(j.tekst)+'</div><div class="meta">'+(v?esc(v.voertuignummer)+' · ':'')
-          + esc(vcNaam(j.toegevoegd_door))+' → opgelost door '+esc(vcNaam(j.opgelost_door))+(j.opgelost_op?' · '+datumTijdLabel(j.opgelost_op):'')+'</div></div>';
+          + esc(vcNaam(j.toegevoegd_door))+' → opgelost door '+esc(vcNaam(j.opgelost_door))+(j.opgelost_op?' · '+datumTijdLabel(j.opgelost_op):'')+'</div>'+vcToelichtingHtml(j.opgelost_toelichting)+'</div>';
       }).join("") : '<div class="leeg">Nog niets in het archief.</div>';
     }
     var na = vc.afwArchief.length;
@@ -338,7 +341,7 @@
       html += na ? vc.afwArchief.map(function(r){
         var v = vc.voertuigen.filter(function(x){ return x.id===r.voertuig_id; })[0];
         return '<div class="vc-arch"><div class="doorgehaald">⚠ '+esc(r.omschrijving_snapshot)+': '+esc(r.opmerking || "(geen opmerking)")+'</div><div class="meta">'+(v?esc(v.voertuignummer)+' · ':'')
-          + 'Controle van '+esc(dagLabel(r.datum).toLowerCase())+' · '+vcAfgehandeldMeta(r)+'</div></div>';
+          + 'Controle van '+esc(dagLabel(r.datum).toLowerCase())+' · '+vcAfgehandeldMeta(r)+'</div>'+vcToelichtingHtml(r.afhandeling_tekst)+'</div>';
       }).join("") : '<div class="leeg">Nog niets in het archief.</div>';
     }
     return html;
@@ -347,7 +350,7 @@
   function kaartHtml(n, soort){
     var wie = esc(n.aangemaakt_door || "Onbekend");
     var meta = wie + " · " + (soort==="open" ? dagLabel(n.datum)+" "+tijdLabel(n.aangemaakt_op) : tijdLabel(n.aangemaakt_op));
-    var klaar = n.afgehandeld_op ? '<div class="meta"><span class="pill klaar">✓ Afgehandeld</span>' + esc(n.afgehandeld_door||"") + " · " + datumTijdLabel(n.afgehandeld_op) + "</div>" : "";
+    var klaar = n.afgehandeld_op ? '<div class="meta"><span class="pill klaar">✓ Afgehandeld</span>' + esc(n.afgehandeld_door||"") + " · " + datumTijdLabel(n.afgehandeld_op) + "</div>" + vcToelichtingHtml(n.afhandeling_tekst) : "";
     var acties = "";
     if(soort==="open") acties += '<button class="btn klein primair" data-actie="afhandelen" data-id="'+esc(n.id)+'">✓ Afhandelen</button>';
     if(mijnNotitie(n)){
@@ -422,7 +425,7 @@
     ov.dataset.bewerkId = bestaand ? bestaand.id : "";
     setTimeout(function(){ var t=document.getElementById("sheetTekst"); if(t) t.focus(); }, 50);
   }
-  function sluitSheet(){ var ov=document.getElementById("sheetOverlay"); ov.classList.add("hidden"); ov.innerHTML=""; ov.dataset.bewerkId=""; }
+  function sluitSheet(){ var ov=document.getElementById("sheetOverlay"); ov.classList.add("hidden"); ov.innerHTML=""; ov.dataset.bewerkId=""; ov.dataset.afhandelSoort=""; ov.dataset.afhandelId=""; }
 
   function zoekNotitie(id){
     return state.notities.concat(state.openAlle).filter(function(n){ return n.id===id; })[0];
@@ -457,28 +460,65 @@
     }
   }
 
-  async function afhandelen(id){
+  // Afhandelen vraagt eerst "Hoe is het afgehandeld?" (niet verplicht). Alleen als er een tekst is, wordt die meegestuurd.
+  // Elke actie geeft true terug als het gelukt is, zodat het venster bij een fout openblijft en de ingetypte tekst niet verloren gaat.
+  async function afhandelen(id, tekst){
     try{
-      var r = await sb.from("overdrachten").update({ is_open:false, afgehandeld_door:state.ikNaam, afgehandeld_door_id:state.ik, afgehandeld_op:new Date().toISOString() }).eq("id", id);
+      var wijz = { is_open:false, afgehandeld_door:state.ikNaam, afgehandeld_door_id:state.ik, afgehandeld_op:new Date().toISOString() };
+      if(tekst) wijz.afhandeling_tekst = tekst;
+      var r = await sb.from("overdrachten").update(wijz).eq("id", id);
       if(r.error) throw r.error;
-      toast("Afgevinkt"); await laad();
-    }catch(e){ toast("Afvinken mislukt" + (e && e.message ? ": " + e.message : "") + "."); }
+      toast("Afgevinkt"); await laad(); return true;
+    }catch(e){ toast("Afvinken mislukt" + (e && e.message ? ": " + e.message : "") + "."); return false; }
   }
-  async function vcOplossen(id){
+  async function vcOplossen(id, tekst){
     try{
-      var r = await sb.from("voertuigcontrole_journaal").update({ opgelost:true, opgelost_door:state.ik, opgelost_op:new Date().toISOString() }).eq("id", id).eq("opgelost", false).select("id");
+      var wijz = { opgelost:true, opgelost_door:state.ik, opgelost_op:new Date().toISOString() };
+      if(tekst) wijz.opgelost_toelichting = tekst;
+      var r = await sb.from("voertuigcontrole_journaal").update(wijz).eq("id", id).eq("opgelost", false).select("id");
       if(r.error) throw r.error;
       toast(r.data && r.data.length ? "Opgelost — staat nu in het archief" : "Was al opgelost door iemand anders");
-      await laad();
-    }catch(e){ toast("Oplossen mislukt" + (e && e.message ? ": " + e.message : "") + "."); }
+      await laad(); return true;
+    }catch(e){ toast("Oplossen mislukt" + (e && e.message ? ": " + e.message : "") + "."); return false; }
   }
-  async function vcAfhandelen(id){
+  async function vcAfhandelen(id, tekst){
     try{
-      var r = await sb.rpc("handel_afwijking_af", { p_id: id });
+      var args = { p_id: id };
+      if(tekst) args.p_tekst = tekst;
+      var r = await sb.rpc("handel_afwijking_af", args);
       if(r.error) throw r.error;
       toast(r.data ? "Afgehandeld" : "Was al afgehandeld door iemand anders");
-      await laad();
-    }catch(e){ toast("Afhandelen mislukt" + (e && e.message ? ": " + e.message : "") + "."); }
+      await laad(); return true;
+    }catch(e){ toast("Afhandelen mislukt" + (e && e.message ? ": " + e.message : "") + "."); return false; }
+  }
+  function afhandelContext(soort, id){
+    if(soort === "notitie"){ var n = zoekNotitie(id); return n ? n.tekst : ""; }
+    if(soort === "journaal"){ var j = ((state.vc && state.vc.open) || []).filter(function(x){ return x.id === id; })[0]; return j ? j.tekst : ""; }
+    var r = ((state.vc && state.vc.afw) || []).filter(function(x){ return x.id === id; })[0];
+    return r ? "⚠ " + r.omschrijving_snapshot + ": " + (r.opmerking || "(geen opmerking)") : "";
+  }
+  function openAfhandelSheet(soort, id){
+    var ov = document.getElementById("sheetOverlay");
+    var wat = afhandelContext(soort, id);
+    ov.innerHTML = '<div class="sheet">'
+      + '<h2>Afhandelen</h2>'
+      + (wat ? '<div class="meta" style="margin:0 0 10px;font-size:14px;color:var(--text);">' + esc(wat) + '</div>' : '')
+      + '<textarea id="afhandelTekst" maxlength="500" style="min-height:110px;" placeholder="Hoe is het afgehandeld? (niet verplicht)"></textarea>'
+      + '<div class="meta" style="margin:0 0 8px;">Geen persoons- of medische gegevens in een toelichting zetten.</div>'
+      + '<div class="rij"><button class="btn" data-actie="sluit">Annuleren</button><button class="btn primair" data-actie="afhandelBevestig">✓ Afhandelen</button></div>'
+      + '</div>';
+    ov.dataset.afhandelSoort = soort; ov.dataset.afhandelId = id;
+    ov.classList.remove("hidden");
+    setTimeout(function(){ var t = document.getElementById("afhandelTekst"); if(t) t.focus(); }, 50);
+  }
+  async function afhandelBevestig(){
+    var ov = document.getElementById("sheetOverlay");
+    var soort = ov.dataset.afhandelSoort, id = ov.dataset.afhandelId;
+    if(!soort || !id) return;
+    var tekst = (document.getElementById("afhandelTekst").value || "").trim();
+    var knop = ov.querySelector('[data-actie="afhandelBevestig"]'); knop.disabled = true; knop.textContent = "Bezig…";
+    var gelukt = soort === "notitie" ? await afhandelen(id, tekst) : soort === "journaal" ? await vcOplossen(id, tekst) : await vcAfhandelen(id, tekst);
+    if(gelukt) sluitSheet(); else { knop.disabled = false; knop.textContent = "✓ Afhandelen"; }
   }
   async function vcTerugzetten(id){
     try{
@@ -506,9 +546,10 @@
     else if(a==="sluit") sluitSheet();
     else if(a==="opslaan") opslaan();
     else if(a==="bewerken"){ var n = zoekNotitie(id); if(n) openSheet(n); }
-    else if(a==="afhandelen") afhandelen(id);
-    else if(a==="vcOplossen") vcOplossen(id);
-    else if(a==="vcAfhandelen") vcAfhandelen(id);
+    else if(a==="afhandelen") openAfhandelSheet("notitie", id);
+    else if(a==="vcOplossen") openAfhandelSheet("journaal", id);
+    else if(a==="vcAfhandelen") openAfhandelSheet("afwijking", id);
+    else if(a==="afhandelBevestig") afhandelBevestig();
     else if(a==="vcTerugzetten") vcTerugzetten(id);
     else if(a==="afwArchief"){ state.afwArchiefOpen = !state.afwArchiefOpen; render(); }
     else if(a==="vcArchief"){ state.vcArchiefOpen = !state.vcArchiefOpen; render(); }
