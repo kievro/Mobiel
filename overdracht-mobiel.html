@@ -72,6 +72,9 @@
   .vc-afw .punt{color:var(--red);font-weight:600;}
   .vc-arch{padding:8px 0;border-bottom:1px solid var(--border);font-size:13.5px;}
   .vc-arch .doorgehaald{text-decoration:line-through;color:var(--text-muted);}
+  .vc-regel .doorgehaald{text-decoration:line-through;color:var(--text-muted);}
+  .vc-ctrl{margin-top:9px;padding-top:9px;border-top:1px solid var(--border);}
+  .vc-ctrl > .meta{margin-bottom:-2px;}
 </style>
 <!-- SESSIE-BEWAKING begin (identiek in alle mobiele pagina's; wijzig overal tegelijk) -->
 <script>
@@ -137,7 +140,7 @@
 
   var state = { ik:null, ikNaam:"", rol:null, posten:[], post:null, dagen:7,
                 notities:[], openAlle:[], laden:true, fout:null, toegang:true,
-                vc:null, vcFout:null, vcArchiefOpen:false };
+                vc:null, vcFout:null, vcArchiefOpen:false, afwArchiefOpen:false };
   var NIETS_TE_MELDEN = "(Niets te melden)";   // wordt door de voertuigcontrole zelf als 'opgelost' bewaard; hoort niet in het archief
 
   // ---------- hulpjes ----------
@@ -205,24 +208,18 @@
     var voertuigen = await metRetry(function(){
       return sb.from("voertuigcontrole_voertuigen").select("id,voertuignummer,omschrijving,dagstaat_positie,volgorde")
         .eq("post_id", state.post).eq("actief", true).order("volgorde",{ascending:true}); });
-    var vc = { voertuigen:voertuigen, open:[], archief:[], controles:{}, afwijkingen:[], namen:{} };
+    var vc = { voertuigen:voertuigen, open:[], archief:[], afw:[], afwArchief:[], namen:{} };
     var ids = voertuigen.map(function(v){ return v.id; });
     if(!ids.length) return vc;
-    var sinds = datumKey(new Date(Date.now() - 2*86400000));
     var res = await Promise.all([
       metRetry(function(){ return sb.from("voertuigcontrole_journaal").select("*").in("voertuig_id", ids).eq("opgelost", false).order("toegevoegd_op",{ascending:true}); }),
       metRetry(function(){ return sb.from("voertuigcontrole_journaal").select("*").in("voertuig_id", ids).eq("opgelost", true).neq("tekst", NIETS_TE_MELDEN).order("opgelost_op",{ascending:false}).limit(40); }),
-      metRetry(function(){ return sb.from("voertuigcontrole_uitvoeringen").select("id,voertuig_id,datum,medewerker_id,afgerond_op").in("voertuig_id", ids).eq("afgerond", true).gte("datum", sinds).order("datum",{ascending:false}).order("afgerond_op",{ascending:false}); })
+      vcLaadAfwijkingen(sb, ids, new Date(), metRetry)
     ]);
-    vc.open = res[0]; vc.archief = res[1];
-    res[2].forEach(function(u){ if(!vc.controles[u.voertuig_id]) vc.controles[u.voertuig_id] = u; });   // alleen de LAATSTE afgeronde controle
-    var uitIds = Object.keys(vc.controles).map(function(k){ return vc.controles[k].id; });
-    if(uitIds.length){
-      vc.afwijkingen = await metRetry(function(){ return sb.from("voertuigcontrole_resultaten").select("uitvoering_id,omschrijving_snapshot,opmerking,volgorde").in("uitvoering_id", uitIds).eq("status","afwijking").order("volgorde",{ascending:true}); });
-    }
+    vc.open = res[0]; vc.archief = res[1]; vc.afw = res[2].zichtbaar; vc.afwArchief = res[2].archief;
     var persIds = {};
     vc.open.concat(vc.archief).forEach(function(j){ if(j.toegevoegd_door) persIds[j.toegevoegd_door] = 1; if(j.opgelost_door) persIds[j.opgelost_door] = 1; });
-    Object.keys(vc.controles).forEach(function(k){ var m = vc.controles[k].medewerker_id; if(m) persIds[m] = 1; });
+    vc.afw.concat(vc.afwArchief).forEach(function(r){ if(r.medewerker_id) persIds[r.medewerker_id] = 1; if(r.afgehandeld_door) persIds[r.afgehandeld_door] = 1; });
     var lijst = Object.keys(persIds);
     if(lijst.length){
       var pr = await metRetry(function(){ return sb.from("personen").select("id,naam").in("id", lijst); });
@@ -231,8 +228,67 @@
     return vc;
   }
 
+  /* VC-AFWIJKINGEN begin (dezelfde code staat in overdracht-mobiel.html en dagplanning-brandweer.html; een test controleert dat ze gelijk blijven) */
+  // Afwijkingen uit de voertuigcontrole blijven OPEN tot iemand ze afhandelt. Een afgehandelde afwijking blijft nog zichtbaar tot 08:30
+  // de dag NA de controle, zodat de lijst ook mondeling kan worden overgedragen; daarna staat hij in het archief.
+  function vcVensterEinde(datum){
+    var d = String(datum).split("-").map(Number);
+    return new Date(d[0], d[1] - 1, d[2] + 1, 8, 30, 0);
+  }
+  function vcAfwijkingStand(r, nu){
+    if(!r.afgehandeld) return "open";
+    return nu < vcVensterEinde(r.datum) ? "recent" : "archief";
+  }
+  function vcPlatteAfwijking(rij){
+    var u = rij.voertuigcontrole_uitvoeringen || {};
+    return { id: rij.id, uitvoering_id: rij.uitvoering_id, voertuig_id: u.voertuig_id, datum: u.datum, medewerker_id: u.medewerker_id, afgerond_op: u.afgerond_op,
+             omschrijving_snapshot: rij.omschrijving_snapshot, opmerking: rij.opmerking, volgorde: rij.volgorde || 0,
+             afgehandeld: !!rij.afgehandeld, afgehandeld_door: rij.afgehandeld_door || null, afgehandeld_op: rij.afgehandeld_op || null };
+  }
+  function vcIndeelAfwijkingen(openRijen, afgehandeldRijen, nu){
+    var zichtbaar = [], archief = [];
+    openRijen.map(vcPlatteAfwijking).forEach(function(r){ r.stand = "open"; zichtbaar.push(r); });
+    afgehandeldRijen.map(vcPlatteAfwijking).forEach(function(r){ r.stand = vcAfwijkingStand(r, nu); (r.stand === "recent" ? zichtbaar : archief).push(r); });
+    return { zichtbaar: zichtbaar, archief: archief };
+  }
+  function vcGroepeerPerControle(rijen){
+    var per = {}, lijst = [];
+    rijen.forEach(function(r){
+      var g = per[r.uitvoering_id];
+      if(!g){ g = per[r.uitvoering_id] = { uitvoering_id: r.uitvoering_id, voertuig_id: r.voertuig_id, datum: r.datum, medewerker_id: r.medewerker_id, afgerond_op: r.afgerond_op, regels: [] }; lijst.push(g); }
+      g.regels.push(r);
+    });
+    lijst.forEach(function(g){ g.regels.sort(function(a, b){ return a.volgorde - b.volgorde; }); });
+    return lijst.sort(function(a, b){ return String(b.datum).localeCompare(String(a.datum)) || String(b.afgerond_op || "").localeCompare(String(a.afgerond_op || "")); });
+  }
+  async function vcLaadAfwijkingen(client, ids, nu, metRetry){
+    if(!ids.length) return { zichtbaar: [], archief: [] };
+    var kolommen = "id,uitvoering_id,omschrijving_snapshot,opmerking,volgorde,afgehandeld,afgehandeld_door,afgehandeld_op,voertuigcontrole_uitvoeringen!inner(voertuig_id,datum,medewerker_id,afgerond_op,afgerond)";
+    function basis(){
+      return client.from("voertuigcontrole_resultaten").select(kolommen).eq("status", "afwijking")
+        .in("voertuigcontrole_uitvoeringen.voertuig_id", ids).eq("voertuigcontrole_uitvoeringen.afgerond", true);
+    }
+    var res = await Promise.all([
+      metRetry(function(){ return basis().eq("afgehandeld", false).order("volgorde", { ascending: true }); }),
+      metRetry(function(){ return basis().eq("afgehandeld", true).order("afgehandeld_op", { ascending: false }).limit(60); })
+    ]);
+    return vcIndeelAfwijkingen(res[0] || [], res[1] || [], nu);
+  }
+  /* VC-AFWIJKINGEN einde */
+
   // ---------- weergave ----------
   function vcNaam(id){ var n = state.vc && state.vc.namen[id]; return n || "Onbekend"; }
+  function vcAfgehandeldMeta(r){
+    return r.afgehandeld_door ? "Afgehandeld door " + esc(vcNaam(r.afgehandeld_door)) + (r.afgehandeld_op ? " · " + datumTijdLabel(r.afgehandeld_op) : "")
+                              : "Eerder afgesloten" + (r.afgehandeld_op ? " · " + datumTijdLabel(r.afgehandeld_op) : "");
+  }
+  function vcAfwRegelHtml(r){
+    var tekst = "⚠ " + esc(r.omschrijving_snapshot) + ": " + esc(r.opmerking || "(geen opmerking)");
+    if(r.stand === "open") return '<div class="vc-regel"><div class="tekst"><span class="punt">' + tekst + '</span></div>'
+      + '<button class="btn klein primair" data-actie="vcAfhandelen" data-id="' + esc(r.id) + '">✓ Afgehandeld</button></div>';
+    return '<div class="vc-regel"><div class="tekst"><div class="doorgehaald">' + tekst + '</div><div class="meta">' + vcAfgehandeldMeta(r) + '</div></div>'
+      + '<button class="btn klein" data-actie="vcTerugzetten" data-id="' + esc(r.id) + '">↩ Terugzetten</button></div>';
+  }
   function voertuigenHtml(){
     var html = "";
     if(state.vcFout) html += '<div class="melding">'+esc(state.vcFout)+' <button class="btn klein" data-actie="ververs" style="margin-left:6px;">Opnieuw proberen</button></div>';
@@ -241,27 +297,27 @@
     var perV = {};
     function bak(id){ return perV[id] || (perV[id] = {open:[], afw:[]}); }
     vc.open.forEach(function(j){ bak(j.voertuig_id).open.push(j); });
-    var uitNaarVoertuig = {};
-    Object.keys(vc.controles).forEach(function(vid){ uitNaarVoertuig[vc.controles[vid].id] = vid; });
-    vc.afwijkingen.forEach(function(r){ var vid = uitNaarVoertuig[r.uitvoering_id]; if(vid) bak(vid).afw.push(r); });
+    var afwPerV = {};
+    vc.afw.forEach(function(r){ (afwPerV[r.voertuig_id] = afwPerV[r.voertuig_id] || []).push(r); });
+    Object.keys(afwPerV).forEach(function(vid){ bak(vid).afw = vcGroepeerPerControle(afwPerV[vid]); });
     var kaarten = vc.voertuigen.filter(function(v){ return perV[v.id]; });
-    var aantal = 0; kaarten.forEach(function(v){ aantal += perV[v.id].open.length + perV[v.id].afw.length; });
+    // Het getal telt alleen wat nog openstaat: notities en afwijkingen die nog niet zijn afgehandeld.
+    var aantal = vc.open.length + vc.afw.filter(function(r){ return r.stand === "open"; }).length;
 
     html += '<div class="sectie-kop">Voertuigen — openstaand'+(aantal?' <span class="teller">'+aantal+'</span>':'')+'</div>';
     if(!vc.voertuigen.length) html += '<div class="leeg">Voor deze post zijn geen voertuigen met voertuigcontrole ingesteld.</div>';
     else if(!kaarten.length) html += '<div class="leeg">Geen openstaande meldingen of afwijkingen bij de voertuigen.</div>';
     else html += kaarten.map(function(v){
-      var b = perV[v.id], c = vc.controles[v.id];
+      var b = perV[v.id];
       var h = '<div class="vc-kaart"><div class="vc-kop">'+esc(v.voertuignummer)+(v.omschrijving?' · '+esc(v.omschrijving):'')+'<small>'+esc(v.dagstaat_positie||"")+'</small></div>';
       b.open.forEach(function(j){
         h += '<div class="vc-regel"><div class="tekst">'+esc(j.tekst)+'<div class="meta">'+esc(vcNaam(j.toegevoegd_door))+' · '+datumTijdLabel(j.toegevoegd_op)+'</div></div>'
            + '<button class="btn klein primair" data-actie="vcOplossen" data-id="'+esc(j.id)+'">✓ Opgelost</button></div>';
       });
-      if(b.afw.length){
-        h += '<div class="vc-afw">';
-        b.afw.forEach(function(r){ h += '<div><span class="punt">⚠ '+esc(r.omschrijving_snapshot)+'</span>: '+esc(r.opmerking || "(geen opmerking)")+'</div>'; });
-        h += '<div class="meta">Afwijking bij de controle van '+esc(dagLabel(c.datum).toLowerCase())+(c.medewerker_id?' door '+esc(vcNaam(c.medewerker_id)):'')+'</div></div>';
-      }
+      b.afw.forEach(function(g){
+        h += '<div class="vc-ctrl"><div class="meta">Controle van '+esc(dagLabel(g.datum).toLowerCase())+(g.medewerker_id?' door '+esc(vcNaam(g.medewerker_id)):'')+'</div>'
+           + g.regels.map(vcAfwRegelHtml).join("") + '</div>';
+      });
       return h + '</div>';
     }).join("");
 
@@ -273,6 +329,16 @@
         var v = vc.voertuigen.filter(function(x){ return x.id===j.voertuig_id; })[0];
         return '<div class="vc-arch"><div class="doorgehaald">'+esc(j.tekst)+'</div><div class="meta">'+(v?esc(v.voertuignummer)+' · ':'')
           + esc(vcNaam(j.toegevoegd_door))+' → opgelost door '+esc(vcNaam(j.opgelost_door))+(j.opgelost_op?' · '+datumTijdLabel(j.opgelost_op):'')+'</div></div>';
+      }).join("") : '<div class="leeg">Nog niets in het archief.</div>';
+    }
+    var na = vc.afwArchief.length;
+    html += '<div style="text-align:center;margin:6px 0 4px;"><button class="btn klein" data-actie="afwArchief">'
+          + (state.afwArchiefOpen ? 'Archief verbergen' : 'Archief afgehandelde afwijkingen ('+na+')') + '</button></div>';
+    if(state.afwArchiefOpen){
+      html += na ? vc.afwArchief.map(function(r){
+        var v = vc.voertuigen.filter(function(x){ return x.id===r.voertuig_id; })[0];
+        return '<div class="vc-arch"><div class="doorgehaald">⚠ '+esc(r.omschrijving_snapshot)+': '+esc(r.opmerking || "(geen opmerking)")+'</div><div class="meta">'+(v?esc(v.voertuignummer)+' · ':'')
+          + 'Controle van '+esc(dagLabel(r.datum).toLowerCase())+' · '+vcAfgehandeldMeta(r)+'</div></div>';
       }).join("") : '<div class="leeg">Nog niets in het archief.</div>';
     }
     return html;
@@ -406,6 +472,22 @@
       await laad();
     }catch(e){ toast("Oplossen mislukt" + (e && e.message ? ": " + e.message : "") + "."); }
   }
+  async function vcAfhandelen(id){
+    try{
+      var r = await sb.rpc("handel_afwijking_af", { p_id: id });
+      if(r.error) throw r.error;
+      toast(r.data ? "Afgehandeld" : "Was al afgehandeld door iemand anders");
+      await laad();
+    }catch(e){ toast("Afhandelen mislukt" + (e && e.message ? ": " + e.message : "") + "."); }
+  }
+  async function vcTerugzetten(id){
+    try{
+      var r = await sb.rpc("zet_afwijking_terug", { p_id: id });
+      if(r.error) throw r.error;
+      toast(r.data ? "Teruggezet naar openstaand" : "Was al teruggezet");
+      await laad();
+    }catch(e){ toast("Terugzetten mislukt" + (e && e.message ? ": " + e.message : "") + "."); }
+  }
   async function verwijderen(id){
     if(!confirm("Deze notitie verwijderen?")) return;
     try{
@@ -426,6 +508,9 @@
     else if(a==="bewerken"){ var n = zoekNotitie(id); if(n) openSheet(n); }
     else if(a==="afhandelen") afhandelen(id);
     else if(a==="vcOplossen") vcOplossen(id);
+    else if(a==="vcAfhandelen") vcAfhandelen(id);
+    else if(a==="vcTerugzetten") vcTerugzetten(id);
+    else if(a==="afwArchief"){ state.afwArchiefOpen = !state.afwArchiefOpen; render(); }
     else if(a==="vcArchief"){ state.vcArchiefOpen = !state.vcArchiefOpen; render(); }
     else if(a==="verwijderen") verwijderen(id);
     else if(a==="ververs"){ state.laden = false; laad(); toast("Verversen…"); }
@@ -453,6 +538,7 @@
         planHerlaad();
       })
       .on("postgres_changes", { event:"*", schema:"public", table:"voertuigcontrole_journaal" }, function(){ planHerlaad(); })
+      .on("postgres_changes", { event:"*", schema:"public", table:"voertuigcontrole_resultaten" }, function(){ planHerlaad(); })
       .subscribe();
   }
 
