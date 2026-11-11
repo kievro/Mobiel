@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Dagplanning Brandweer · v7 nov 2026 J</title>
+<title>Dagplanning Brandweer · v7 nov 2026 K</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🚒</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
@@ -219,6 +219,8 @@ select.add-select{background:var(--surface-2);border:1px dashed var(--border);co
 .ovd-vc-afw .punt{color:var(--red-text);font-weight:600;}
 .ovd-vc-arch{padding:6px 0;border-bottom:1px solid var(--border-soft);font-size:13px;}
 .ovd-vc-arch .doorgehaald{text-decoration:line-through;color:var(--text-dim);}
+.ovd-vc-regel .doorgehaald{text-decoration:line-through;color:var(--text-dim);}
+.ovd-vc-ctrl{margin-top:8px;padding-top:8px;border-top:1px solid var(--border-soft);}
 .ovd-melding{background:var(--surface-2);border:1px solid var(--border-soft);border-radius:var(--radius);padding:12px 16px;font-size:14px;margin-bottom:12px;}
 .ovd-melding.fout{border-color:var(--red-text);}
 .mededelingen-paneel{background:var(--surface-2);border:1px solid var(--border-soft);border-radius:var(--radius);padding:12px 16px;margin-bottom:14px;}
@@ -657,7 +659,7 @@ function contrastTextColor(hex){
 const SUPABASE_URL = 'https://iyquepqubfqrhybriqif.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml5cXVlcHF1YmZxcmh5YnJpcWlmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYwODI2MDMsImV4cCI6MjEwMTY1ODYwM30.0zMg5njpz3wnu3qSLDCRQ2Rx2IZlWGnZTj1mQkyWKsw';
 const supa = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
-const APP_VERSIE = '7 nov 2026 J';   // zelfde label als in de titel van het tabblad; ook zichtbaar in de kop en bij wie online is
+const APP_VERSIE = '7 nov 2026 K';   // zelfde label als in de titel van het tabblad; ook zichtbaar in de kop en bij wie online is
 
 // Pas dit aan zodra bekend is waar PloegCompleet definitief gehost wordt (bijv. een
 // submap naast Dagstaat op dezelfde NAS, of een heel ander adres). Relatief pad
@@ -812,7 +814,7 @@ const State = {
   overdrachten:[], overdrachtOpen:[], overdrachtGeladen:false, overdrachtLaden:false, overdrachtFout:null,
   overdrachtPost:null, overdrachtDagen:7, overdrachtKanaal:null,
   opslaanBezig:0, personenVersie:0,
-  vcOverdracht:null, vcFout:null, vcArchiefOpen:false,
+  vcOverdracht:null, vcFout:null, vcArchiefOpen:false, afwArchiefOpen:false,
   oefSubtab:'rooster', duikPersoonId:null
 };
 
@@ -3008,65 +3010,113 @@ async function laadOverdrachten(){
 const VC_NIETS_TE_MELDEN = '(Niets te melden)';   // door de voertuigcontrole zelf als 'opgelost' bewaard; hoort niet in het archief
 // Alles wat na de voertuigcontrole openstaat, per voertuig van de gekozen post. Eén bron: de tabellen van de
 // voertuigcontrole zelf. Hier wordt niets gekopieerd, dus oplossen hier of in de voertuigcontrole is hetzelfde.
+/* VC-AFWIJKINGEN begin (dezelfde code staat in overdracht-mobiel.html en dagplanning-brandweer.html; een test controleert dat ze gelijk blijven) */
+// Afwijkingen uit de voertuigcontrole blijven OPEN tot iemand ze afhandelt. Een afgehandelde afwijking blijft nog zichtbaar tot 08:30
+// de dag NA de controle, zodat de lijst ook mondeling kan worden overgedragen; daarna staat hij in het archief.
+function vcVensterEinde(datum){
+  var d = String(datum).split("-").map(Number);
+  return new Date(d[0], d[1] - 1, d[2] + 1, 8, 30, 0);
+}
+function vcAfwijkingStand(r, nu){
+  if(!r.afgehandeld) return "open";
+  return nu < vcVensterEinde(r.datum) ? "recent" : "archief";
+}
+function vcPlatteAfwijking(rij){
+  var u = rij.voertuigcontrole_uitvoeringen || {};
+  return { id: rij.id, uitvoering_id: rij.uitvoering_id, voertuig_id: u.voertuig_id, datum: u.datum, medewerker_id: u.medewerker_id, afgerond_op: u.afgerond_op,
+           omschrijving_snapshot: rij.omschrijving_snapshot, opmerking: rij.opmerking, volgorde: rij.volgorde || 0,
+           afgehandeld: !!rij.afgehandeld, afgehandeld_door: rij.afgehandeld_door || null, afgehandeld_op: rij.afgehandeld_op || null };
+}
+function vcIndeelAfwijkingen(openRijen, afgehandeldRijen, nu){
+  var zichtbaar = [], archief = [];
+  openRijen.map(vcPlatteAfwijking).forEach(function(r){ r.stand = "open"; zichtbaar.push(r); });
+  afgehandeldRijen.map(vcPlatteAfwijking).forEach(function(r){ r.stand = vcAfwijkingStand(r, nu); (r.stand === "recent" ? zichtbaar : archief).push(r); });
+  return { zichtbaar: zichtbaar, archief: archief };
+}
+function vcGroepeerPerControle(rijen){
+  var per = {}, lijst = [];
+  rijen.forEach(function(r){
+    var g = per[r.uitvoering_id];
+    if(!g){ g = per[r.uitvoering_id] = { uitvoering_id: r.uitvoering_id, voertuig_id: r.voertuig_id, datum: r.datum, medewerker_id: r.medewerker_id, afgerond_op: r.afgerond_op, regels: [] }; lijst.push(g); }
+    g.regels.push(r);
+  });
+  lijst.forEach(function(g){ g.regels.sort(function(a, b){ return a.volgorde - b.volgorde; }); });
+  return lijst.sort(function(a, b){ return String(b.datum).localeCompare(String(a.datum)) || String(b.afgerond_op || "").localeCompare(String(a.afgerond_op || "")); });
+}
+async function vcLaadAfwijkingen(client, ids, nu, metRetry){
+  if(!ids.length) return { zichtbaar: [], archief: [] };
+  var kolommen = "id,uitvoering_id,omschrijving_snapshot,opmerking,volgorde,afgehandeld,afgehandeld_door,afgehandeld_op,voertuigcontrole_uitvoeringen!inner(voertuig_id,datum,medewerker_id,afgerond_op,afgerond)";
+  function basis(){
+    return client.from("voertuigcontrole_resultaten").select(kolommen).eq("status", "afwijking")
+      .in("voertuigcontrole_uitvoeringen.voertuig_id", ids).eq("voertuigcontrole_uitvoeringen.afgerond", true);
+  }
+  var res = await Promise.all([
+    metRetry(function(){ return basis().eq("afgehandeld", false).order("volgorde", { ascending: true }); }),
+    metRetry(function(){ return basis().eq("afgehandeld", true).order("afgehandeld_op", { ascending: false }).limit(60); })
+  ]);
+  return vcIndeelAfwijkingen(res[0] || [], res[1] || [], nu);
+}
+/* VC-AFWIJKINGEN einde */
+// Alles wat na de voertuigcontrole openstaat, per voertuig van de gekozen post. Eén bron: de tabellen van de
+// voertuigcontrole zelf. Hier wordt niets gekopieerd, dus afhandelen hier of in de voertuigcontrole is hetzelfde.
 async function laadOverdrachtVoertuigen(post){
   const voertuigen = await overdrachtMetRetry(()=>supa.from('voertuigcontrole_voertuigen').select('id,voertuignummer,omschrijving,dagstaat_positie,volgorde').eq('post_id', post).eq('actief', true).order('volgorde',{ascending:true}));
-  const vc = { voertuigen, open:[], archief:[], controles:{}, afwijkingen:[], namen:{} };
+  const vc = { voertuigen, open:[], archief:[], afw:[], afwArchief:[], namen:{} };
   const ids = voertuigen.map(v=>v.id);
   if(!ids.length) return vc;
-  const sinds = fmtKey(new Date(Date.now() - 2*86400000));
-  const [open, archief, uitvoeringen] = await Promise.all([
+  const [open, archief, afw] = await Promise.all([
     overdrachtMetRetry(()=>supa.from('voertuigcontrole_journaal').select('*').in('voertuig_id', ids).eq('opgelost', false).order('toegevoegd_op',{ascending:true})),
     overdrachtMetRetry(()=>supa.from('voertuigcontrole_journaal').select('*').in('voertuig_id', ids).eq('opgelost', true).neq('tekst', VC_NIETS_TE_MELDEN).order('opgelost_op',{ascending:false}).limit(40)),
-    overdrachtMetRetry(()=>supa.from('voertuigcontrole_uitvoeringen').select('id,voertuig_id,datum,medewerker_id,afgerond_op').in('voertuig_id', ids).eq('afgerond', true).gte('datum', sinds).order('datum',{ascending:false}).order('afgerond_op',{ascending:false}))
+    vcLaadAfwijkingen(supa, ids, new Date(), overdrachtMetRetry)
   ]);
-  vc.open = open; vc.archief = archief;
-  uitvoeringen.forEach(u=>{ if(!vc.controles[u.voertuig_id]) vc.controles[u.voertuig_id] = u; });   // alleen de LAATSTE afgeronde controle
-  const uitIds = Object.values(vc.controles).map(u=>u.id);
-  if(uitIds.length){
-    vc.afwijkingen = await overdrachtMetRetry(()=>supa.from('voertuigcontrole_resultaten').select('uitvoering_id,omschrijving_snapshot,opmerking,volgorde').in('uitvoering_id', uitIds).eq('status','afwijking').order('volgorde',{ascending:true}));
-  }
+  vc.open = open; vc.archief = archief; vc.afw = afw.zichtbaar; vc.afwArchief = afw.archief;
   const persIds = new Set();
   open.concat(archief).forEach(j=>{ if(j.toegevoegd_door) persIds.add(j.toegevoegd_door); if(j.opgelost_door) persIds.add(j.opgelost_door); });
-  Object.values(vc.controles).forEach(u=>{ if(u.medewerker_id) persIds.add(u.medewerker_id); });
+  vc.afw.concat(vc.afwArchief).forEach(r=>{ if(r.medewerker_id) persIds.add(r.medewerker_id); if(r.afgehandeld_door) persIds.add(r.afgehandeld_door); });
   if(persIds.size){
     const pers = await overdrachtMetRetry(()=>supa.from('personen').select('id,naam').in('id', [...persIds]));
     pers.forEach(p=>{ vc.namen[p.id] = p.naam; });
   }
   return vc;
 }
-// Per voertuig bundelen wat er openstaat: meldingen uit het journaal en afwijkingen van de laatste controle.
+// Per voertuig bundelen wat er openstaat: meldingen uit het journaal en afwijkingen uit de controles (per controle gegroepeerd).
+// Het getal telt alleen wat nog openstaat; recent afgehandelde afwijkingen staan er nog bij, maar tellen niet mee.
 function ovdVoertuigenGebundeld(vc){
   const perV = {};
-  const bak = id => perV[id] || (perV[id] = {open:[], afw:[]});
+  const bak = id => perV[id] || (perV[id] = {open:[], groepen:[]});
   vc.open.forEach(j=>bak(j.voertuig_id).open.push(j));
-  const uitNaarVoertuig = {};
-  Object.keys(vc.controles).forEach(vid=>{ uitNaarVoertuig[vc.controles[vid].id] = vid; });
-  vc.afwijkingen.forEach(r=>{ const vid = uitNaarVoertuig[r.uitvoering_id]; if(vid) bak(vid).afw.push(r); });
-  const kaarten = vc.voertuigen.filter(v=>perV[v.id]).map(v=>({ v, open: perV[v.id].open, afw: perV[v.id].afw, controle: vc.controles[v.id] }));
-  const aantal = kaarten.reduce((som,k)=>som + k.open.length + k.afw.length, 0);
+  const afwPerV = {};
+  vc.afw.forEach(r=>{ (afwPerV[r.voertuig_id] = afwPerV[r.voertuig_id] || []).push(r); });
+  Object.keys(afwPerV).forEach(vid=>{ bak(vid).groepen = vcGroepeerPerControle(afwPerV[vid]); });
+  const kaarten = vc.voertuigen.filter(v=>perV[v.id]).map(v=>({ v, open: perV[v.id].open, groepen: perV[v.id].groepen }));
+  const aantal = vc.open.length + vc.afw.filter(r=>r.stand==='open').length;
   return { kaarten, aantal };
 }
-// Telt per voertuig wat er openstaat: meldingen uit het journaal plus afwijkingen van de laatste afgeronde controle
-// (maximaal 2 dagen oud). Zelfde definitie als in het blok Voertuigen van de overdracht, zodat de getallen overal gelijk zijn.
+// Telt per voertuig wat er openstaat: meldingen uit het journaal plus afwijkingen uit de controles die nog niet zijn afgehandeld
+// (van elke leeftijd). Zelfde definitie als in het blok Voertuigen van de overdracht, zodat de getallen overal gelijk zijn.
 async function laadVoertuigOpenstaand(ids){
   const uit = {};
   ids.forEach(id=>{ uit[id] = { meldingen:0, afwijkingen:0 }; });
   if(!ids.length) return uit;
-  const sinds = fmtKey(new Date(Date.now() - 2*86400000));
-  const [open, uitvoeringen] = await Promise.all([
+  const [open, afw] = await Promise.all([
     overdrachtMetRetry(()=>supa.from('voertuigcontrole_journaal').select('voertuig_id').in('voertuig_id', ids).eq('opgelost', false)),
-    overdrachtMetRetry(()=>supa.from('voertuigcontrole_uitvoeringen').select('id,voertuig_id,datum,afgerond_op').in('voertuig_id', ids).eq('afgerond', true).gte('datum', sinds).order('datum',{ascending:false}).order('afgerond_op',{ascending:false}))
+    overdrachtMetRetry(()=>supa.from('voertuigcontrole_resultaten').select('id,voertuigcontrole_uitvoeringen!inner(voertuig_id)').eq('status','afwijking').eq('afgehandeld', false)
+      .eq('voertuigcontrole_uitvoeringen.afgerond', true).in('voertuigcontrole_uitvoeringen.voertuig_id', ids))
   ]);
   open.forEach(j=>{ if(uit[j.voertuig_id]) uit[j.voertuig_id].meldingen++; });
-  const laatste = {};
-  uitvoeringen.forEach(u=>{ if(!laatste[u.voertuig_id]) laatste[u.voertuig_id] = u; });     // alleen de LAATSTE afgeronde controle
-  const uitIds = Object.values(laatste).map(u=>u.id);
-  if(uitIds.length){
-    const afw = await overdrachtMetRetry(()=>supa.from('voertuigcontrole_resultaten').select('uitvoering_id').in('uitvoering_id', uitIds).eq('status','afwijking'));
-    const naarVoertuig = {}; Object.keys(laatste).forEach(vid=>{ naarVoertuig[laatste[vid].id] = vid; });
-    afw.forEach(r=>{ const vid = naarVoertuig[r.uitvoering_id]; if(vid) uit[vid].afwijkingen++; });
-  }
+  afw.forEach(r=>{ const vid = (r.voertuigcontrole_uitvoeringen||{}).voertuig_id; if(uit[vid]) uit[vid].afwijkingen++; });
   return uit;
+}
+function ovdAfgehandeldMeta(r, naamVan){
+  return r.afgehandeld_door ? `Afgehandeld door ${esc(naamVan(r.afgehandeld_door))}${r.afgehandeld_op?' · '+esc(ovdDatumTijd(r.afgehandeld_op)):''}`
+                            : `Eerder afgesloten${r.afgehandeld_op?' · '+esc(ovdDatumTijd(r.afgehandeld_op)):''}`;
+}
+function ovdAfwRegelHtml(r, naamVan){
+  const tekst = `⚠ ${esc(r.omschrijving_snapshot)}: ${esc(r.opmerking||'(geen opmerking)')}`;
+  if(r.stand==='open') return `<div class="ovd-vc-regel"><div><span class="punt">${tekst}</span></div>
+        <button class="btn small primary" data-ovd="vcAfhandelen" data-id="${esc(r.id)}">✓ Afgehandeld</button></div>`;
+  return `<div class="ovd-vc-regel"><div><div class="doorgehaald">${tekst}</div><div class="ovd-meta">${ovdAfgehandeldMeta(r, naamVan)}</div></div>
+        <button class="btn small ghost" data-ovd="vcTerugzetten" data-id="${esc(r.id)}">↩ Terugzetten</button></div>`;
 }
 function ovdVoertuigenHtml(){
   let html = '';
@@ -3082,14 +3132,21 @@ function ovdVoertuigenHtml(){
       <div class="ovd-vc-kop">${esc(k.v.voertuignummer)}${k.v.omschrijving?' · '+esc(k.v.omschrijving):''}<small>${esc(k.v.dagstaat_positie||'')}</small></div>
       ${k.open.map(j=>`<div class="ovd-vc-regel"><div><div class="ovd-tekst">${esc(j.tekst)}</div><div class="ovd-meta">${esc(naamVan(j.toegevoegd_door))} · ${esc(ovdDatumTijd(j.toegevoegd_op))}</div></div>
         <button class="btn small primary" data-ovd="vcOplossen" data-id="${esc(j.id)}">✓ Opgelost</button></div>`).join('')}
-      ${k.afw.length?`<div class="ovd-vc-afw">${k.afw.map(r=>`<div><span class="punt">⚠ ${esc(r.omschrijving_snapshot)}</span>: ${esc(r.opmerking||'(geen opmerking)')}</div>`).join('')}
-        <div class="ovd-meta">Afwijking bij de controle van ${esc(ovdDagLabel(k.controle.datum).toLowerCase())}${k.controle.medewerker_id?' door '+esc(naamVan(k.controle.medewerker_id)):''}</div></div>`:''}
+      ${k.groepen.map(g=>`<div class="ovd-vc-ctrl"><div class="ovd-meta">Controle van ${esc(ovdDagLabel(g.datum).toLowerCase())}${g.medewerker_id?' door '+esc(naamVan(g.medewerker_id)):''}</div>
+        ${g.regels.map(r=>ovdAfwRegelHtml(r, naamVan)).join('')}</div>`).join('')}
     </div>`).join('');
   html += `<div style="margin:6px 0 4px;"><button class="btn small ghost" data-ovd="vcArchief">${State.vcArchiefOpen?'Archief verbergen':`Archief opgeloste voertuigmeldingen (${vc.archief.length})`}</button></div>`;
   if(State.vcArchiefOpen){
     html += vc.archief.length ? vc.archief.map(j=>{
       const v = vc.voertuigen.find(x=>x.id===j.voertuig_id);
       return `<div class="ovd-vc-arch"><div class="doorgehaald">${esc(j.tekst)}</div><div class="ovd-meta">${v?esc(v.voertuignummer)+' · ':''}${esc(naamVan(j.toegevoegd_door))} → opgelost door ${esc(naamVan(j.opgelost_door))}${j.opgelost_op?' · '+esc(ovdDatumTijd(j.opgelost_op)):''}</div></div>`;
+    }).join('') : '<div class="ovd-leeg">Nog niets in het archief.</div>';
+  }
+  html += `<div style="margin:6px 0 4px;"><button class="btn small ghost" data-ovd="afwArchief">${State.afwArchiefOpen?'Archief verbergen':`Archief afgehandelde afwijkingen (${vc.afwArchief.length})`}</button></div>`;
+  if(State.afwArchiefOpen){
+    html += vc.afwArchief.length ? vc.afwArchief.map(r=>{
+      const v = vc.voertuigen.find(x=>x.id===r.voertuig_id);
+      return `<div class="ovd-vc-arch"><div class="doorgehaald">⚠ ${esc(r.omschrijving_snapshot)}: ${esc(r.opmerking||'(geen opmerking)')}</div><div class="ovd-meta">${v?esc(v.voertuignummer)+' · ':''}Controle van ${esc(ovdDagLabel(r.datum).toLowerCase())} · ${ovdAfgehandeldMeta(r, naamVan)}</div></div>`;
     }).join('') : '<div class="ovd-leeg">Nog niets in het archief.</div>';
   }
   return html;
@@ -3103,6 +3160,7 @@ function startOverdrachtRealtime(){
   State.overdrachtKanaal = supa.channel('overdracht-dagstaat')
     .on('postgres_changes', {event:'*', schema:'public', table:'overdrachten'}, bijWijziging)
     .on('postgres_changes', {event:'*', schema:'public', table:'voertuigcontrole_journaal'}, bijWijziging)
+    .on('postgres_changes', {event:'*', schema:'public', table:'voertuigcontrole_resultaten'}, bijWijziging)
     .subscribe();
 }
 function ovdDagLabel(key){
@@ -3192,6 +3250,16 @@ async function ovdKlik(e){
   else if(actie==='bewerken'){ const n = ovdZoek(id); if(n) openOverdrachtModal(n); }
   else if(actie==='ververs') laadOverdrachten();
   else if(actie==='vcArchief'){ State.vcArchiefOpen = !State.vcArchiefOpen; render(); }
+  else if(actie==='afwArchief'){ State.afwArchiefOpen = !State.afwArchiefOpen; render(); }
+  else if(actie==='vcAfhandelen' || actie==='vcTerugzetten'){
+    const afhandelen = actie==='vcAfhandelen';
+    try{
+      const r = await supa.rpc(afhandelen ? 'handel_afwijking_af' : 'zet_afwijking_terug', { p_id: id });
+      if(r.error) throw r.error;
+      if(!r.data) alert(afhandelen ? 'Deze afwijking was al afgehandeld door iemand anders.' : 'Deze afwijking was al teruggezet.');
+      await laadOverdrachten();
+    }catch(err){ alert((afhandelen ? 'Afhandelen' : 'Terugzetten')+' mislukt: '+(err.message||err)); }
+  }
   else if(actie==='vcOplossen'){
     try{
       const r = await supa.from('voertuigcontrole_journaal').update({opgelost:true, opgelost_door:State.ingelogdPersoon.id, opgelost_op:new Date().toISOString()}).eq('id', id).eq('opgelost', false).select('id');
@@ -3277,8 +3345,7 @@ function renderOverdrachtPrint(){
     const vcNaam = id => (State.vcOverdracht && State.vcOverdracht.namen[id]) || 'Onbekend';
     const vcBlok = State.vcOverdracht ? `<div class="p-blok"><h2>Voertuigen — openstaand (${vcBundel.aantal})</h2>${vcBundel.kaarten.length ? vcBundel.kaarten.map(k=>`<div class="p-ovd-item open"><strong>${esc(k.v.voertuignummer)}${k.v.omschrijving?' · '+esc(k.v.omschrijving):''}</strong>
         ${k.open.map(j=>`<div>• ${esc(j.tekst)}<span class="p-ovd-meta"> — ${esc(vcNaam(j.toegevoegd_door))} · ${esc(ovdDatumTijd(j.toegevoegd_op))}</span></div>`).join('')}
-        ${k.afw.map(r=>`<div>⚠ ${esc(r.omschrijving_snapshot)}: ${esc(r.opmerking||'(geen opmerking)')}</div>`).join('')}
-        ${k.afw.length?`<div class="p-ovd-meta">Afwijking bij de controle van ${esc(ovdDagLabel(k.controle.datum).toLowerCase())}</div>`:''}</div>`).join('') : '<div class="p-row">Geen openstaande meldingen of afwijkingen bij de voertuigen.</div>'}</div>` : '';
+        ${k.groepen.map(g=>`<div class="p-ovd-meta">Controle van ${esc(ovdDagLabel(g.datum).toLowerCase())}${g.medewerker_id?' door '+esc(vcNaam(g.medewerker_id)):''}</div>${g.regels.map(r=>`<div>${r.stand==='open'?'⚠':'✓ (afgehandeld)'} ${esc(r.omschrijving_snapshot)}: ${esc(r.opmerking||'(geen opmerking)')}</div>`).join('')}`).join('')}</div>`).join('') : '<div class="p-row">Geen openstaande meldingen of afwijkingen bij de voertuigen.</div>'}</div>` : '';
     inhoud = `<div class="p-blok"><h2>Open punten (${open.length})</h2>${open.length?open.map(n=>item(n,'open')).join(''):'<div class="p-row">Geen openstaande punten.</div>'}</div>
       ${vcBlok}
       <div class="p-blok"><h2>Journaal — ${State.overdrachtDagen===2?'vandaag en gisteren':'laatste '+State.overdrachtDagen+' dagen'}</h2>${volgorde.length?volgorde.map(d=>`<div class="p-ovd-dag">${esc(ovdDagLabel(d))}</div>`+perDag[d].map(n=>item(n,'journaal')).join('')).join(''):'<div class="p-row">Geen notities in deze periode.</div>'}</div>`;
@@ -4905,6 +4972,7 @@ async function openVcDetailModal(voertuigId){
       const { data } = await supa.from('voertuigcontrole_resultaten').select('*').in('uitvoering_id', uitvoeringIds).eq('status','afwijking');
       alleResultaten = data||[];
     }
+    const openAfw = alleResultaten.filter(r=>!r.afgehandeld && (uitvoeringen||[]).some(u=>u.id===r.uitvoering_id && u.afgerond));
 
     box.innerHTML = `<div class="modal-head"><h3>${esc(voertuig.voertuignummer)} — ${esc(voertuig.omschrijving)}</h3><button class="modal-close" data-close="modal">✕</button></div>
       <div class="hint" style="margin-top:0;">${esc(voertuig.dagstaat_positie)} — ${esc(postNaam(voertuig.post_id))}</div>
@@ -4920,6 +4988,15 @@ async function openVcDetailModal(voertuigId){
           <input type="text" id="vcNieuweMelding" placeholder="Nieuwe melding toevoegen…">
           <button class="btn small" id="vcMeldingToevoegenBtn">Toevoegen</button>
         </div>
+      </div>
+
+      <div class="post-block">
+        <div class="eyebrow">Afwijkingen uit de controle — openstaand</div>
+        ${!openAfw.length ? '<div class="empty-hint">Geen openstaande afwijkingen.</div>' : openAfw.map(r=>{ const u = (uitvoeringen||[]).find(x=>x.id===r.uitvoering_id) || {}; return `
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);">
+            <div><div style="color:var(--red-text);">⚠ ${esc(r.omschrijving_snapshot)}: ${esc(r.opmerking||'(geen opmerking)')}</div><div class="hint" style="margin:2px 0 0;">Controle van ${esc(u.datum||'?')}${u.medewerker_id?' door '+esc(naamVan(u.medewerker_id)):''}</div></div>
+            <button type="button" class="btn small ghost" data-action="vcAfwAfhandelen" data-id="${r.id}">✓ Afgehandeld</button>
+          </div>`; }).join('')}
       </div>
 
       <div class="post-block">
@@ -4941,7 +5018,7 @@ async function openVcDetailModal(voertuigId){
           return `<div style="padding:6px 0;border-bottom:1px solid var(--border-soft);">
             <div style="display:flex;justify-content:space-between;"><strong>${esc(u.datum)}</strong><span>${statusTekst}</span></div>
             <div class="hint" style="margin:2px 0 0;">${esc(naamVan(u.medewerker_id))}${u.afgerond_op?' · '+esc(new Date(u.afgerond_op).toLocaleTimeString('nl-NL',{hour:'2-digit',minute:'2-digit'})):''}</div>
-            ${afwijkingen.map(r=>`<div class="hint" style="margin:2px 0 0;color:var(--red-text);">${esc(r.omschrijving_snapshot)}: ${esc(r.opmerking||'(geen opmerking)')}</div>`).join('')}
+            ${afwijkingen.map(r=>`<div class="hint" style="margin:2px 0 0;color:${r.afgehandeld?'var(--text-dim)':'var(--red-text)'};${r.afgehandeld?'text-decoration:line-through;':''}">${esc(r.omschrijving_snapshot)}: ${esc(r.opmerking||'(geen opmerking)')}${r.afgehandeld?` — afgehandeld${r.afgehandeld_door?' door '+esc(naamVan(r.afgehandeld_door)):' (eerder afgesloten)'}`:''}</div>`).join('')}
           </div>`;
         }).join('')}
       </div>
@@ -4952,6 +5029,15 @@ async function openVcDetailModal(voertuigId){
         const r = await supa.from('voertuigcontrole_journaal').update({opgelost:true, opgelost_door: State.ingelogdPersoon.id, opgelost_op: new Date().toISOString()}).eq('id', btn.dataset.id);
         if(r.error){ alert('Oplossen mislukt: '+r.error.message); return; }
         await addLog(`Journaalpunt opgelost voor voertuig ${voertuig.voertuignummer}.`, voertuig.post_id);
+        laadEnToon();
+        if(State.activeTab==='voertuigcontrole') renderVoertuigcontroleOverzicht();   // het getal achter dit venster meteen bijwerken
+      });
+    });
+    box.querySelectorAll('[data-action="vcAfwAfhandelen"]').forEach(btn=>{
+      btn.addEventListener('click', async ()=>{
+        const r = await supa.rpc('handel_afwijking_af', { p_id: btn.dataset.id });
+        if(r.error){ alert('Afhandelen mislukt: '+r.error.message); return; }
+        if(!r.data) alert('Deze afwijking was al afgehandeld door iemand anders.');
         laadEnToon();
         if(State.activeTab==='voertuigcontrole') renderVoertuigcontroleOverzicht();   // het getal achter dit venster meteen bijwerken
       });
