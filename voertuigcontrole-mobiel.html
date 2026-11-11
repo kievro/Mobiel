@@ -159,6 +159,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="./aanwezig.js"></script>
+<script src="./herlaad.js"></script>
 <script src="./kop.js"></script>
 <script>
 (function(){
@@ -167,6 +168,7 @@
   var DAG_KEY_HEADERS = {"apikey":DAG_KEY,"Authorization":"Bearer "+DAG_KEY};
   var supa = window.supabase.createClient(DAG_URL, DAG_KEY);
   if(window.Aanwezig) Aanwezig.start(supa, {app:'voertuigcontrole'});
+  if(window.Herlaad) Herlaad.start(supa, { app: 'voertuigcontrole', veilig: function(){ return scherm === "lijst"; } });
   if(window.Kop){
     Kop.start({ client: supa, ververs: function(){ if(scherm === "lijst") return laadEnRenderLijst(); } });
     Kop.plaats('kopPlek', { terug: { tekst: 'Brandweer Mobiel', href: './index.html' }, ververs: true, meldingen: true });
