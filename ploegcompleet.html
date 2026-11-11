@@ -8,6 +8,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="./aanwezig.js"></script>
+<script src="./herlaad.js"></script>
 <style>
   :root{
     --bg:#12161B;
@@ -191,6 +192,7 @@
   var DAG_KEY = "sb_publishable_Pb0fFfxZQggKnFCtJYMH9A_avw0GaPn";
   var sbDag = window.supabase.createClient(DAG_URL, DAG_KEY);
   if(window.Aanwezig) Aanwezig.start(sbDag, {app:'ploegcompleet-web', versie:function(){ return typeof APP_VERSIE_DATUM !== 'undefined' ? APP_VERSIE_DATUM : null; }});
+  if(window.Herlaad) Herlaad.start(sbDag, { app: 'ploegcompleet-web', veilig: function(){ return !(typeof state !== "undefined" && state && (state.showForm || state.batchModus)); } });
 
   // Pushmeldingen -- hergebruikt dezelfde push_subscriptions-tabel en dezelfde
   // Edge Functions als de mobiele Ploeg-app. Vraagt na het inloggen om
