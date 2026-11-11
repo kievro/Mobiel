@@ -268,6 +268,10 @@
         if(vIds.length){
           var vcTelRes = await supa.from("voertuigcontrole_journaal").select("id", { count: "exact", head: true }).eq("opgelost", false).in("voertuig_id", vIds);
           vcAantal = (vcTelRes && !vcTelRes.error && vcTelRes.count) || 0;
+          // Afwijkingen uit de voertuigcontrole die nog niet zijn afgehandeld horen er ook bij (van afgeronde controles, van elke leeftijd).
+          var afwTelRes = await supa.from("voertuigcontrole_resultaten").select("id, voertuigcontrole_uitvoeringen!inner(voertuig_id,afgerond)", { count: "exact", head: true })
+            .eq("status", "afwijking").eq("afgehandeld", false).eq("voertuigcontrole_uitvoeringen.afgerond", true).in("voertuigcontrole_uitvoeringen.voertuig_id", vIds);
+          vcAantal += (afwTelRes && !afwTelRes.error && afwTelRes.count) || 0;
         }
       }catch(e){ vcAantal = 0; }
       var aantal = (telRes.count || 0) + vcAantal;
