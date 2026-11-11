@@ -124,6 +124,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="./aanwezig.js"></script>
+<script src="./herlaad.js"></script>
 <script src="./kop.js"></script>
 <script>
 (function(){
@@ -133,6 +134,7 @@
   var DAG_KEY = "sb_publishable_Pb0fFfxZQggKnFCtJYMH9A_avw0GaPn";
   var sb = window.supabase.createClient(DAG_URL, DAG_KEY);
   if(window.Aanwezig) Aanwezig.start(sb, {app:'overdracht'});
+  if(window.Herlaad) Herlaad.start(sb, { app: 'overdracht', veilig: function(){ var s = document.getElementById("sheetOverlay"); return !s || s.classList.contains("hidden"); } });
   if(window.Kop) Kop.start({ client: sb });   // verversen handelt deze app zelf af (data-actie)
 
   var INGELOGD_KEY = "brw-mobiel-ingelogd-persoon"; // gedeeld met de hub en de andere mobiele apps
