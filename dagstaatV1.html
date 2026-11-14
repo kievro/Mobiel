@@ -364,6 +364,12 @@ table.pers-table tr:last-child td{border-bottom:none;}
 .tagpill{display:inline-flex;align-items:center;gap:6px;background:var(--surface-2);border:1px solid var(--border);border-radius:20px;padding:5px 6px 5px 12px;font-size:12px;}
 .tagpill button{background:none;border:none;color:var(--text-faint);font-size:13px;}
 .tagpill-wrap{display:flex;flex-wrap:wrap;gap:8px;}
+.ok-bar{display:flex;gap:8px;margin:8px 0 6px;}.ok-bar input{flex:1;}
+.ok-lijst{max-height:260px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:6px 10px;}
+.ok-groep{font-family:var(--font-mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--text-faint);margin:10px 0 4px;}
+.ok-rij{display:flex;align-items:flex-start;gap:8px;font-size:13px;padding:3px 0;text-transform:none;font-weight:400;}
+.ok-rij input{width:auto;margin-top:3px;}
+
 .inline-add{display:flex;gap:8px;margin-top:6px;}
 .inline-add input{flex:1;background:var(--surface-2);border:1px solid var(--border);border-radius:6px;padding:8px 10px;font-size:12px;}
 .koppel-box{background:var(--surface-2);border:1px solid var(--border-soft);border-radius:8px;padding:16px;}
@@ -3788,6 +3794,54 @@ function bijlagenLijstHtml(bijlagen){
     <button type="button" class="btn small ghost" data-action="verwijderBijlage" data-pad="${esc(b.pad)}">✕</button>
   </div>`).join('');
 }
+function oefKaartPicker(){
+  const hidden=document.getElementById('okHidden'); if(!hidden) return;
+  const chips=document.getElementById('okChips'), lijst=document.getElementById('okLijst');
+  const zoek=document.getElementById('okZoek'), soort=document.getElementById('okSoort');
+  const kaarten=State.oefenkaarten||[];
+  const bekend=new Map(kaarten.map(k=>[k.nummer,k]));
+  let gekozen=(hidden.value||'').split(',').map(x=>x.trim()).filter(Boolean);
+  function sync(){
+    hidden.value=gekozen.join(', ');
+    chips.innerHTML=gekozen.length?gekozen.map((n,i)=>{
+      const k=bekend.get(n);
+      return `<span class="tagpill" title="${esc(k?k.omschrijving:'Eigen nummer')}">${esc(n)}${k?' — '+esc(k.omschrijving):''}<button type="button" data-i="${i}">✕</button></span>`;
+    }).join(''):'<span class="empty-hint">Nog geen kaart gekozen</span>';
+    chips.querySelectorAll('button[data-i]').forEach(b=>b.addEventListener('click',()=>{gekozen.splice(+b.dataset.i,1);sync();}));
+    lijst.querySelectorAll('input[data-nr]').forEach(i=>{i.checked=gekozen.includes(i.dataset.nr);});
+  }
+  function teken(){
+    const q=zoek.value.trim().toLowerCase(), sf=soort.value;
+    const groepen=new Map();
+    kaarten.forEach(k=>{
+      if(sf && k.soort!==sf) return;
+      if(q && !(k.nummer.toLowerCase().includes(q)||(k.omschrijving||'').toLowerCase().includes(q))) return;
+      const cats=(k.categorieen&&k.categorieen.length)?k.categorieen:['Overig'];
+      cats.forEach(c=>{ if(!groepen.has(c)) groepen.set(c,[]); groepen.get(c).push(k); });
+    });
+    lijst.innerHTML=groepen.size?[...groepen.entries()].map(([c,ks])=>
+      `<div class="ok-groep">${esc(c)}</div>`+ks.map(k=>
+        `<label class="ok-rij"><input type="checkbox" data-nr="${esc(k.nummer)}"> <strong>${esc(k.nummer)}</strong> ${esc(k.omschrijving||'')}</label>`).join('')
+    ).join(''):'<div class="empty-hint">Geen kaarten gevonden.</div>';
+    lijst.querySelectorAll('input[data-nr]').forEach(i=>i.addEventListener('change',()=>{
+      const n=i.dataset.nr;
+      if(i.checked){ if(!gekozen.includes(n)) gekozen.push(n); } else gekozen=gekozen.filter(x=>x!==n);
+      sync();
+    }));
+    sync();
+  }
+  zoek.addEventListener('input',teken); soort.addEventListener('change',teken);
+  const eigen=document.getElementById('okEigen');
+  function voegEigenToe(){
+    const n=eigen.value.replace(/,/g,' ').trim();
+    if(n && !gekozen.includes(n)) gekozen.push(n);
+    eigen.value=''; sync();
+  }
+  document.getElementById('okEigenBtn').addEventListener('click',voegEigenToe);
+  eigen.addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); voegEigenToe(); } });
+  zoek.addEventListener('keydown',e=>{ if(e.key==='Enter') e.preventDefault(); });
+  teken();
+}
 function openOefeningModal(existingId){
   const cfg = State.config;
   const existing = existingId ? State.oefeningen.find(o=>o.id===existingId) : null;
@@ -3817,8 +3871,17 @@ function openOefeningModal(existingId){
         </div>
         <div class="field"><label>Welke oefening</label><input type="text" name="welkeOefening" value="${existing?esc(existing.welkeOefening||''):''}" placeholder="Bijv. Redden vanaf platte daken"></div>
       </div>
-      <div class="field"><label>Oefenkaart-nummer (optioneel)</label><input type="text" name="oefenkaartNummer" list="dlOefenkaarten" value="${existing?esc(existing.oefenkaartNummer||''):''}" placeholder="Bijv. 3 of BRW-BWD.03"><datalist id="dlOefenkaarten">${State.oefenkaarten.map(k=>`<option value="${esc(k.nummer)}">${esc(k.omschrijving)}</option>`).join('')}</datalist></div>
-      <div class="hint" style="margin-top:-8px;">${State.oefenkaarten.length?'Kies uit de catalogus (Instellingen &gt; Oefenkaarten) of typ een eigen nummer.':'De oefenkaarten-catalogus is nog leeg -- typ hier gewoon vrij het nummer in.'}</div>
+      <div class="field"><label>Oefenkaarten (optioneel — meerdere mogelijk)</label>
+        <input type="hidden" name="oefenkaartNummer" id="okHidden" value="${existing?esc(existing.oefenkaartNummer||''):''}">
+        <div class="tagpill-wrap" id="okChips"></div>
+        <div class="ok-bar">
+          <input type="text" id="okZoek" placeholder="Zoek op nummer of naam…" autocomplete="off">
+          <select id="okSoort"><option value="">Alle soorten</option><option value="OK">Opdrachtkaart (OK)</option><option value="IK">Instructiekaart (IK)</option><option value="SK">Scenariokaart (SK)</option></select>
+        </div>
+        <div class="ok-lijst" id="okLijst"></div>
+        <div class="inline-add" style="margin-top:6px;"><input type="text" id="okEigen" placeholder="Eigen nummer (staat niet in de lijst)"><button type="button" class="btn small" id="okEigenBtn">Toevoegen</button></div>
+        <div class="hint">${State.oefenkaarten.length?'Vink één of meer kaarten aan; ze worden bij de oefening bewaard.':'De kaartenlijst is nog leeg — draai eerst sql-oefenkaarten/1. Je kunt wel eigen nummers toevoegen.'}</div>
+      </div>
       <div class="fieldrow">
         <div class="field"><label>Vorm</label>
           <div class="radio-row">
@@ -3874,6 +3937,7 @@ function openOefeningModal(existingId){
         <button type="submit" class="btn primary">Opslaan &amp; in planning zetten</button>
       </div>
     </form>`;
+  oefKaartPicker();
   function fillPloegOptions(postId, datumStr, selectedPloegId){
     const sel = document.getElementById('oefModalPloegSelect');
     const lijst = ploegenVanPost(postId);
