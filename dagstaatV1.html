@@ -788,10 +788,39 @@ function defaultPersonen(){ return []; } // bewust leeg, zelfde reden als bij de
 function emptyDag(cfg){
   return {ploegAanDienst:null, cellen:{}, extraPersonen:[], voertuigIndeling:{dag:{},avond:{}}};
 }
+// Zoekt in een vrije celtekst naar de naam van een activiteittype (hele woorden,
+// hoofdletterongevoelig, bv. "HV" in "HV oefening" of "boodschappen" in
+// "Boodschappen doen"). Bij meerdere treffers wint de langste typenaam.
+function typeIdUitTekst(tekst){
+  const t = String(tekst||'').trim();
+  const typen = (State.config && State.config.activiteitTypes) || [];
+  if(!t || !typen.length) return '';
+  const hooi = ' '+t.toLowerCase()+' ';
+  const isLetter = c => /[\p{L}\p{N}]/u.test(c);
+  let beste = null;
+  typen.forEach(ty=>{
+    const naam = String(ty.naam||'').trim().toLowerCase();
+    if(!naam) return;
+    let i = hooi.indexOf(naam);
+    while(i>=0){
+      const voor = hooi[i-1], na = hooi[i+naam.length];
+      if(!isLetter(voor) && !isLetter(na)){
+        if(!beste || naam.length>String(beste.naam).trim().length) beste = ty;
+        break;
+      }
+      i = hooi.indexOf(naam, i+1);
+    }
+  });
+  return beste ? beste.id : '';
+}
 function getCel(dag, personId, kolomId){
   const p = dag.cellen[personId];
   const c = p ? p[kolomId] : null;
-  if(c) return c;
+  if(c){
+    // Cel met tekst maar zonder type (bv. ouder ingevoerd): kleur alsnog uit het herkende woord halen.
+    if(!c.typeId && c.tekst){ const herkend = typeIdUitTekst(c.tekst); if(herkend) return Object.assign({}, c, {typeId: herkend}); }
+    return c;
+  }
   if(kolomId==='briefing') return {tekst:'Briefing & voertuigcontrole', typeId:'t-con'};
   return {tekst:'', typeId:''};
 }
@@ -6584,8 +6613,10 @@ function wireEvents(){
       } else if(opt){
         nieuweCel = {tekst:typed, typeId:opt.dataset.typeid||''};
       } else {
-        nieuweCel = {tekst:typed, typeId:t.dataset.typeid||''};
+        const herkend = typeIdUitTekst(typed);
+        nieuweCel = {tekst:typed, typeId:herkend || t.dataset.typeid||''};
       }
+      if(nieuweCel.tekst && !nieuweCel.typeId){ nieuweCel.typeId = typeIdUitTekst(nieuweCel.tekst); }
       setCel(dagData, personId, blokId, nieuweCel);
       await saveDagVoorPost(postId, dagData);
       if(nieuweCel.tekst) await voegWerkzaamheidToeAanHistorie(nieuweCel.tekst, nieuweCel.typeId);
