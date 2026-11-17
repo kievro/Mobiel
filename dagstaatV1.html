@@ -1101,6 +1101,7 @@ async function loadDag(postId, date){
   State.dagUpdatedAt[key] = resultaat.updatedAt;
   if(resultaat.ok) State.laatsteOphaling = new Date();
   abonneerOpDagRealtime(postId, fmtKey(date));
+  laadAndereDagenAchtergrond(date); // niet afwachten: scherm staat meteen, daarna vult 'elders ingezet' zich aan
 }
 // Checkt of iemand anders deze dag heeft opgeslagen sinds wij 'm voor het
 // laatst inlaadden -- dit voorkomt dat twee mensen die gelijktijdig aan
@@ -1175,6 +1176,7 @@ async function koppelOefeningNaarPlanning(oefening){
       const huidigType = State.config.activiteitTypes.find(x=>x.id===huidigeCel.typeId);
       const isVrijeDienst = huidigType && huidigType.naam.trim().toLowerCase()==='vrije dienst';
       if(isVrijeDienst){ overgeslagen++; return; }
+      if(geblokkeerdElders(dagData, r.rowId, blokId, oefening.postId)){ overgeslagen++; return; }
       setCel(dagData, r.rowId, blokId, {tekst: themaTekst, typeId: oefening.typeId || 't-oef', oefeningId: oefening.id});
     });
   });
@@ -1188,6 +1190,7 @@ async function koppelOefeningNaarPlanning(oefening){
         const huidigType = State.config.activiteitTypes.find(x=>x.id===huidigeCel.typeId);
         const isVrijeDienst = huidigType && huidigType.naam.trim().toLowerCase()==='vrije dienst';
         if(isVrijeDienst) return;
+        if(geblokkeerdElders(dagData, r.rowId, blokId, oefening.postId)) return;
         setCel(dagData, r.rowId, blokId, {tekst: themaTekst, typeId: oefening.typeId || 't-oef', oefeningId: oefening.id});
       });
     });
@@ -2032,6 +2035,7 @@ async function koppelMeerdereOefeningenNaarPlanning(oefeningen){
         const huidigType = State.config.activiteitTypes.find(x=>x.id===huidigeCel.typeId);
         const isVrijeDienst = huidigType && huidigType.naam.trim().toLowerCase()==='vrije dienst';
         if(isVrijeDienst) return;
+        if(geblokkeerdElders(dagData, r.rowId, blokId, oefening.postId)) return;
         setCel(dagData, r.rowId, blokId, {tekst: themaTekst, typeId: oefening.typeId || 't-oef', oefeningId: oefening.id});
       });
     });
@@ -2455,10 +2459,68 @@ function renderHeader(){
 }
 
 /* ---------- planning tab ---------- */
+// Wie is vandaag als 'extra' bij een ANDERE post ingezet? Zo iemand hoort in de eigen
+// post niet op 'vrij' of een andere activiteit te kunnen staan, want hij werkt elders.
+// Werkt op wat al geladen is: de huidige post (State.dag) en de andere posten (pinCache,
+// wordt na het laden van een dag op de achtergrond aangevuld).
+function postVanDagData(dagData){
+  if(dagData===State.dag) return State.currentPost;
+  const datum = fmtKey(State.currentDate);
+  for(const k of Object.keys(State.pinCache)){
+    if(State.pinCache[k]===dagData && k.endsWith(':'+datum)) return k.slice(0, k.length-datum.length-1);
+  }
+  return null;
+}
+// Per persoon: in welke blokken werkt hij vandaag elders? -> {personId:{perBlok:{blokId:postId}}}
+// Bron: extraPersonen van de andere posten. Heeft de extra een expliciete blokkenlijst
+// (nieuwe toevoegingen), dan geldt die; anders (oudere gegevens, duikoefeningen) tellen
+// de blokken waar hij bij die andere post al iets ingevuld heeft (briefing telt niet mee).
+function eldersIngezet(dagData, postHint){
+  const kaart = {};
+  const eigen = postHint || postVanDagData(dagData);
+  if(!eigen || !State.config || !State.config.posten) return kaart;
+  const datum = fmtKey(State.currentDate);
+  State.config.posten.forEach(post=>{
+    if(post.id===eigen) return;
+    const dag = post.id===State.currentPost ? State.dag : State.pinCache[post.id+':'+datum];
+    if(!dag || !dag.extraPersonen) return;
+    dag.extraPersonen.forEach(x=>{
+      if(!x.personId) return;
+      let blokIds;
+      if(Array.isArray(x.blokken)) blokIds = x.blokken;
+      else {
+        const cellen = (dag.cellen && dag.cellen[x.personId]) || {};
+        blokIds = Object.keys(cellen).filter(bid=>bid!=='briefing' && (cellen[bid].tekst || cellen[bid].typeId));
+      }
+      if(!blokIds.length) return;
+      if(!kaart[x.personId]) kaart[x.personId] = {perBlok:{}};
+      blokIds.forEach(bid=>{ if(!kaart[x.personId].perBlok[bid]) kaart[x.personId].perBlok[bid] = post.id; });
+    });
+  });
+  return kaart;
+}
+function geblokkeerdElders(dagData, personId, blokId, postHint){
+  const e = eldersIngezet(dagData, postHint)[personId];
+  return e && e.perBlok[blokId] ? e.perBlok[blokId] : null;
+}
+// Staat deze persoon in ALLE blokken elders? Dan verdwijnt hij uit de lijst van zijn eigen post.
+function volledigElders(e){
+  const blokken = (State.config.werkblokken||[]).map(b=>b.id);
+  return !!e && blokken.length>0 && blokken.every(id=>e.perBlok[id]);
+}
+async function laadAndereDagenAchtergrond(date){
+  try{
+    const datumStr = fmtKey(date);
+    await ensureDashboardDagen(datumStr);
+    if(fmtKey(State.currentDate)!==datumStr) return;
+    if((State.activeTab==='planning' || State.activeTab==='voertuigindeling') && !isTekstveldActiefBinnenTab()) render();
+  }catch(e){ console.warn('[dagplanning] andere posten laden mislukt', e); }
+}
 function getPersonRijenVoorDag(dagData){
   const cfg = State.config;
   const afwezig = new Set(dagData.afwezigen||[]);
-  const ploegLeden = State.personen.filter(p=>p.ploegId===dagData.ploegAanDienst && !afwezig.has(p.id)).map(p=>({rowId:p.id,naam:p.naam,isExtra:false}));
+  const elders = eldersIngezet(dagData);
+  const ploegLeden = State.personen.filter(p=>p.ploegId===dagData.ploegAanDienst && !afwezig.has(p.id) && !volledigElders(elders[p.id])).map(p=>({rowId:p.id,naam:p.naam,isExtra:false}));
   const extras = (dagData.extraPersonen||[]).filter(x=>!afwezig.has(x.personId||x.id)).map(x=>{
     if(x.personId){
       const p = State.personen.find(pp=>pp.id===x.personId);
@@ -2922,6 +2984,11 @@ function buildPlanningPanelHTML(postId, dagData){
           ${beschikbaar.map(p=>`<option data-id="${p.id}" value="${esc(p.naam)} — ${esc(postNaam(p.postId))} · ${esc((cfg.ploegen.find(x=>x.id===p.ploegId)||{}).naam||'')}">`).join('')}
         </datalist>
         <button class="btn small" data-action="addExtraByName" data-post="${postId}">Toevoegen</button>
+        <div class="extra-blokken" style="flex-basis:100%;display:flex;flex-wrap:wrap;gap:12px;align-items:center;font-size:12px;color:var(--text-dim);">
+          <span>Werkt hier in:</span>
+          ${cfg.werkblokken.map(b=>`<label style="display:inline-flex;gap:4px;align-items:center;text-transform:none;font-weight:400;"><input type="checkbox" class="extra-blok" value="${esc(b.id)}" checked style="width:auto;"> ${esc(b.naam)}</label>`).join('')}
+          <span class="hint" style="margin:0;">Voor iemand van een andere post is hij in deze blokken bij zijn eigen post vergrendeld.</span>
+        </div>
       </div>`;
 
     if(rijen.length===0){
@@ -2934,12 +3001,20 @@ function buildPlanningPanelHTML(postId, dagData){
         const smal = b.id==='briefing' ? ' col-smal' : '';
         return `<th class="${activeNow?'col-active':''}${smal}"><div class="th-naam">${esc(b.naam)}</div><div class="th-tijd">${esc(b.start)}–${esc(b.eind)}</div></th>`;
       }).join('');
+      const eldersKaart = eldersIngezet(dagData);
       const rows = sorteerOpVoertuigIndeling(rijen, dagData, postId).map(r=>{
         const cells = cfg.werkblokken.map(b=>{
           const cel = getCel(dagData, r.rowId, b.id);
           const t = cfg.activiteitTypes.find(x=>x.id===cel.typeId);
           const bg = t ? t.kleur : 'transparent';
           const fg = t ? (t.tekstKleur||contrastTextColor(t.kleur)) : 'var(--text)';
+          const slotPost = r.isExtra ? null : (eldersKaart[r.rowId] && eldersKaart[r.rowId].perBlok[b.id]);
+          if(slotPost){
+            const slotTekst = '🔒 '+esc(postNaam(slotPost));
+            return b.id==='briefing'
+              ? `<td class="col-smal"><div class="briefing-acties"><span class="empty-hint" title="Werkt in dit blok bij een andere post">${slotTekst}</span></div></td>`
+              : `<td><div class="cell-wrap" style="background:var(--surface-2);color:var(--text-dim);border-left-color:var(--border);padding:9px 10px;font-size:12px;" title="Werkt in dit blok bij een andere post">${slotTekst}</div></td>`;
+          }
           if(b.id==='briefing'){
             const isVrij = isVrijeDienstPersoon(dagData, r.rowId);
             return `<td class="col-smal">
@@ -2982,7 +3057,18 @@ function buildPlanningPanelHTML(postId, dagData){
       }).join('')}
     </div>` : '';
 
-  return `${onzekerHtml}${kazerneAgendaHtml(postId, State.currentDate)}${maandcontroleHtml}${bijzHtml}${afwezigenHtml}${extraRowHtml}${tableHtml}${oefBlok}`;
+  const eldersMap = eldersIngezet(dagData);
+  const eldersLeden = State.personen.filter(p=>p.ploegId===dagData.ploegAanDienst && eldersMap[p.id] && !(dagData.afwezigen||[]).includes(p.id));
+  const eldersHtml = eldersLeden.length ? `<div class="afwezigen-balk">
+      <span class="afwezigen-label">Vandaag (deels) elders ingezet (${eldersLeden.length}):</span>
+      ${eldersLeden.map(p=>{
+        const e = eldersMap[p.id];
+        const blokNamen = cfg.werkblokken.filter(b=>e.perBlok[b.id]).map(b=>b.naam);
+        const waar = [...new Set(Object.values(e.perBlok))].map(id=>postNaam(id)).join(' + ');
+        return `<span class="tagpill">${esc(p.naam)} → ${esc(waar)}${volledigElders(e)?' (hele dag)':' ('+esc(blokNamen.join(', '))+')'}</span>`;
+      }).join('')}
+    </div>` : '';
+  return `${onzekerHtml}${kazerneAgendaHtml(postId, State.currentDate)}${maandcontroleHtml}${bijzHtml}${afwezigenHtml}${eldersHtml}${extraRowHtml}${tableHtml}${oefBlok}`;
 }
 function renderOefeningDetails(postId, datumStr){
   const cfg = State.config;
@@ -6503,9 +6589,14 @@ function wireEvents(){
         const opt = Array.from(dl.options).find(o=>o.value===typed);
         if(opt) matchId = opt.dataset.id;
       }
+      const blokVakjes = Array.from(el.closest('.extra-personen-row').querySelectorAll('.extra-blok'));
+      const gekozenBlokken = blokVakjes.filter(c=>c.checked).map(c=>c.value);
+      if(blokVakjes.length && !gekozenBlokken.length){ alert('Kies minstens één blok waarin deze persoon hier werkt.'); return; }
       if(matchId){
         const p = State.personen.find(x=>x.id===matchId);
-        dagData.extraPersonen.push({id:uid(), personId:p.id, naam:p.naam});
+        const nieuweExtra = {id:uid(), personId:p.id, naam:p.naam};
+        if(blokVakjes.length) nieuweExtra.blokken = gekozenBlokken;
+        dagData.extraPersonen.push(nieuweExtra);
         await addLog(`${p.naam} (${postNaam(p.postId)}) toegevoegd aan de planning van vandaag.`, postId);
       } else {
         dagData.extraPersonen.push({id:uid(), personId:null, naam:typed});
