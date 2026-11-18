@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Dagplanning Brandweer · v7 nov 2026 L</title>
+<title>Dagplanning Brandweer · v18 nov 2026 A</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🚒</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
@@ -507,6 +507,8 @@ footer.pagefoot{margin-top:40px;text-align:center;color:var(--text-faint);font-s
         <button class="btn ghost" id="btnOefImport">⬆ Importeren</button>
         <input type="file" id="oefImportFile" accept=".xlsx,.xls,.csv" class="hidden">
         <button class="btn ghost" id="btnOefJaarImport">⬆ Jaarrooster importeren</button>
+        <button class="btn ghost" id="btnOefDocImport" title="Het oefenplanning-document (Excel) inlezen: nieuwe en gewijzigde oefeningen worden bijgewerkt">⬆ Oefenplanning-document importeren</button>
+        <input type="file" id="oefDocImportFile" accept=".xlsx,.xls" class="hidden">
         <input type="file" id="oefJaarImportFile" accept=".xlsx,.xls" class="hidden">
         <button class="btn ghost" id="btnOefExport">⬇ Exporteren</button>
         <button class="btn primary" id="btnAddOefening" style="margin-left:auto;">+ Oefening toevoegen</button>
@@ -669,7 +671,7 @@ const SUPABASE_URL = 'https://iyquepqubfqrhybriqif.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml5cXVlcHF1YmZxcmh5YnJpcWlmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYwODI2MDMsImV4cCI6MjEwMTY1ODYwM30.0zMg5njpz3wnu3qSLDCRQ2Rx2IZlWGnZTj1mQkyWKsw';
 const supa = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
 if(window.Herlaad && supa) Herlaad.start(supa, { app: 'dagstaat', veilig: function(){ var m = document.getElementById('modalOverlay'); return (!m || m.classList.contains('hidden')) && !(typeof State !== 'undefined' && State && State.opslaanBezig); } });
-const APP_VERSIE = '7 nov 2026 L';   // zelfde label als in de titel van het tabblad; ook zichtbaar in de kop en bij wie online is
+const APP_VERSIE = '18 nov 2026 A';   // zelfde label als in de titel van het tabblad; ook zichtbaar in de kop en bij wie online is
 
 // Pas dit aan zodra bekend is waar PloegCompleet definitief gehost wordt (bijv. een
 // submap naast Dagstaat op dezelfde NAS, of een heel ander adres). Relatief pad
@@ -886,6 +888,38 @@ async function supaSelectMetRetry(query, omschrijving){
   State.laadFouten.push(omschrijving);
   return { data: [], error: { message: `Kon '${omschrijving}' niet ophalen na ${pogingen} pogingen.` } };
 }
+// PostgREST geeft per aanvraag maximaal 1000 rijen. Het oefenplanning-document vult een jaar met honderden
+// oefeningen, dus lijsten die groot kunnen worden worden hier in pagina's opgehaald.
+async function haalAllePaginas(tabel, sortering){
+  const grootte = 1000; let alles = [];
+  for(let van=0; van<100000; van+=grootte){
+    const r = await supa.from(tabel).select('*').order(sortering).order('id').range(van, van+grootte-1);
+    if(r.error) return {data:[], error:r.error};
+    alles = alles.concat(r.data||[]);
+    if(!r.data || r.data.length<grootte) break;
+  }
+  return {data:alles, error:null};
+}
+// Momentopname van de oefeningen zoals ze in de database staan: zo schrijft opslaan alleen wat veranderd is en
+// verwijdert het alleen wat in dit venster is verwijderd. Een venster met een verouderde lijst kan dus geen
+// oefeningen van collega's of uit een import meer wegvegen.
+function oefeningRijVoorOpslaan(o){
+  const rij = {
+    id:o.id, datum:o.datum, post_id:o.postId, ploeg_id:o.ploegId, thema:o.thema,
+    welke_oefening:o.welkeOefening||null, oefenkaart_nummer:o.oefenkaartNummer||null, vorm:o.vorm,
+    ruimte_gereserveerd:!!o.ruimteGereserveerd, oefenleiding_type:o.oefenleidingType,
+    oefenleiders:o.oefenleiders||[], blokken:o.blokken||[], bijzonderheden:o.bijzonderheden||null,
+    materialen:o.materialen||[], bijlagen:o.bijlagen||[]
+  };
+  if(o.bronSleutel!==undefined){
+    rij.thema_code = o.themaCode||null; rij.bron = o.bron||null; rij.bron_sleutel = o.bronSleutel||null;
+    rij.bron_hash = o.bronHash||null; rij.leiding_tekst = o.leidingTekst||null; rij.materiaal_aanvragen = o.materiaalAanvragen||[];
+  }
+  return rij;
+}
+function zetOefeningMomentopname(){
+  State.oefeningMomentopname = new Map(State.oefeningen.map(o=>[o.id, JSON.stringify(oefeningRijVoorOpslaan(o))]));
+}
 async function loadAll(overslaanDag){
   State.laadFouten = [];
   const personenVersieBijStart = State.personenVersie || 0;
@@ -896,9 +930,9 @@ async function loadAll(overslaanDag){
     supaSelectMetRetry(()=>supa.from('ploegen').select('*').then(r=>r, e=>({error:e})), 'ploegen'),
     supaSelectMetRetry(()=>supa.from('activiteit_types').select('*').then(r=>r, e=>({error:e})), 'activiteit_types'),
     supaSelectMetRetry(()=>supa.from('werkblokken').select('*').order('volgorde').then(r=>r, e=>({error:e})), 'werkblokken'),
-    supaSelectMetRetry(()=>supa.from('oefen_themas').select('naam').order('naam').then(r=>r, e=>({error:e})), 'oefen_themas'),
+    supaSelectMetRetry(()=>supa.from('oefen_themas').select('*').order('naam').then(r=>r, e=>({error:e})), 'oefen_themas'),
     sGet('log', [], true),
-    supaSelectMetRetry(()=>supa.from('oefeningen').select('*').order('datum').then(r=>r, e=>({error:e})), 'oefeningen'),
+    supaSelectMetRetry(()=>haalAllePaginas('oefeningen','datum'), 'oefeningen'),
     sGet('werkzaamheden-historie', [], true),
     supaSelectMetRetry(()=>supa.from('kazerne_agenda').select('*').order('start_tijd', {ascending:true}).then(r=>r, e=>({error:e})), 'kazerne_agenda'),
     supaSelectMetRetry(()=>supa.from('oefenmaterialen').select('*').eq('actief', true).order('categorie').order('naam').then(r=>r, e=>({error:e})), 'oefenmaterialen'),
@@ -926,6 +960,12 @@ async function loadAll(overslaanDag){
   }));
   if(werkblokResultaat && werkblokResultaat.error){ if(!State.laadFouten) State.laadFouten=[]; State.laadFouten.push('werkblokken'); }
   State.config.themas = ((themasResultaat && !themasResultaat.error) ? (themasResultaat.data||[]) : []).map(r=>r.naam);
+  // Extra gegevens per thema (code uit het oefenplanning-document, kleur, type ploeg/duik, standaardblokken).
+  // Bewust los van config.themas (die alleen de namen bevat), zodat al het bestaande gedrag gelijk blijft.
+  State.themaInfo = {};
+  ((themasResultaat && !themasResultaat.error) ? (themasResultaat.data||[]) : []).forEach(r=>{
+    State.themaInfo[r.naam] = {code:r.code||'', kleur:r.kleur||'', type:r.type||'ploeg', blokken:r.standaard_blokken||[], volgorde:r.volgorde==null?9999:r.volgorde};
+  });
   if(themasResultaat && themasResultaat.error){ if(!State.laadFouten) State.laadFouten=[]; State.laadFouten.push('oefen_themas'); }
   // Kolomnamen (snake_case) terugvertalen naar de veldnamen die de rest van
   // de app al overal gebruikt (camelCase) -- zo hoeft verder nergens anders
@@ -943,8 +983,11 @@ async function loadAll(overslaanDag){
     welkeOefening: r.welke_oefening, oefenkaartNummer: r.oefenkaart_nummer, vorm: r.vorm,
     ruimteGereserveerd: r.ruimte_gereserveerd, oefenleidingType: r.oefenleiding_type,
     oefenleiders: r.oefenleiders||[], blokken: r.blokken||[], bijzonderheden: r.bijzonderheden,
-    materialen: r.materialen||[], bijlagen: r.bijlagen||[]
+    materialen: r.materialen||[], bijlagen: r.bijlagen||[],
+    // Velden van het oefenplanning-document; alleen aanwezig als de kolommen in de database bestaan.
+    ...(r.bron_sleutel!==undefined ? {themaCode:r.thema_code||'', bron:r.bron||null, bronSleutel:r.bron_sleutel||null, bronHash:r.bron_hash||null, leidingTekst:r.leiding_tekst||'', materiaalAanvragen:r.materiaal_aanvragen||[]} : {})
   }));
+  zetOefeningMomentopname();
   if(oefeningenResultaat && oefeningenResultaat.error){ if(!State.laadFouten) State.laadFouten=[]; State.laadFouten.push('oefeningen'); }
   State.oefenkaarten = (oefenkaartenResultaat && !oefenkaartenResultaat.error) ? (oefenkaartenResultaat.data||[]) : [];
   State.mededelingen = (mededelingenResultaat && !mededelingenResultaat.error) ? (mededelingenResultaat.data||[]) : [];
@@ -1436,21 +1479,22 @@ async function savePersonen(opties){
   if(teVerwijderen.length) await supa.from('personen').delete().in('id', teVerwijderen);
 }
 async function saveOefeningen(){
-  const rijen = State.oefeningen.map(o=>({
-    id:o.id, datum:o.datum, post_id:o.postId, ploeg_id:o.ploegId, thema:o.thema,
-    welke_oefening:o.welkeOefening||null, oefenkaart_nummer:o.oefenkaartNummer||null, vorm:o.vorm,
-    ruimte_gereserveerd:!!o.ruimteGereserveerd, oefenleiding_type:o.oefenleidingType,
-    oefenleiders:o.oefenleiders||[], blokken:o.blokken||[], bijzonderheden:o.bijzonderheden||null,
-    materialen:o.materialen||[], bijlagen:o.bijlagen||[]
-  }));
-  if(rijen.length){
-    const { error } = await supa.from('oefeningen').upsert(rijen, {onConflict:'id'});
+  // Alleen nieuwe of gewijzigde oefeningen schrijven, en alleen oefeningen verwijderen die in dit venster
+  // zijn verwijderd (waren bekend bij het laden, nu weg). Zie zetOefeningMomentopname.
+  const oud = State.oefeningMomentopname || new Map();
+  const rijenNu = State.oefeningen.map(oefeningRijVoorOpslaan);
+  const gewijzigd = rijenNu.filter(r=>oud.get(r.id)!==JSON.stringify(r));
+  for(let i=0; i<gewijzigd.length; i+=200){
+    const { error } = await supa.from('oefeningen').upsert(gewijzigd.slice(i,i+200), {onConflict:'id'});
     if(error){ console.error('[dagplanning] opslaan van oefeningen mislukt:', error.message); throw error; }
   }
-  const { data: bestaandeIds } = await supa.from('oefeningen').select('id');
   const huidigeIds = new Set(State.oefeningen.map(o=>o.id));
-  const teVerwijderen = (bestaandeIds||[]).filter(r=>!huidigeIds.has(r.id)).map(r=>r.id);
-  if(teVerwijderen.length) await supa.from('oefeningen').delete().in('id', teVerwijderen);
+  const teVerwijderen = [...oud.keys()].filter(id=>!huidigeIds.has(id));
+  for(let i=0; i<teVerwijderen.length; i+=200){
+    const { error } = await supa.from('oefeningen').delete().in('id', teVerwijderen.slice(i,i+200));
+    if(error){ console.error('[dagplanning] verwijderen van oefeningen mislukt:', error.message); throw error; }
+  }
+  zetOefeningMomentopname();
 }
 async function voegWerkzaamheidToeAanHistorie(tekst, typeId){
   tekst = (tekst||'').trim();
@@ -2051,6 +2095,441 @@ async function koppelMeerdereOefeningenNaarPlanning(oefeningen){
   else State.pinCache[sleutel] = dagData;
   return {overgeslagen:false};
 }
+
+// Themacodes uit het oefenplanning-document: per code het type (ploeg of duik), de standaardblokken en de kleur.
+function themaCodeTabelHtml(){
+  const rijen = Object.keys(State.themaInfo||{}).filter(n=>State.themaInfo[n].code).sort((a,b)=>State.themaInfo[a].volgorde-State.themaInfo[b].volgorde);
+  if(!rijen.length) return `<p class="hint">Nog geen themacodes. Voer <code>sql-oefenplanning/1-oefenplanning-document.sql</code> uit om de codes uit het oefenplanning-document te laden.</p>`;
+  const blokken = State.config.werkblokken||[];
+  return `<div class="eyebrow" style="margin-top:18px;">Themacodes uit het oefenplanning-document</div>
+    <p class="hint" style="margin-top:0;"><strong>Type</strong>: duik = naar de duikplanning, ploeg = naar het oefenrooster van de ploeg. <strong>Blokken</strong>: waar de oefening standaard in valt; leeg betekent dat de dagplanning niet wordt ingevuld. Wijzigingen gelden bij de volgende import.</p>
+    <div class="table-wrap-scroll" style="max-height:420px;"><table class="p-table"><thead><tr><th>Code</th><th>Thema</th><th>Type</th><th>Standaardblokken</th><th>Kleur</th></tr></thead><tbody>
+    ${rijen.map(n=>{ const i = State.themaInfo[n]; return `<tr data-thema="${esc(n)}">
+      <td class="pnum">${esc(i.code)}</td><td>${esc(n)}</td>
+      <td><select data-veld="type"><option value="ploeg" ${i.type==='ploeg'?'selected':''}>ploeg</option><option value="duik" ${i.type==='duik'?'selected':''}>duik</option></select></td>
+      <td>${blokken.map(b=>`<label style="margin-right:8px;white-space:nowrap;"><input type="checkbox" data-veld="blok" value="${esc(b.id)}" ${i.blokken.includes(b.id)?'checked':''}> ${esc(b.naam.replace('Avondoefening (optioneel)','Avond'))}</label>`).join('')}</td>
+      <td><input type="color" data-veld="kleur" value="${esc(i.kleur||'#999999')}"></td></tr>`; }).join('')}
+    </tbody></table></div>`;
+}
+function koppelThemaCodeTabel(panel){
+  panel.querySelectorAll('tr[data-thema]').forEach(tr=>{
+    tr.addEventListener('change', async ()=>{
+      const naam = tr.dataset.thema, i = State.themaInfo[naam];
+      const nieuw = {type: tr.querySelector('[data-veld="type"]').value,
+        standaard_blokken: [...tr.querySelectorAll('[data-veld="blok"]:checked')].map(x=>x.value),
+        kleur: tr.querySelector('[data-veld="kleur"]').value};
+      const { error } = await supa.from('oefen_themas').update(nieuw).eq('naam', naam);
+      if(error){ alert('Opslaan van dit thema is mislukt: '+error.message); return; }
+      i.type = nieuw.type; i.blokken = nieuw.standaard_blokken; i.kleur = nieuw.kleur;
+    });
+  });
+}
+function themaPunt(naam){
+  const i = (State.themaInfo||{})[naam];
+  return (i && i.kleur) ? `<span title="${esc(i.code||'')}" style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${esc(i.kleur)};margin-right:6px;vertical-align:baseline;"></span>` : '';
+}
+function oefLeidingWeergave(o, staf){
+  if(staf.length) return staf.map(s=>s.naam).join(', ') + (o.leidingTekst && !staf.some(s=>o.leidingTekst.toLowerCase().includes(String(s.naam).split(' ').pop().toLowerCase())) ? ' ('+o.leidingTekst+')' : '');
+  return o.leidingTekst || '—';
+}
+// ===OEFDOC-START===
+/* ---------- oefenplanning-document (jaarplanning, bijv. 2027): inlezen, vertalen en vergelijken ----------
+   Het Excel-document is leidend. Elke oefening uit het document krijgt een vaste sleutel (bron_sleutel: post, datum,
+   piket, regel en plek 1-3) en een controlegetal van de inhoud (bron_hash). Bij opnieuw inlezen geldt:
+   - sleutel nog niet bekend: nieuw
+   - sleutel bekend, inhoud in het document veranderd: bijwerken (alleen de velden uit het document)
+   - sleutel bekend, inhoud in het document gelijk: ongemoeid laten (ook als iemand in de app iets heeft aangevuld)
+   - sleutel niet meer in het document en de datum ligt in de toekomst: verwijderen
+   - datum in het verleden: nooit aanraken. */
+function odNorm(s){ return String(s==null?'':s).replace(/\s+/g,' ').trim(); }
+function odHash(tekst){
+  let h1=0xdeadbeef, h2=0x41c6ce57;
+  for(let i=0;i<tekst.length;i++){ const ch=tekst.charCodeAt(i); h1=Math.imul(h1^ch,2654435761); h2=Math.imul(h2^ch,1597334677); }
+  h1=Math.imul(h1^(h1>>>16),2246822507)^Math.imul(h2^(h2>>>13),3266489909);
+  h2=Math.imul(h2^(h2>>>16),2246822507)^Math.imul(h1^(h1>>>13),3266489909);
+  return (4294967296*(2097151&h2)+(h1>>>0)).toString(36);
+}
+function odDatum(v){
+  if(v instanceof Date && !isNaN(v)) return fmtKey(v);
+  if(typeof v==='number' && v>20000 && v<80000){ return new Date(Math.round((v-25569)*86400000)).toISOString().slice(0,10); }
+  return parseFlexibleDatum(v);
+}
+function odCelTekst(v){
+  if(v instanceof Date && !isNaN(v)) return fmtKey(v);
+  return odNorm(v);
+}
+// "E. Lankwarden" / "J.J. de Graaf" -> persoon uit de personeelslijst, alleen bij een eenduidige treffer.
+// Functies en afspraken ("DI / DPL", "werkplan A-piket", "VB / PI") zijn geen personen en blijven tekst.
+function odZoekPersoon(raw, personen){
+  const t = odNorm(raw);
+  if(!t || /werkplan/i.test(t) || /^(di|dpl|vb|pi)(\s*[\/,+&]\s*(di|dpl|vb|pi))*$/i.test(t)) return null;
+  const m = t.match(/^((?:[A-Za-z]\.\s*)+)\s*(.+)$/);
+  if(!m) return null;
+  const initiaal = m[1].replace(/[^A-Za-z]/g,'')[0].toLowerCase();
+  const achter = m[2].toLowerCase().replace(/[.,]/g,' ').split(/\s+/).filter(Boolean);
+  const kand = personen.filter(p=>{
+    const tokens = String(p.naam||'').toLowerCase().replace(/[.,]/g,' ').split(/\s+/).filter(Boolean);
+    return achter.every(a=>tokens.includes(a)) && tokens.some(tk=>tk[0]===initiaal && !achter.includes(tk));
+  });
+  return kand.length===1 ? kand[0] : null;
+}
+function odDuikCodes(onderwerp){
+  const i = String(onderwerp).search(/BWD/i);
+  if(i<0) return [];
+  const uit = []; const re = /\.(\d{2})/g; let m; const rest = String(onderwerp).slice(i);
+  while((m = re.exec(rest))) { const c = 'BRW-BWD.'+m[1]; if(!uit.includes(c)) uit.push(c); }
+  return uit;
+}
+function odMateriaalSoort(groep){
+  const g = odNorm(groep).toLowerCase();
+  if(/rolcontainer/.test(g)) return 'rolcontainer';
+  if(/wrak/.test(g)) return 'wrakken';
+  if(/overig/.test(g)) return 'overig';
+  return odNorm(groep);
+}
+// aoa = rijen van het tabblad (arrays), ctx = {posten, ploegen, themaInfo, personen}
+function parseOefenplanningDocument(aoa, ctx){
+  const res = {items:[], feestdagen:[], onbekendeCodes:{}, onbekendePosten:{}, onbekendePloegen:{}, materiaalGenegeerd:0, namenGekoppeld:0, namenTekst:0, rijenMetDatum:0, fout:null, bron:null, jaar:null};
+  const kopIdx = aoa.findIndex(r=>Array.isArray(r) && r.some(c=>odNorm(c).toLowerCase()==='datum') && r.some(c=>odNorm(c).toLowerCase()==='piket'));
+  if(kopIdx<0){ res.fout = 'Kon de koptekstrij (met "datum" en "piket") niet vinden.'; return res; }
+  const kop = aoa[kopIdx].map(c=>odNorm(c).toLowerCase());
+  const boven = (aoa[kopIdx-1]||[]).map(odNorm);
+  const onder = (aoa[kopIdx+1]||[]).map(c=>odNorm(c).toLowerCase());
+  const colDatum = kop.indexOf('datum'), colPiket = kop.indexOf('piket'), colPost = kop.indexOf('post');
+  if(colPost<0){ res.fout = 'Kon de kolom "post" niet vinden.'; return res; }
+  const triples = [];
+  kop.forEach((h,c)=>{ if(h==='thema') triples.push({t:c, o:c+1, l:c+2}); });
+  if(!triples.length){ res.fout = 'Kon geen kolommen "thema / onderwerp / oefenleider" vinden.'; return res; }
+  // Materiaalkolommen: in de koptekstrij staat "oefening 1/2/3", erboven de soort, eronder besteld/bevestigd/specificatie.
+  const matGroepen = [];
+  kop.forEach((h,c)=>{
+    const m = h.match(/^oefening\s*(\d)$/);
+    if(!m) return;
+    const kols = [];
+    for(let k=0;k<3;k++){
+      const lab = onder[c+k];
+      if(!lab) break;
+      if(k>0 && /^oefening\s*\d$/.test(kop[c+k]||'')) break;
+      kols.push({c:c+k, label:lab});
+    }
+    if(kols.length) matGroepen.push({slot:parseInt(m[1],10), soort:odMateriaalSoort(boven[c]), kols});
+  });
+  const posten = ctx.posten, personen = ctx.personen||[];
+  const postCache = {};
+  const zoekPost = txt=>{
+    const t = odNorm(txt).toLowerCase(); if(!t) return null;
+    if(t in postCache) return postCache[t];
+    let r = posten.find(p=>p.naam.toLowerCase()===t) || null;
+    if(!r){ const l = posten.filter(p=>p.naam.toLowerCase().includes(t)); if(t.length>=3 && l.length===1) r = l[0]; }
+    return postCache[t]=r;
+  };
+  const zoekPloeg = (postId, letter)=>{
+    const L = String(letter||'').toUpperCase(); if(!L) return null;
+    return ctx.ploegen.find(p=>p.postId===postId && (p.naam.toUpperCase()==='PLOEG '+L || p.naam.toUpperCase()===L || new RegExp('\\s'+L+'$').test(p.naam.toUpperCase()))) || null;
+  };
+  const codeMap = {};
+  Object.keys(ctx.themaInfo||{}).forEach(naam=>{ const i = ctx.themaInfo[naam]; if(i.code) codeMap[odNorm(i.code).toLowerCase()] = Object.assign({naam}, i); });
+  // Teksten die in het document zelf als onderwerp of leider voorkomen: staan die in een materiaalkolom, dan is
+  // dat een per ongeluk gekopieerde cel (in het werkdocument gebeurt dat op een paar plekken) en tellen ze niet mee.
+  const bekendeTeksten = new Set();
+  for(let r=kopIdx+2; r<aoa.length; r++){
+    const rij = aoa[r]; if(!Array.isArray(rij)) continue;
+    triples.forEach(tr=>{ [rij[tr.o], rij[tr.l]].forEach(v=>{ const t = odCelTekst(v); if(t) bekendeTeksten.add(t); }); });
+  }
+  res.materiaalGenegeerdDatums = [];
+  const teller = {}, feestSet = new Set(), ruw = [];
+  for(let r=kopIdx+2; r<aoa.length; r++){
+    const rij = aoa[r]; if(!Array.isArray(rij)) continue;
+    const datum = odDatum(rij[colDatum]); if(!datum) continue;
+    res.rijenMetDatum++;
+    const postTxt = odNorm(rij[colPost]);
+    const piket = odNorm(rij[colPiket]).toUpperCase();
+    const post = zoekPost(postTxt);
+    const sleutelRij = postTxt.toLowerCase()+'|'+datum+'|'+piket;
+    teller[sleutelRij] = (teller[sleutelRij]||0)+1; const regelNr = teller[sleutelRij];
+    const rijItems = [];
+    triples.forEach((tr, idx)=>{
+      const slot = idx+1;
+      const thema = odNorm(rij[tr.t]), onderwerp = odNorm(rij[tr.o]), leider = odNorm(rij[tr.l]);
+      if(!thema && !onderwerp) return;
+      if(!thema){ const k = datum+'|'+onderwerp; if(!feestSet.has(k)){ feestSet.add(k); res.feestdagen.push({datum, naam:onderwerp}); } return; }
+      if(!post){ res.onbekendePosten[postTxt||'(leeg)'] = (res.onbekendePosten[postTxt||'(leeg)']||0)+1; return; }
+      const ploeg = zoekPloeg(post.id, piket);
+      if(!ploeg){ const k = post.naam+' / '+(piket||'(leeg)'); res.onbekendePloegen[k] = (res.onbekendePloegen[k]||0)+1; }
+      const info = codeMap[thema.toLowerCase()];
+      let type = info ? info.type : 'ploeg';
+      if(!info){
+        res.onbekendeCodes[thema] = (res.onbekendeCodes[thema]||0)+1;
+        if(/BWD|^duikoefening/i.test(onderwerp)) type = 'duik';
+      }
+      const themaNaam = info ? info.naam : thema;
+      const code = info ? info.code : thema;
+      const vorm = (/\sth$/i.test(code) || /theorie/i.test(themaNaam)) ? 'theorie' : 'praktijk';
+      // materiaal bij deze plek (oefening 1/2/3)
+      const aanvragen = [];
+      matGroepen.filter(g=>g.slot===slot).forEach(g=>{
+        const a = {soort:g.soort}; let heeft = false;
+        g.kols.forEach(k=>{
+          const w = odCelTekst(rij[k.c]); if(!w) return;
+          if(bekendeTeksten.has(w)){ res.materiaalGenegeerd++; if(!res.materiaalGenegeerdDatums.includes(datum)) res.materiaalGenegeerdDatums.push(datum); return; }  // per ongeluk gekopieerde tekst
+          a[k.label] = w; heeft = true;
+        });
+        if(heeft) aanvragen.push(a);
+      });
+      let oefenleiders = [];
+      const pers = odZoekPersoon(leider, personen);
+      if(pers){ oefenleiders = [{naam:pers.naam, email:pers.email||(typeof genereerEmail==='function'?genereerEmail(pers.naam):'')}]; res.namenGekoppeld++; }
+      else if(leider && !/werkplan/i.test(leider) && !/^(di|dpl|vb|pi)(\s*[\/,+&]\s*(di|dpl|vb|pi))*$/i.test(leider)) res.namenTekst++;
+      rijItems.push({datum, postId:post.id, postTxt, piket, ploegId:ploeg?ploeg.id:null, regelNr, slot, themaCode:code, themaNaam, type, vorm,
+        welke:onderwerp, leiding:leider, oefenleiders, aanvragen,
+        duikCodes: type==='duik' ? odDuikCodes(onderwerp) : [],
+        blokkenThema: (info && info.blokken) ? info.blokken.slice() : []});
+    });
+    // Staat dezelfde oefening in opeenvolgende kolommen (oefening 1, 2 en 3), dan is het één oefening die meerdere
+    // delen van de dag beslaat. Zo werkt ook de bestaande jaarrooster-import.
+    const samen = [];
+    rijItems.forEach(it=>{
+      const v = samen[samen.length-1];
+      if(v && v.slots[v.slots.length-1]===it.slot-1 && v.themaCode===it.themaCode && v.welke===it.welke && v.leiding===it.leiding){
+        v.slots.push(it.slot);
+        it.aanvragen.forEach(a=>{ if(!v.aanvragen.some(b=>JSON.stringify(b)===JSON.stringify(a))) v.aanvragen.push(a); });
+      } else { it.slots = [it.slot]; samen.push(it); }
+    });
+    samen.forEach(x=>ruw.push(x));
+  }
+  // jaar van het document = jaar dat het vaakst voorkomt in de datums
+  const perJaar = {}; ruw.forEach(x=>{ const j = x.datum.slice(0,4); perJaar[j]=(perJaar[j]||0)+1; });
+  res.jaar = Object.keys(perJaar).sort((a,b)=>perJaar[b]-perJaar[a])[0] || null;
+  res.bron = res.jaar ? 'oefenplanning-'+res.jaar : 'oefenplanning';
+  ruw.forEach(x=>{
+    x.sleutel = [res.bron, x.postId, x.datum, x.piket||'-', 'r'+x.regelNr+'s'+x.slots[0]].join('|');
+    // Blokken: eerst de standaardblokken van het thema; anders (alleen als dat is ingesteld) afgeleid van oefening 1/2/3.
+    let blokken = x.blokkenThema.slice();
+    if(!blokken.length && ctx.slotBlokken){ x.slots.forEach(sl=>(ctx.slotBlokken[sl]||[]).forEach(b=>{ if(!blokken.includes(b)) blokken.push(b); })); }
+    x.blokken = blokken;
+    x.hash = odHash(JSON.stringify([x.datum, x.postId, x.ploegId, x.themaCode, x.welke, x.leiding, x.aanvragen, x.type, x.slots]));
+  });
+  res.items = ruw;
+  return res;
+}
+// Vergelijkt het document met wat al in de app staat. bestaandPloeg = State.oefeningen, bestaandDuik = duik_oefeningen-rijen.
+function vergelijkOefenplanningDocument(parsed, bestaandPloeg, bestaandDuik, vandaagKey){
+  const dv = {nieuw:[], gewijzigd:[], ongewijzigd:[], verwijderen:[], verleden:0, duikUitgevoerdBlijft:0};
+  const pMap = new Map(bestaandPloeg.filter(o=>o.bron===parsed.bron && o.bronSleutel).map(o=>[o.bronSleutel,o]));
+  const dMap = new Map(bestaandDuik.filter(o=>o.bron===parsed.bron && o.bron_sleutel).map(o=>[o.bron_sleutel,o]));
+  const inDoc = new Set(parsed.items.map(x=>x.sleutel));
+  parsed.items.forEach(it=>{
+    if(it.datum < vandaagKey){ dv.verleden++; return; }
+    const eigen = it.type==='duik' ? dMap : pMap, ander = it.type==='duik' ? pMap : dMap;
+    const ex = eigen.get(it.sleutel);
+    const exAnder = ander.get(it.sleutel);
+    if(exAnder) dv.verwijderen.push({soort: it.type==='duik' ? 'ploeg' : 'duik', rij:exAnder, reden:'type veranderd'});
+    if(!ex) dv.nieuw.push(it);
+    else {
+      const hashOud = it.type==='duik' ? ex.bron_hash : ex.bronHash;
+      if(hashOud!==it.hash) dv.gewijzigd.push({item:it, bestaand:ex}); else dv.ongewijzigd.push(it);
+    }
+  });
+  pMap.forEach((o,k)=>{ if(!inDoc.has(k) && o.datum>=vandaagKey) dv.verwijderen.push({soort:'ploeg', rij:o, reden:'niet meer in het document'}); });
+  dMap.forEach((o,k)=>{
+    if(inDoc.has(k) || o.datum<vandaagKey) return;
+    if(o.uitgevoerd){ dv.duikUitgevoerdBlijft++; return; }
+    dv.verwijderen.push({soort:'duik', rij:o, reden:'niet meer in het document'});
+  });
+  return dv;
+}
+// ===OEFDOC-END===
+
+// ===OEFDOC-UI-START===
+// Betekent "oefening 1/2/3" in het document een deel van de dag (ochtend/middag/avond)? Dan kan hier per kolom worden
+// ingesteld in welke blokken die valt, bijvoorbeeld {1:['blok1','blok2'], 2:['blok3','blok4'], 3:['avond']}.
+// Staat op null (uit) tot dat bevestigd is; dan krijgt een oefening alleen blokken via de standaardblokken van het thema.
+const OEFDOC_SLOT_BLOKKEN = null;
+function oefeningVanDbRij(r){
+  return {id:r.id, datum:r.datum, postId:r.post_id, ploegId:r.ploeg_id, thema:r.thema, welkeOefening:r.welke_oefening,
+    oefenkaartNummer:r.oefenkaart_nummer, vorm:r.vorm, ruimteGereserveerd:r.ruimte_gereserveerd, oefenleidingType:r.oefenleiding_type,
+    oefenleiders:r.oefenleiders||[], blokken:r.blokken||[], bijzonderheden:r.bijzonderheden, materialen:r.materialen||[], bijlagen:r.bijlagen||[],
+    themaCode:r.thema_code||'', bron:r.bron||null, bronSleutel:r.bron_sleutel||null, bronHash:r.bron_hash||null,
+    leidingTekst:r.leiding_tekst||'', materiaalAanvragen:r.materiaal_aanvragen||[]};
+}
+async function haalRijenMetBron(tabel){
+  let alles = [];
+  for(let van=0; van<100000; van+=1000){
+    const r = await supa.from(tabel).select('*').like('bron','oefenplanning-%').order('id').range(van, van+999);
+    if(r.error) throw r.error;
+    alles = alles.concat(r.data||[]);
+    if(!r.data || r.data.length<1000) break;
+  }
+  return alles;
+}
+function odThemaTekst(thema, welke){ return welke ? `${thema} — ${welke}` : thema; }
+async function openOefDocImportModal(file){
+  if(typeof XLSX==='undefined'){ alert('Kon de Excel-bibliotheek niet laden (geen internetverbinding?). Probeer het later opnieuw.'); return; }
+  const probe = await supa.from('oefeningen').select('bron_sleutel').limit(1);
+  if(probe.error){ alert('De database heeft de nieuwe kolommen nog niet.\n\nVoer eerst sql-oefenplanning/1-oefenplanning-document.sql uit in de SQL Editor van Supabase, ververs daarna deze pagina en probeer het opnieuw.'); return; }
+  if(!Object.values(State.themaInfo||{}).some(i=>i.code)){ alert('De themalijst bevat nog geen codes uit het oefenplanning-document.\n\nVoer sql-oefenplanning/1-oefenplanning-document.sql uit, ververs daarna deze pagina en probeer het opnieuw.'); return; }
+  let aoa;
+  try{
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, {type:'array', cellDates:true});
+    const naam = wb.SheetNames.find(n=>/oefenplanning|oefenjaar/i.test(n)) || wb.SheetNames[0];
+    aoa = XLSX.utils.sheet_to_json(wb.Sheets[naam], {header:1, defval:'', cellDates:true});
+  }catch(err){ alert('Kon het bestand niet lezen: '+err.message); return; }
+  const parsed = parseOefenplanningDocument(aoa, {posten:State.config.posten, ploegen:State.config.ploegen, themaInfo:State.themaInfo||{}, personen:State.personen, slotBlokken:OEFDOC_SLOT_BLOKKEN});
+  if(parsed.fout){ alert('Dit lijkt niet het oefenplanning-document: '+parsed.fout); return; }
+  let bestaandPloeg, bestaandDuik;
+  try{
+    bestaandPloeg = (await haalRijenMetBron('oefeningen')).map(oefeningVanDbRij);
+    bestaandDuik = await haalRijenMetBron('duik_oefeningen');
+  }catch(err){ alert('Kon de bestaande oefeningen niet ophalen: '+(err.message||err)); return; }
+  const dv = vergelijkOefenplanningDocument(parsed, bestaandPloeg, bestaandDuik, fmtKey(new Date()));
+  const aantalPloeg = parsed.items.filter(i=>i.type!=='duik').length, aantalDuik = parsed.items.length-aantalPloeg;
+  const lijst = (arr, max, f)=> arr.slice(0,max).map(f).join('') + (arr.length>max?`<div class="log-item">… en nog ${arr.length-max} meer.</div>`:'');
+  const perPost = {};
+  dv.nieuw.concat(dv.gewijzigd.map(g=>g.item)).forEach(i=>{ const k = postNaam(i.postId)+' — '+(i.type==='duik'?'duikoefeningen':'ploegoefeningen'); perPost[k]=(perPost[k]||0)+1; });
+  const waarschuwingen = [];
+  const onbekend = Object.keys(parsed.onbekendeCodes);
+  if(onbekend.length) waarschuwingen.push(`Themacode(s) niet in de themalijst (komen als gewone ploegoefening binnen, zonder kleur): <strong>${onbekend.map(esc).join(', ')}</strong>. Voeg ze toe in Instellingen → Thema's.`);
+  const onbPosten = Object.keys(parsed.onbekendePosten);
+  if(onbPosten.length) waarschuwingen.push(`Post niet herkend, deze regels zijn overgeslagen: <strong>${onbPosten.map(esc).join(', ')}</strong>.`);
+  const onbPloegen = Object.keys(parsed.onbekendePloegen);
+  if(onbPloegen.length) waarschuwingen.push(`Piket/ploeg niet herkend (oefening komt zonder ploeg binnen): <strong>${onbPloegen.map(esc).join(', ')}</strong>.`);
+  if(parsed.materiaalGenegeerdDatums.length) waarschuwingen.push(`In de materiaalkolommen staan op ${parsed.materiaalGenegeerdDatums.length} datum(s) teksten die uit andere cellen lijken te zijn gekopieerd (${parsed.materiaalGenegeerdDatums.slice(0,6).join(', ')}${parsed.materiaalGenegeerdDatums.length>6?', …':''}); die zijn niet meegenomen.`);
+  const box = document.getElementById('modalBox');
+  box.classList.add('wide');
+  box.innerHTML = `
+    <div class="modal-head"><h3>Oefenplanning-document controleren vóór import</h3><button class="modal-close" data-close="modal">✕</button></div>
+    <div class="hint">Bestand: <strong>${esc(file.name)}</strong> · ${parsed.rijenMetDatum} regels met datum · jaar ${esc(parsed.jaar||'?')}. Het document is leidend: wat hier verandert, wordt bijgewerkt.</div>
+    <div class="post-block">
+      <div class="eyebrow">Wat er gebeurt</div>
+      <div class="log-item"><strong>${parsed.items.length}</strong> oefeningen in het document: ${aantalPloeg} ploegoefeningen (naar het oefenrooster) en ${aantalDuik} duikoefeningen (naar de duikplanning).</div>
+      <div class="log-item">🆕 <strong>${dv.nieuw.length}</strong> nieuw · ✏️ <strong>${dv.gewijzigd.length}</strong> gewijzigd in het document · ✔ <strong>${dv.ongewijzigd.length}</strong> ongewijzigd (blijven zoals ze zijn, ook als iemand ze in de app heeft aangevuld) · 🗑 <strong>${dv.verwijderen.length}</strong> niet meer in het document</div>
+      ${dv.verleden?`<div class="log-item">${dv.verleden} oefening(en) liggen in het verleden en worden nooit aangeraakt.</div>`:''}
+      ${dv.duikUitgevoerdBlijft?`<div class="log-item">${dv.duikUitgevoerdBlijft} al uitgevoerde duikoefening(en) die niet meer in het document staan, blijven staan.</div>`:''}
+      ${(()=>{ const zonder = parsed.items.filter(i=>i.type!=='duik' && !i.blokken.length).length; return zonder?`<div class="log-item">${zonder} ploegoefening(en) hebben geen blokken (het document noemt geen tijden): die komen in het oefenrooster, maar vullen de dagplanning niet. Standaardblokken per themacode stelt u in bij Instellingen → Thema's.</div>`:''; })()}
+      <div class="log-item">${parsed.feestdagen.length} feestdag(en) herkend; die worden niet als oefening ingelezen.</div>
+      <div class="log-item">Oefenleiders: ${parsed.namenGekoppeld} gekoppeld aan een persoon uit de personeelslijst; functies en afspraken zoals "DI / DPL" of "werkplan A-piket" blijven als tekst bij de oefening staan.</div>
+    </div>
+    ${waarschuwingen.length?`<div class="post-block"><div class="eyebrow">Let op</div>${waarschuwingen.map(w=>`<div class="log-item" style="color:var(--amber);">⚠ ${w}</div>`).join('')}</div>`:''}
+    ${Object.keys(perPost).length?`<div class="post-block"><div class="eyebrow">Nieuw en gewijzigd per post</div>${Object.keys(perPost).sort().map(k=>`<div class="log-item">${esc(k)}: ${perPost[k]}</div>`).join('')}</div>`:''}
+    ${dv.gewijzigd.length?`<div class="post-block"><div class="eyebrow">Gewijzigd (eerste 10)</div>${lijst(dv.gewijzigd,10,g=>`<div class="log-item">${esc(g.item.datum)} · ${esc(postNaam(g.item.postId))} · ${esc(g.item.themaCode)} — ${esc(g.item.welke)}</div>`)}</div>`:''}
+    ${dv.verwijderen.length?`<div class="post-block"><div class="eyebrow">Worden verwijderd (eerste 10)</div>${lijst(dv.verwijderen,10,v=>`<div class="log-item">${esc(v.rij.datum)} · ${esc(v.soort==='duik'?'duik':'ploeg')} · ${esc(v.rij.thema||v.rij.omschrijving||'')} (${esc(v.reden)})</div>`)}</div>`:''}
+    <div class="modal-actions">
+      <button type="button" class="btn ghost" data-close="modal">Annuleren</button>
+      <button type="button" class="btn primary" id="btnBevestigOefDoc" ${(dv.nieuw.length+dv.gewijzigd.length+dv.verwijderen.length)?'':'disabled'}>✅ Importeren</button>
+    </div>`;
+  document.getElementById('modalOverlay').classList.remove('hidden');
+  document.getElementById('btnBevestigOefDoc').addEventListener('click', async ()=>{
+    if(dv.verwijderen.length>20 && !confirm(`Let op: ${dv.verwijderen.length} oefeningen staan niet meer in dit document en worden verwijderd.\n\nIs dit het juiste, volledige document?`)) return;
+    const knop = document.getElementById('btnBevestigOefDoc'); knop.disabled = true;
+    try{
+      const uitkomst = await voerOefDocImportUit(parsed, dv, t=>{ knop.textContent = t; });
+      closeModal(); render();
+      alert(`Klaar.\n\n${uitkomst.nieuw} nieuw, ${uitkomst.gewijzigd} bijgewerkt, ${uitkomst.verwijderd} verwijderd.` + (uitkomst.dagenOvergeslagen?`\n\nLet op: ${uitkomst.dagenOvergeslagen} dag(en) in de dagplanning zijn niet bijgewerkt omdat iemand anders die dag tegelijk wijzigde. Importeer het bestand nog een keer.`:''));
+    }catch(err){
+      console.error('[dagplanning] import oefenplanning-document mislukt:', err);
+      alert('De import is onderbroken: '+(err.message||err)+'\n\nHet is veilig om het bestand opnieuw te importeren; wat al is gelukt wordt dan niet dubbel gezet.');
+      knop.disabled = false; knop.textContent = '✅ Opnieuw proberen';
+    }
+  });
+}
+async function voerOefDocImportUit(parsed, dv, melding){
+  const nu = new Date().toISOString();
+  const wie = State.ingelogdPersoon ? State.ingelogdPersoon.naam : null;
+  const nieuwPloeg = [], wijzigPloeg = [], nieuwDuik = [], wijzigDuik = [];
+  const ontkoppel = []; // [id, oud] voor opruimen van cellen in de dagplanning
+  // 1. ploegoefeningen opbouwen
+  dv.nieuw.filter(i=>i.type!=='duik').forEach(it=>{
+    nieuwPloeg.push({id:uid(), datum:it.datum, postId:it.postId, ploegId:it.ploegId, thema:it.themaNaam, welkeOefening:it.welke, oefenkaartNummer:'',
+      vorm:it.vorm, ruimteGereserveerd:false, oefenleidingType:'intern', oefenleiders:it.oefenleiders, blokken:it.blokken.slice(),
+      bijzonderheden:'', materialen:[], bijlagen:[], themaCode:it.themaCode, bron:parsed.bron, bronSleutel:it.sleutel, bronHash:it.hash,
+      leidingTekst:it.leiding, materiaalAanvragen:it.aanvragen});
+  });
+  dv.gewijzigd.filter(g=>g.item.type!=='duik').forEach(g=>{
+    const ex = g.bestaand, it = g.item;
+    if((ex.blokken||[]).length) ontkoppel.push([ex.id, {datum:ex.datum, postId:ex.postId, blokken:(ex.blokken||[]).slice(), tekst:odThemaTekst(ex.thema, ex.welkeOefening), typeId:'t-oef'}]);
+    const codeGewijzigd = ex.themaCode !== it.themaCode;
+    Object.assign(ex, {datum:it.datum, postId:it.postId, ploegId:it.ploegId, thema:it.themaNaam, themaCode:it.themaCode, welkeOefening:it.welke,
+      oefenleiders:it.oefenleiders, leidingTekst:it.leiding, materiaalAanvragen:it.aanvragen, bronHash:it.hash});
+    if(codeGewijzigd){ ex.vorm = it.vorm; ex.blokken = it.blokken.slice(); }
+    wijzigPloeg.push(ex);
+  });
+  const verwijderPloeg = dv.verwijderen.filter(v=>v.soort==='ploeg').map(v=>v.rij);
+  verwijderPloeg.forEach(o=>{ if((o.blokken||[]).length) ontkoppel.push([o.id, {datum:o.datum, postId:o.postId, blokken:o.blokken.slice(), tekst:odThemaTekst(o.thema, o.welkeOefening), typeId:'t-oef'}]); });
+  const verwijderDuik = dv.verwijderen.filter(v=>v.soort==='duik').map(v=>v.rij);
+  // 2. duikoefeningen opbouwen
+  dv.nieuw.filter(i=>i.type==='duik').forEach(it=>{
+    nieuwDuik.push({id:uid(), datum:it.datum, post_id:it.postId, codes:it.duikCodes, deelnemer_ids:[], omschrijving:it.welke, uitgevoerd:false,
+      aangemaakt_door:wie, blokken:it.blokken.slice(), thema_code:it.themaCode, bron:parsed.bron, bron_sleutel:it.sleutel, bron_hash:it.hash,
+      leiding_tekst:it.leiding||null, materiaal_aanvragen:it.aanvragen});
+  });
+  dv.gewijzigd.filter(g=>g.item.type==='duik').forEach(g=>{
+    const ex = g.bestaand, it = g.item;
+    if(ex.uitgevoerd) return; // een al uitgevoerde duikoefening blijft zoals ze is
+    const upd = {datum:it.datum, post_id:it.postId, codes:it.duikCodes, omschrijving:it.welke, thema_code:it.themaCode, bron_hash:it.hash,
+      leiding_tekst:it.leiding||null, materiaal_aanvragen:it.aanvragen};
+    if(ex.thema_code!==it.themaCode) upd.blokken = it.blokken.slice();
+    wijzigDuik.push({id:ex.id, upd});
+  });
+  // 3. eerst de dagplanning opruimen voor wat verandert of verdwijnt (de oude cellen kennen nog de oude tekst)
+  let dagenOvergeslagen = 0, k = 0;
+  for(const [id, oud] of ontkoppel){ melding(`Planning opruimen ${++k} van ${ontkoppel.length}…`); await ontkoppelOefeningVanPlanning(id, oud); }
+  // 4. database
+  melding('Oefeningen opslaan…');
+  const rijenPloeg = nieuwPloeg.concat(wijzigPloeg).map(oefeningRijVoorOpslaan);
+  for(let i=0;i<rijenPloeg.length;i+=200){
+    const { error } = await supa.from('oefeningen').upsert(rijenPloeg.slice(i,i+200), {onConflict:'id'});
+    if(error) throw error;
+  }
+  for(let i=0;i<verwijderPloeg.length;i+=200){
+    const { error } = await supa.from('oefeningen').delete().in('id', verwijderPloeg.slice(i,i+200).map(o=>o.id));
+    if(error) throw error;
+  }
+  melding('Duikoefeningen opslaan…');
+  const duikTerug = [];
+  for(let i=0;i<nieuwDuik.length;i+=200){
+    const { data, error } = await supa.from('duik_oefeningen').insert(nieuwDuik.slice(i,i+200)).select();
+    if(error) throw error; duikTerug.push(...(data||[]));
+  }
+  for(const w of wijzigDuik){
+    const { data, error } = await supa.from('duik_oefeningen').update(w.upd).eq('id', w.id).select();
+    if(error) throw error; duikTerug.push(...(data||[]));
+  }
+  for(let i=0;i<verwijderDuik.length;i+=200){
+    const { error } = await supa.from('duik_oefeningen').delete().in('id', verwijderDuik.slice(i,i+200).map(o=>o.id));
+    if(error) throw error;
+  }
+  // 5. wat dit venster nu weet bijwerken (en de momentopname, zodat gewoon opslaan hier niets dubbel doet)
+  const verwijderdeIds = new Set(verwijderPloeg.map(o=>o.id));
+  State.oefeningen = State.oefeningen.filter(o=>!verwijderdeIds.has(o.id));
+  nieuwPloeg.concat(wijzigPloeg).forEach(o=>{
+    const i = State.oefeningen.findIndex(x=>x.id===o.id);
+    if(i>=0) State.oefeningen[i] = o; else State.oefeningen.push(o);
+  });
+  if(!State.oefeningMomentopname) State.oefeningMomentopname = new Map();
+  verwijderdeIds.forEach(id=>State.oefeningMomentopname.delete(id));
+  nieuwPloeg.concat(wijzigPloeg).forEach(o=>State.oefeningMomentopname.set(o.id, JSON.stringify(oefeningRijVoorOpslaan(o))));
+  if(State.duikGeladen){
+    const weg = new Set(verwijderDuik.map(o=>o.id));
+    State.duikOefeningen = State.duikOefeningen.filter(o=>!weg.has(o.id));
+    duikTerug.forEach(r=>{ const i = State.duikOefeningen.findIndex(x=>x.id===r.id); if(i>=0) State.duikOefeningen[i]=r; else State.duikOefeningen.push(r); });
+  }
+  // 6. dagplanning vullen voor ploegoefeningen met blokken (per dag in één keer)
+  const perDag = new Map();
+  nieuwPloeg.concat(wijzigPloeg).filter(o=>o.ploegId && (o.blokken||[]).length).forEach(o=>{
+    const s = o.postId+':'+o.datum; if(!perDag.has(s)) perDag.set(s, []); perDag.get(s).push(o);
+  });
+  k = 0;
+  for(const [, lijstVanDag] of perDag){
+    melding(`Dagplanning vullen ${++k} van ${perDag.size}…`);
+    const u = await koppelMeerdereOefeningenNaarPlanning(lijstVanDag.map(o=>Object.assign({}, o, {typeId:'t-oef'})));
+    if(u && u.overgeslagen) dagenOvergeslagen++;
+  }
+  const res = {nieuw:nieuwPloeg.length+nieuwDuik.length, gewijzigd:wijzigPloeg.length+wijzigDuik.length, verwijderd:verwijderPloeg.length+verwijderDuik.length, dagenOvergeslagen};
+  await addLog(`Oefenplanning-document geïmporteerd (${parsed.bron}): ${res.nieuw} nieuw, ${res.gewijzigd} bijgewerkt, ${res.verwijderd} verwijderd.`, null);
+  return res;
+}
+// ===OEFDOC-UI-END===
 
 function openOefExportModal(){
   const cfg = State.config;
@@ -3078,11 +3557,11 @@ function renderOefeningDetails(postId, datumStr){
     const ploeg = cfg.ploegen.find(p=>p.id===o.ploegId);
     const blokNamen = (o.blokken||[]).map(bid=>{const b=cfg.werkblokken.find(x=>x.id===bid);return b?b.naam:bid;}).join(', ') || '—';
     const staf = oefenleidersVan(o);
-    const stafTekst = staf.length ? staf.map(s=>s.naam).join(', ') : '—';
+    const stafTekst = oefLeidingWeergave(o, staf);
     const heeftMailadres = staf.some(s=>s.email);
     return `<div class="oef-detail-item">
       <div class="oef-detail-top">
-        <strong>${esc(o.thema)}</strong>${o.welkeOefening?' — '+esc(o.welkeOefening):''}${o.oefenkaartNummer?' <span class="pnum">('+esc(o.oefenkaartNummer)+')</span>':''}
+        ${themaPunt(o.thema)}<strong>${esc(o.thema)}</strong>${o.welkeOefening?' — '+esc(o.welkeOefening):''}${o.oefenkaartNummer?' <span class="pnum">('+esc(o.oefenkaartNummer)+')</span>':''}
         <span class="badge-vorm ${o.vorm}">${vormLabel(o.vorm)}</span>
         <button class="btn small ghost" data-action="editOefening" data-id="${o.id}" style="margin-left:auto;">✎ Oefening bewerken</button>
         ${heeftMailadres?`<button class="btn small ghost" data-action="mailOefenstaf" data-id="${o.id}">📧 Mail oefenstaf</button>`:''}
@@ -3743,13 +4222,13 @@ function renderOefenrooster(){
     const datumLabel = o.datum ? parseKey(o.datum).toLocaleDateString('nl-NL',{weekday:'short',day:'2-digit',month:'2-digit',year:'numeric'}) : '—';
     const blokNamen = (o.blokken||[]).map(bid=>{const b=cfg.werkblokken.find(x=>x.id===bid);return b?b.naam:bid;}).join(', ') || '—';
     const staf = oefenleidersVan(o);
-    const stafTekst = staf.length ? staf.map(s=>s.naam).join(', ') : '—';
+    const stafTekst = oefLeidingWeergave(o, staf);
     const kanMailen = staf.some(s=>s.email);
     return `<tr>
       <td class="pnum">${esc(datumLabel)}</td>
       <td>${esc(postNaam(o.postId))}</td>
       <td>${esc(ploeg?ploeg.naam:'—')}</td>
-      <td>${esc(o.thema||'—')}</td>
+      <td>${themaPunt(o.thema)}${esc(o.thema||'—')}</td>
       <td>${esc(o.welkeOefening||'—')}</td>
       <td><div class="row-acties">${kanMailen?`<button data-action="mailOefenstaf" data-id="${o.id}" title="Mail oefenstaf">📧</button>`:''}<button data-action="editOefening" data-id="${o.id}" title="Bewerken">✎</button><button data-action="delOefening" data-id="${o.id}" title="Verwijderen">✕</button></div></td>
       <td><span class="badge-vorm ${o.vorm}">${vormLabel(o.vorm)}</span></td>
@@ -4029,6 +4508,7 @@ function openOefeningModal(existingId){
           <button type="button" class="btn small" id="btnOefenleiderExtern">Toevoegen</button>
         </div>
       </div>
+      ${existing && existing.bronSleutel ? `<div class="hint" style="margin:0 0 10px;">📄 Deze oefening komt uit het oefenplanning-document (${esc(existing.bron||'')}). Verandert het document voor deze oefening, dan worden thema, onderwerp, post, ploeg en leiding bij de volgende import bijgewerkt. Wat u hier aanvult (oefenkaart, bijzonderheden, bijlagen, materialen) blijft staan.${existing.leidingTekst?`<br>Leiding volgens het document: <strong>${esc(existing.leidingTekst)}</strong>`:''}${(existing.materiaalAanvragen||[]).length?`<br>Materiaal volgens het document: ${(existing.materiaalAanvragen||[]).map(a=>esc(a.soort)+': '+['besteld','bevestigd','specificatie'].filter(k=>a[k]).map(k=>k+' '+esc(a[k])).join(', ')).join(' · ')}`:''}</div>` : ''}
       <div class="field"><label>Bijzonderheden</label><textarea name="bijzonderheden">${existing?esc(existing.bijzonderheden||''):''}</textarea></div>
       <div class="field"><label>Materialen bestellen (optioneel)</label>
         <div class="hint" style="margin-top:0;">Centraal magazijn Heteren, minimaal 14 dagen van tevoren aanvragen. Vink aan wat je nodig hebt — bij opslaan kun je de relatiebeheerder direct informeren.</div>
@@ -5575,7 +6055,9 @@ function renderSettings(){
     panel.innerHTML = `
       <p style="font-size:13px;color:var(--text-dim);margin-top:0;">Deze thema's staan als keuze klaar bij het toevoegen van een oefening in het Oefenrooster.</p>
       <div class="tagpill-wrap">${cfg.themas.map(s=>`<span class="tagpill">${esc(s)}<button data-action="delThema" data-val="${esc(s)}">✕</button></span>`).join('')}</div>
-      <div class="inline-add"><input type="text" id="newThema" placeholder="Nieuw thema, bijv. Redding op hoogte"><button class="btn small" id="addThemaBtn">Toevoegen</button></div>`;
+      <div class="inline-add"><input type="text" id="newThema" placeholder="Nieuw thema, bijv. Redding op hoogte"><button class="btn small" id="addThemaBtn">Toevoegen</button></div>
+      ${themaCodeTabelHtml()}`;
+    koppelThemaCodeTabel(panel);
     panel.querySelectorAll('[data-action="delThema"]').forEach(btn=>{
       btn.addEventListener('click', async ()=>{
         cfg.themas = cfg.themas.filter(s=>s!==btn.dataset.val);
@@ -6414,6 +6896,13 @@ function wireEvents(){
     const file = e.target.files[0];
     if(!file) return;
     await importOefRooster(file);
+    e.target.value = '';
+  });
+  document.getElementById('btnOefDocImport').addEventListener('click', ()=> document.getElementById('oefDocImportFile').click());
+  document.getElementById('oefDocImportFile').addEventListener('change', async e=>{
+    const file = e.target.files[0];
+    if(!file) return;
+    try{ await openOefDocImportModal(file); }catch(err){ console.error(err); alert('Het importscherm kon niet worden geopend: '+(err.message||err)); }
     e.target.value = '';
   });
   document.getElementById('btnOefJaarImport').addEventListener('click', ()=> document.getElementById('oefJaarImportFile').click());
