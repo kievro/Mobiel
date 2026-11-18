@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Dagplanning Brandweer · v18 nov 2026 B</title>
+<title>Dagplanning Brandweer · v18 nov 2026 C</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🚒</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
@@ -677,7 +677,7 @@ const SUPABASE_URL = 'https://iyquepqubfqrhybriqif.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml5cXVlcHF1YmZxcmh5YnJpcWlmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYwODI2MDMsImV4cCI6MjEwMTY1ODYwM30.0zMg5njpz3wnu3qSLDCRQ2Rx2IZlWGnZTj1mQkyWKsw';
 const supa = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
 if(window.Herlaad && supa) Herlaad.start(supa, { app: 'dagstaat', veilig: function(){ var m = document.getElementById('modalOverlay'); return (!m || m.classList.contains('hidden')) && !(typeof State !== 'undefined' && State && State.opslaanBezig); } });
-const APP_VERSIE = '18 nov 2026 B';   // zelfde label als in de titel van het tabblad; ook zichtbaar in de kop en bij wie online is
+const APP_VERSIE = '18 nov 2026 C';   // zelfde label als in de titel van het tabblad; ook zichtbaar in de kop en bij wie online is
 
 // Pas dit aan zodra bekend is waar PloegCompleet definitief gehost wordt (bijv. een
 // submap naast Dagstaat op dezelfde NAS, of een heel ander adres). Relatief pad
@@ -2291,17 +2291,8 @@ function parseOefenplanningDocument(aoa, ctx){
         duikCodes: type==='duik' ? odDuikCodes(onderwerp) : [],
         blokkenThema: (info && info.blokken) ? info.blokken.slice() : []});
     });
-    // Staat dezelfde oefening in opeenvolgende kolommen (oefening 1, 2 en 3), dan is het één oefening die meerdere
-    // delen van de dag beslaat. Zo werkt ook de bestaande jaarrooster-import.
-    const samen = [];
-    rijItems.forEach(it=>{
-      const v = samen[samen.length-1];
-      if(v && v.slots[v.slots.length-1]===it.slot-1 && v.themaCode===it.themaCode && v.welke===it.welke && v.leiding===it.leiding){
-        v.slots.push(it.slot);
-        it.aanvragen.forEach(a=>{ if(!v.aanvragen.some(b=>JSON.stringify(b)===JSON.stringify(a))) v.aanvragen.push(a); });
-      } else { it.slots = [it.slot]; samen.push(it); }
-    });
-    samen.forEach(x=>ruw.push(x));
+    // Elke ingevulde kolom (oefening 1, 2 of 3: H-J, L-N, P-R) is een eigen oefening, ook als de tekst gelijk is.
+    rijItems.forEach(it=>{ it.slots = [it.slot]; ruw.push(it); });
   }
   // jaar van het document = jaar dat het vaakst voorkomt in de datums
   const perJaar = {}; ruw.forEach(x=>{ const j = x.datum.slice(0,4); perJaar[j]=(perJaar[j]||0)+1; });
@@ -2309,10 +2300,8 @@ function parseOefenplanningDocument(aoa, ctx){
   res.bron = res.jaar ? 'oefenplanning-'+res.jaar : 'oefenplanning';
   ruw.forEach(x=>{
     x.sleutel = [res.bron, x.postId, x.datum, x.piket||'-', 'r'+x.regelNr+'s'+x.slots[0]].join('|');
-    // Blokken: eerst de standaardblokken van het thema; anders (alleen als dat is ingesteld) afgeleid van oefening 1/2/3.
-    let blokken = x.blokkenThema.slice();
-    if(!blokken.length && ctx.slotBlokken){ x.slots.forEach(sl=>(ctx.slotBlokken[sl]||[]).forEach(b=>{ if(!blokken.includes(b)) blokken.push(b); })); }
-    x.blokken = blokken;
+    // Blokken: de standaardblokken van het thema (het document noemt geen tijden).
+    x.blokken = x.blokkenThema.slice();
     x.hash = odHash(JSON.stringify([x.datum, x.postId, x.ploegId, x.themaCode, x.welke, x.leiding, x.aanvragen, x.type, x.slots]));
   });
   res.items = ruw;
@@ -2347,10 +2336,6 @@ function vergelijkOefenplanningDocument(parsed, bestaandPloeg, bestaandDuik, van
 // ===OEFDOC-END===
 
 // ===OEFDOC-UI-START===
-// Betekent "oefening 1/2/3" in het document een deel van de dag (ochtend/middag/avond)? Dan kan hier per kolom worden
-// ingesteld in welke blokken die valt, bijvoorbeeld {1:['blok1','blok2'], 2:['blok3','blok4'], 3:['avond']}.
-// Staat op null (uit) tot dat bevestigd is; dan krijgt een oefening alleen blokken via de standaardblokken van het thema.
-const OEFDOC_SLOT_BLOKKEN = null;
 function oefeningVanDbRij(r){
   return {id:r.id, datum:r.datum, postId:r.post_id, ploegId:r.ploeg_id, thema:r.thema, welkeOefening:r.welke_oefening,
     oefenkaartNummer:r.oefenkaart_nummer, vorm:r.vorm, ruimteGereserveerd:r.ruimte_gereserveerd, oefenleidingType:r.oefenleiding_type,
@@ -2381,7 +2366,7 @@ async function openOefDocImportModal(file){
     const naam = wb.SheetNames.find(n=>/oefenplanning|oefenjaar/i.test(n)) || wb.SheetNames[0];
     aoa = XLSX.utils.sheet_to_json(wb.Sheets[naam], {header:1, defval:'', cellDates:true});
   }catch(err){ alert('Kon het bestand niet lezen: '+err.message); return; }
-  const parsed = parseOefenplanningDocument(aoa, {posten:State.config.posten, ploegen:State.config.ploegen, themaInfo:State.themaInfo||{}, personen:State.personen, slotBlokken:OEFDOC_SLOT_BLOKKEN});
+  const parsed = parseOefenplanningDocument(aoa, {posten:State.config.posten, ploegen:State.config.ploegen, themaInfo:State.themaInfo||{}, personen:State.personen});
   if(parsed.fout){ alert('Dit lijkt niet het oefenplanning-document: '+parsed.fout); return; }
   let bestaandPloeg, bestaandDuik;
   try{
