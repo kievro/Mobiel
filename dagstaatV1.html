@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Dagplanning Brandweer · v18 nov 2026 A</title>
+<title>Dagplanning Brandweer · v18 nov 2026 B</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🚒</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
@@ -234,6 +234,11 @@ select.add-select{background:var(--surface-2);border:1px dashed var(--border);co
 .mededeling-tekst{font-size:14px;white-space:pre-wrap;}
 .mededeling-meta{font-size:11px;color:var(--text-faint);margin-top:3px;}
 .mededeling-meta a{color:var(--text-dim);}
+.oef-jaarkop td{background:var(--surface-3);font-family:var(--font-display);font-size:15px;font-weight:700;padding:8px 10px;}
+.oef-maandkop td{background:var(--surface-2);cursor:pointer;font-family:var(--font-display);font-size:13px;font-weight:600;padding:7px 10px;border-top:1px solid var(--border);user-select:none;}
+.oef-maandkop td:hover{background:var(--surface-3);}
+.oef-maandkop .teller{font-weight:400;color:var(--text-dim);margin-left:6px;}
+.oef-archiefkop td{background:var(--surface-3);cursor:pointer;font-family:var(--font-display);font-size:14px;font-weight:700;padding:9px 10px;border-top:2px solid var(--border);user-select:none;}
 .oef-subtabs{display:flex;gap:6px;margin-bottom:16px;border-bottom:1px solid var(--border);}
 .oef-subtab-btn{background:none;border:none;color:var(--text-dim);padding:9px 14px;font-family:var(--font-display);font-size:14px;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;}
 .oef-subtab-btn.active{color:var(--text);border-bottom-color:var(--red);}
@@ -503,6 +508,7 @@ footer.pagefoot{margin-top:40px;text-align:center;color:var(--text-faint);font-s
       <div class="filters-row">
         <select id="oefFilterPost"><option value="">Alle posten</option></select>
         <select id="oefFilterPloeg"><option value="">Alle ploegen</option></select>
+        <select id="oefFilterJaar" title="Toon één jaar of alle jaren"><option value="">Alle jaren</option></select>
         <button class="btn ghost" id="btnOefSjabloon">⬇ Sjabloon</button>
         <button class="btn ghost" id="btnOefImport">⬆ Importeren</button>
         <input type="file" id="oefImportFile" accept=".xlsx,.xls,.csv" class="hidden">
@@ -671,7 +677,7 @@ const SUPABASE_URL = 'https://iyquepqubfqrhybriqif.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml5cXVlcHF1YmZxcmh5YnJpcWlmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYwODI2MDMsImV4cCI6MjEwMTY1ODYwM30.0zMg5njpz3wnu3qSLDCRQ2Rx2IZlWGnZTj1mQkyWKsw';
 const supa = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
 if(window.Herlaad && supa) Herlaad.start(supa, { app: 'dagstaat', veilig: function(){ var m = document.getElementById('modalOverlay'); return (!m || m.classList.contains('hidden')) && !(typeof State !== 'undefined' && State && State.opslaanBezig); } });
-const APP_VERSIE = '18 nov 2026 A';   // zelfde label als in de titel van het tabblad; ook zichtbaar in de kop en bij wie online is
+const APP_VERSIE = '18 nov 2026 B';   // zelfde label als in de titel van het tabblad; ook zichtbaar in de kop en bij wie online is
 
 // Pas dit aan zodra bekend is waar PloegCompleet definitief gehost wordt (bijv. een
 // submap naast Dagstaat op dezelfde NAS, of een heel ander adres). Relatief pad
@@ -4205,9 +4211,14 @@ function renderOefenrooster(){
     document.getElementById('oefFilterPost').dataset.built='1';
   }
   const fPost = document.getElementById('oefFilterPost').value, fPloeg = document.getElementById('oefFilterPloeg').value;
+  const jaarSel = document.getElementById('oefFilterJaar');
+  const gekozenJaar = jaarSel.value;
+  const jaren = [...new Set(State.oefeningen.map(o=>(o.datum||'').slice(0,4)).filter(Boolean))].sort();
+  jaarSel.innerHTML = `<option value="">Alle jaren</option>` + jaren.map(j=>`<option value="${j}" ${j===gekozenJaar?'selected':''}>${j}</option>`).join('');
   let lijst = State.oefeningen.filter(o=>{
     if(fPost && o.postId!==fPost) return false;
     if(fPloeg && o.ploegId!==fPloeg) return false;
+    if(gekozenJaar && (o.datum||'').slice(0,4)!==gekozenJaar) return false;
     return true;
   });
   lijst = lijst.slice().sort((a,b)=>a.datum.localeCompare(b.datum));
@@ -4217,7 +4228,7 @@ function renderOefenrooster(){
     if(State.oefSubtab==='duik' && State.duikGeladen) renderDuikSub();
     return;
   }
-  body.innerHTML = lijst.map(o=>{
+  const rijHtml = o=>{
     const ploeg = cfg.ploegen.find(p=>p.id===o.ploegId);
     const datumLabel = o.datum ? parseKey(o.datum).toLocaleDateString('nl-NL',{weekday:'short',day:'2-digit',month:'2-digit',year:'numeric'}) : '—';
     const blokNamen = (o.blokken||[]).map(bid=>{const b=cfg.werkblokken.find(x=>x.id===bid);return b?b.naam:bid;}).join(', ') || '—';
@@ -4238,7 +4249,41 @@ function renderOefenrooster(){
       <td>${esc(blokNamen)}</td>
       <td>${esc(o.bijzonderheden||'')}</td>
     </tr>`;
-  }).join('');
+  };
+  // Groeperen: huidige en komende maanden onder elkaar per jaar, afgelopen maanden in het archief (standaard dicht).
+  const huidigeMaand = fmtKey(new Date()).slice(0,7);
+  const maandLabel = ym=>{ const t = parseKey(ym+'-01').toLocaleDateString('nl-NL',{month:'long',year:'numeric'}); return t.charAt(0).toUpperCase()+t.slice(1); };
+  const perMaand = {};
+  lijst.forEach(o=>{ const ym = (o.datum||'').slice(0,7); (perMaand[ym] = perMaand[ym]||[]).push(o); });
+  const maanden = Object.keys(perMaand).sort();
+  const actief = maanden.filter(m=>m>=huidigeMaand), archief = maanden.filter(m=>m<huidigeMaand).reverse();
+  if(!State.oefOpen) State.oefOpen = {};
+  const staatOpen = (sleutel, standaard)=> (sleutel in State.oefOpen) ? State.oefOpen[sleutel] : standaard;
+  const maandBlok = (ym, standaardOpen)=>{
+    const open = staatOpen('m:'+ym, standaardOpen);
+    return `<tr class="oef-maandkop" data-toggle="m:${ym}" data-standaard="${standaardOpen?1:0}"><td colspan="12">${open?'▾':'▸'} ${esc(maandLabel(ym))}<span class="teller">${perMaand[ym].length} oefening${perMaand[ym].length===1?'':'en'}</span></td></tr>` + (open ? perMaand[ym].map(rijHtml).join('') : '');
+  };
+  let html = '';
+  let vorigJaar = null;
+  actief.forEach(ym=>{
+    const jaar = ym.slice(0,4);
+    if(jaar!==vorigJaar){ html += `<tr class="oef-jaarkop"><td colspan="12">${esc(jaar)}</td></tr>`; vorigJaar = jaar; }
+    html += maandBlok(ym, true);
+  });
+  if(archief.length){
+    const aantalArchief = archief.reduce((n,m)=>n+perMaand[m].length,0);
+    const archiefOpen = staatOpen('archief', false);
+    html += `<tr class="oef-archiefkop" data-toggle="archief" data-standaard="0"><td colspan="12">${archiefOpen?'▾':'▸'} 📁 Archief — afgelopen maanden<span class="teller" style="font-weight:400;margin-left:6px;">${archief.length} maand${archief.length===1?'':'en'}, ${aantalArchief} oefening${aantalArchief===1?'':'en'}</span></td></tr>`;
+    if(archiefOpen){
+      let jaarA = null;
+      archief.forEach(ym=>{
+        const jaar = ym.slice(0,4);
+        if(jaar!==jaarA){ html += `<tr class="oef-jaarkop"><td colspan="12">${esc(jaar)} <span style="font-weight:400;font-size:12px;">(archief)</span></td></tr>`; jaarA = jaar; }
+        html += maandBlok(ym, false);
+      });
+    }
+  }
+  body.innerHTML = html;
   if(State.oefSubtab==='duik' && State.duikGeladen) renderDuikSub();
 }
 function materialenOverzichtHtml(){
@@ -6914,6 +6959,16 @@ function wireEvents(){
   });
   document.getElementById('btnOefExport').addEventListener('click', openOefExportModal);
   document.getElementById('oefFilterPost').addEventListener('change', ()=>{ rebuildOefPloegFilterOptions(); renderOefenrooster(); });
+  document.getElementById('oefFilterJaar').addEventListener('change', renderOefenrooster);
+  document.getElementById('oefTableBody').addEventListener('click', e=>{
+    const kop = e.target.closest('tr[data-toggle]');
+    if(!kop) return;
+    if(!State.oefOpen) State.oefOpen = {};
+    const sleutel = kop.dataset.toggle;
+    const nu = (sleutel in State.oefOpen) ? State.oefOpen[sleutel] : kop.dataset.standaard==='1';
+    State.oefOpen[sleutel] = !nu;
+    renderOefenrooster();
+  });
   document.getElementById('oefFilterPloeg').addEventListener('change', renderOefenrooster);
 
   document.getElementById('app').addEventListener('click', async e=>{
