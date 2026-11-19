@@ -190,7 +190,7 @@
       var sinds = datumKey(new Date(Date.now() - state.dagen*86400000));
       var res = await Promise.all([
         metRetry(function(){ return sb.from("overdrachten").select("*").eq("post_id", state.post).eq("is_open", false).gte("datum", sinds).order("datum",{ascending:false}).order("aangemaakt_op",{ascending:false}); }),
-        metRetry(function(){ return sb.from("overdrachten").select("*").eq("is_open", true).order("datum",{ascending:true}).order("aangemaakt_op",{ascending:true}); })
+        metRetry(function(){ return sb.from("overdrachten").select("*").eq("is_open", true).order("datum",{ascending:false}).order("aangemaakt_op",{ascending:false}); })
       ]);
       state.notities = res[0];
       state.openAlle = res[1];
