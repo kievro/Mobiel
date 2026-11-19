@@ -161,6 +161,7 @@
 <script src="./aanwezig.js"></script>
 <script src="./herlaad.js"></script>
 <script src="./kop.js"></script>
+<script src="./foto.js"></script>
 <script>
 (function(){
   var DAG_URL = "https://iyquepqubfqrhybriqif.supabase.co";
@@ -168,6 +169,7 @@
   var DAG_KEY_HEADERS = {"apikey":DAG_KEY,"Authorization":"Bearer "+DAG_KEY};
   var supa = window.supabase.createClient(DAG_URL, DAG_KEY);
   if(window.Aanwezig) Aanwezig.start(supa, {app:'voertuigcontrole'});
+  if(window.Foto) Foto.koppel(supa, document);
   if(window.Herlaad) Herlaad.start(supa, { app: 'voertuigcontrole', veilig: function(){ return scherm === "lijst"; } });
   if(window.Kop){
     Kop.start({ client: supa, ververs: function(){ if(scherm === "lijst") return laadEnRenderLijst(); } });
@@ -198,6 +200,7 @@
   var huidigeUitvoeringId = null;
   var huidigePunten = []; // [{id, omschrijving, resultaatId, status, opmerking}]
   var huidigJournaal = [];
+  var journaalFotoStaat = {};   // gekozen foto bij de nieuwe melding; overleeft het opnieuw tekenen van het scherm
   var huidigArchief = [];   // opgeloste meldingen van dit voertuig (zonder "Niets te melden")
   var journaalKeuzeGemaakt = false;
   var mijnVoertuigenCache = [];
@@ -314,6 +317,7 @@
     var datumStr = vandaagKey();
     try{
       var punten = await sbSelect("voertuigcontrole_controlepunten?voertuig_id=eq."+voertuigId+"&actief=eq.true&order=volgorde");
+      journaalFotoStaat = {}; journaalFotoVeld = null;
       var journaalRes = await sbSelect("voertuigcontrole_journaal?voertuig_id=eq."+voertuigId+"&opgelost=eq.false&order=toegevoegd_op.asc");
       huidigJournaal = journaalRes || [];
       try{
@@ -343,7 +347,7 @@
       var resultatenRes = await sbSelect("voertuigcontrole_resultaten?uitvoering_id=eq."+uitvoering.id);
       huidigePunten = punten.map(function(p){
         var r = (resultatenRes||[]).filter(function(x){ return x.controlepunt_id===p.id; })[0];
-        return { id: p.id, omschrijving: p.omschrijving, resultaatId: r?r.id:null, status: r?r.status:null, opmerking: r?(r.opmerking||""):"" };
+        return { id: p.id, omschrijving: p.omschrijving, resultaatId: r?r.id:null, status: r?r.status:null, opmerking: r?(r.opmerking||""):"", foto_pad: r?(r.foto_pad||null):null };
       });
       renderChecklist(uitvoering.afgerond);
     }catch(e){
@@ -351,6 +355,14 @@
     }
   }
 
+  var journaalFotoVeld = null;
+  function fotoMini(pad){ return window.Foto ? Foto.minHtml(pad) : ""; }
+  async function patchResultaat(resultaatId, body){
+    var res = await fetch(DAG_URL+"/rest/v1/voertuigcontrole_resultaten?id=eq."+resultaatId, {
+      method:"PATCH", headers: Object.assign({}, DAG_KEY_HEADERS, {"Content-Type":"application/json","Prefer":"return=minimal"}), body: JSON.stringify(body)
+    });
+    if(!res.ok) throw new Error("Opslaan mislukt.");
+  }
   function renderChecklist(afgerond){
     var inhoud = document.getElementById("inhoud");
     var aantalGedaan = huidigePunten.filter(function(p){ return p.status; }).length;
@@ -376,7 +388,7 @@
         var persoon = loginState.personen.filter(function(p){ return p.id===j.toegevoegd_door; })[0];
         var wanneer = new Date(j.toegevoegd_op).toLocaleDateString("nl-NL",{day:"numeric",month:"short"});
         return '<div class="journaal-item" data-jid="'+j.id+'" style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);">'
-          + '<div><div style="font-size:13.5px;">'+escapeHtml(j.tekst)+'</div><div class="hint" style="margin:2px 0 0;">'+escapeHtml(persoon?persoon.naam:"?")+' · '+wanneer+'</div></div>'
+          + '<div><div style="font-size:13.5px;">'+escapeHtml(j.tekst)+'</div>'+fotoMini(j.foto_pad)+'<div class="hint" style="margin:2px 0 0;">'+escapeHtml(persoon?persoon.naam:"?")+' · '+wanneer+'</div></div>'
           + (afgerond ? '' : '<button type="button" class="btn-vandaag" data-action="lostJournaalOp" style="margin:0;padding:5px 10px;white-space:nowrap;">✓ Opgelost</button>')
           + '</div>';
       }).join("");
@@ -388,7 +400,7 @@
       + (huidigArchief.length ? huidigArchief.map(function(j){
           var door = function(id){ var p = loginState.personen.filter(function(x){ return x.id===id; })[0]; return p ? p.naam : "?"; };
           var wanneer = j.opgelost_op ? new Date(j.opgelost_op).toLocaleDateString("nl-NL",{day:"numeric",month:"short"}) : "";
-          return '<div style="padding:6px 2px;border-bottom:1px solid var(--border);"><div style="text-decoration:line-through;font-size:13.5px;">'+escapeHtml(j.tekst)+'</div>'
+          return '<div style="padding:6px 2px;border-bottom:1px solid var(--border);"><div style="text-decoration:line-through;font-size:13.5px;">'+escapeHtml(j.tekst)+'</div>'+fotoMini(j.foto_pad)
             + '<div class="hint" style="margin:2px 0 0;">'+escapeHtml(door(j.toegevoegd_door))+' → opgelost door '+escapeHtml(door(j.opgelost_door))+(wanneer?' · '+wanneer:'')+'</div></div>';
         }).join("") : '<div class="hint" style="margin:6px 2px;">Nog niets in het archief.</div>')
       + '</details>';
@@ -400,7 +412,8 @@
         + (journaalKeuzeGemaakt
           ? '<div class="hint" style="margin:0;color:#4CAF7D;">✓ Verwerkt.</div>'
           : '<textarea id="nieuweJournaalTekst" placeholder="Bijv. moet getankt worden…" style="width:100%;background:var(--surface-2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:8px 10px;font-family:inherit;font-size:13px;min-height:50px;margin-bottom:8px;"></textarea>'
-          + '<div style="display:flex;gap:6px;">'
+          + '<div id="journaalFoto"></div>'
+          + '<div style="display:flex;gap:6px;margin-top:8px;">'
           + '<button type="button" class="btn-vandaag" id="btnJournaalToevoegen" style="flex:1;margin:0;padding:8px;">Melding toevoegen</button>'
           + '<button type="button" class="btn-vandaag" id="btnNietsTeMelden" style="flex:1;margin:0;padding:8px;">Niets te melden</button>'
           + '</div>')
@@ -431,7 +444,8 @@
         + '<button type="button" class="punt-btn'+(p.status==="afwijking"?" actief-afwijking":"")+'" data-status="afwijking" '+(afgerond?"disabled":"")+'>Afwijking</button>'
         + '<button type="button" class="punt-btn'+(p.status==="nvt"?" actief-nvt":"")+'" data-status="nvt" '+(afgerond?"disabled":"")+'>N.v.t.</button>'
         + '</div>'
-        + (p.status==="afwijking" ? '<textarea class="punt-opmerking" placeholder="Verplichte opmerking…" '+(afgerond?"disabled":"")+'>'+escapeHtml(p.opmerking)+'</textarea>' : '')
+        + (p.status==="afwijking" ? '<textarea class="punt-opmerking" placeholder="Verplichte opmerking…" '+(afgerond?"disabled":"")+'>'+escapeHtml(p.opmerking)+'</textarea>'
+            + (afgerond ? fotoMini(p.foto_pad) : '<div class="punt-foto"></div>') : '')
         + '</div>';
     }).join("");
 
@@ -440,6 +454,18 @@
     }
 
     inhoud.innerHTML = html;
+    if(window.Foto){
+      var jf = document.getElementById("journaalFoto");
+      if(jf) journaalFotoVeld = Foto.veld(jf, { client: supa, staat: journaalFotoStaat, kort: true });
+      inhoud.querySelectorAll(".punt-foto").forEach(function(el){
+        var pid = el.closest(".punt-rij").dataset.pid;
+        var punt = huidigePunten.filter(function(p){ return p.id===pid; })[0];
+        if(!punt || !punt.resultaatId){ el.remove(); return; }
+        Foto.direct(el, { client: supa, pad: punt.foto_pad, map: "vc",
+          opslaan: async function(nieuwPad){ await patchResultaat(punt.resultaatId, { foto_pad: nieuwPad }); },
+          klaar: function(nieuwPad){ punt.foto_pad = nieuwPad; renderChecklist(false); } });
+      });
+    }
     var terugKnop = document.getElementById("btnTerugNaarLijst");
     if(terugKnop) terugKnop.addEventListener("click", laadEnRenderLijst);
     var overdrachtBtn = document.getElementById("btnOverdragen");
@@ -489,21 +515,30 @@
   }
 
   async function voegJournaalToe(tekst){
+    var foto = null;
     try{
       var isNietsTeMelden = tekst==="(Niets te melden)";
+      if(journaalFotoVeld && journaalFotoVeld.bezig()){ alert("Even wachten: de foto wordt nog verkleind."); return; }
+      if(!isNietsTeMelden && journaalFotoVeld) foto = await journaalFotoVeld.klaar(supa, "vc");   // verkleint en uploadt (alleen als er een foto is gekozen)
       var nieuw = {
+        foto_pad: foto ? foto.pad : null,
         voertuig_id: huidigVoertuig.id, tekst: tekst, toegevoegd_door: loginState.gekozenId,
         opgelost: isNietsTeMelden, // 'niets te melden' hoeft niet als openstaand punt te blijven staan
         opgelost_door: isNietsTeMelden ? loginState.gekozenId : null,
         opgelost_op: isNietsTeMelden ? new Date().toISOString() : null
       };
-      await fetch(DAG_URL+"/rest/v1/voertuigcontrole_journaal", {
+      var resJ = await fetch(DAG_URL+"/rest/v1/voertuigcontrole_journaal", {
         method:"POST", headers: Object.assign({}, DAG_KEY_HEADERS, {"Content-Type":"application/json","Prefer":"return=minimal"}),
         body: JSON.stringify(nieuw)
       });
+      if(!resJ.ok) throw new Error("Opslaan mislukt, probeer opnieuw.");
+      journaalFotoStaat = {}; journaalFotoVeld = null;
       journaalKeuzeGemaakt = true;
       renderChecklist(false);
-    }catch(e){ alert("Opslaan mislukt, probeer opnieuw."); }
+    }catch(e){
+      if(foto && foto.pad && window.Foto) Foto.verwijder(supa, foto.pad);
+      alert(e && e.message && /foto/i.test(e.message) ? e.message : "Opslaan mislukt, probeer opnieuw.");
+    }
   }
 
   async function zetStatus(controlepuntId, status){
@@ -511,12 +546,16 @@
     if(!punt) return;
     punt.status = status;
     if(status!=="afwijking") punt.opmerking = "";
+    var oudeFoto = (status!=="afwijking" && punt.foto_pad) ? punt.foto_pad : null;   // geen afwijking meer: foto hoort er niet meer bij
     try{
       if(punt.resultaatId){
+        var wijzig = {status: status, opmerking: punt.opmerking};
+        if(oudeFoto) wijzig.foto_pad = null;
         await fetch(DAG_URL+"/rest/v1/voertuigcontrole_resultaten?id=eq."+punt.resultaatId, {
           method:"PATCH", headers: Object.assign({}, DAG_KEY_HEADERS, {"Content-Type":"application/json","Prefer":"return=minimal"}),
-          body: JSON.stringify({status: status, opmerking: punt.opmerking})
+          body: JSON.stringify(wijzig)
         });
+        if(oudeFoto && window.Foto){ punt.foto_pad = null; Foto.verwijder(supa, oudeFoto); }
       } else {
         var res = await fetch(DAG_URL+"/rest/v1/voertuigcontrole_resultaten", {
           method:"POST", headers: Object.assign({}, DAG_KEY_HEADERS, {"Content-Type":"application/json","Prefer":"return=representation"}),
